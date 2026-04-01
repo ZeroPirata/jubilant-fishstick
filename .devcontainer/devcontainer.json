@@ -1,0 +1,19 @@
+{
+  "name": "Go Dev Environment",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/hackton-treino",
+  "postCreateCommand": "go install golang.org/x/tools/gopls@v0.16.2 && go install golang.org/x/tools/cmd/goimports@v0.28.0 && go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 && go install github.com/air-verse/air@v1.61.5",
+  "customizations": {
+    "vscode": {
+      "extensions": ["golang.go", "tamasfe.even-better-toml"],
+      "settings": {
+        "go.gopls": {
+          "ui.semanticTokens": true
+        },
+        "go.lintTool": "golangci-lint",
+        "go.formatTool": "goimports"
+      }
+    }
+  }
+}
