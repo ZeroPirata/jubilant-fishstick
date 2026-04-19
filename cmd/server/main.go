@@ -4,25 +4,28 @@ import (
 	"context"
 	"fmt"
 	"hackton-treino/config"
+	"hackton-treino/database/cache"
 	"hackton-treino/database/postgres"
+	"hackton-treino/internal/bootstrap"
 	"hackton-treino/internal/middleware"
 	"hackton-treino/internal/routes"
 	"hackton-treino/internal/services"
 	"hackton-treino/internal/worker"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 func main() {
 	if err := run(); err != nil {
-		panic(err)
+		log.Fatal("failed to run the system", zap.Error(err))
+		os.Exit(1)
 	}
 }
 
@@ -35,31 +38,11 @@ func run() error {
 		return err
 	}
 
-	if cfg.Project.LoggerFolder != "" {
-		if err := os.MkdirAll(cfg.Project.LoggerFolder, 0755); err != nil {
-			return fmt.Errorf("could not create log directory: %w", err)
-		}
-	}
-
-	loggerConfig := zapConfigFromProjectConfig(*cfg)
-	logger, err := loggerConfig.Build()
+	logger, flushLog, err := bootstrap.InitZapLog(cfg)
 	if err != nil {
-		return err
+		log.Fatalf("failed to init log: %v", err)
 	}
-
-	logger = logger.With(
-		zap.String("service", cfg.Project.Name),
-		zap.String("env", cfg.Project.Name),
-		zap.String("version", cfg.Project.Version),
-	)
-
-	defer func() {
-		if err := logger.Sync(); err != nil {
-			if !strings.Contains(err.Error(), "stdout") && !strings.Contains(err.Error(), "stderr") {
-				fmt.Printf("Error syncing logger: %v\n", err)
-			}
-		}
-	}()
+	defer flushLog()
 
 	zap.ReplaceGlobals(logger)
 
@@ -76,16 +59,21 @@ func run() error {
 	}
 	defer postgres.ClosePool(zap.L())
 
-	llm := services.NewAiService(cfg)
+	rds, err := cache.GetClient(cfg, zap.L())
+	if err != nil {
+		return fmt.Errorf("failed to get cache pool: %w", err)
+	}
+	defer cache.Close(zap.L())
 
 	go func() {
-		if err := startServer(*cfg, db); err != nil {
+		if err := startServer(*cfg, db, rds); err != nil {
 			zap.L().Fatal("Erro fatal no servidor HTTP", zap.Error(err))
 		}
 	}()
 
+	llm := services.NewLLMService(cfg)
 	go func() {
-		worker.NewWorker(zap.L(), db, *llm).Start(ctx)
+		worker.NewWorker(zap.L(), db, *llm, cfg.ScrapeAi.Activate, rds).Start(ctx)
 	}()
 
 	<-ctx.Done()
@@ -93,61 +81,19 @@ func run() error {
 	return nil
 }
 
-func zapConfigFromProjectConfig(cfg config.Config) zap.Config {
-	var zapConfig zap.Config
-
-	if cfg.Project.Debug {
-		zapConfig = zap.NewDevelopmentConfig()
-	} else {
-		zapConfig = zap.NewProductionConfig()
-	}
-
-	zapConfig.OutputPaths = []string{"stdout"}
-	zapConfig.ErrorOutputPaths = []string{"stderr"}
-
-	if !cfg.Project.Debug && cfg.Project.LoggerFolder != "" {
-		zapConfig.OutputPaths = append(
-			zapConfig.OutputPaths,
-			cfg.Project.LoggerFolder+"/"+cfg.Project.Name+".log",
-		)
-		zapConfig.ErrorOutputPaths = append(
-			zapConfig.ErrorOutputPaths,
-			cfg.Project.LoggerFolder+"/"+cfg.Project.Name+"_error.log",
-		)
-	}
-
-	enc := zapConfig.EncoderConfig
-
-	enc.EncodeLevel = zapcore.LowercaseLevelEncoder
-	enc.EncodeTime = zapcore.ISO8601TimeEncoder
-	enc.EncodeCaller = zapcore.ShortCallerEncoder
-	enc.EncodeDuration = zapcore.StringDurationEncoder
-
-	zapConfig.EncoderConfig = enc
-
-	zapConfig.DisableStacktrace = true
-
-	if cfg.Project.Debug {
-		zapConfig.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
-	} else {
-		zapConfig.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
-	}
-
-	return zapConfig
-}
-
-func startServer(config config.Config, db *pgxpool.Pool) error {
+func startServer(cfg config.Config, db *pgxpool.Pool, rds *redis.Client) error {
 	var port string
 	mux := http.NewServeMux()
 
-	if config.Server.Port != "" {
-		port = ":" + config.Server.Port
+	if cfg.Server.Port != "" {
+		port = ":" + cfg.Server.Port
 	} else {
 		port = ":8080"
 	}
 
-	routes.PipeCurriculoStup(mux, zap.L(), db)
+	routes.Setup(mux, zap.L(), db, cfg, rds)
 	handler := middleware.CORSMiddleware(middleware.LoggingMiddleware(zap.L(), mux))
+	handler = middleware.MiddlewarePanicRecovery(zap.L())(handler)
 
 	server := &http.Server{
 		Addr:    port,

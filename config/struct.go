@@ -8,6 +8,22 @@ type Config struct {
 	Cache    CacheConfig
 	Project  ProjectConfig
 	Ai       AiConfig
+	ScrapeAi ScrapeAiConfig
+	Hash     HashConfig
+	Jwt      JwtConfig
+}
+
+type JwtConfig struct {
+	Secret     string        `env:"JWT_SECRET,required"`
+	Expiration time.Duration `env:"JWT_EXPIRATION" envDefault:"24h"`
+}
+type HashConfig struct {
+	Argon2Memory      uint32 `env:"HASH_ARGON2_MEMORY" envDefault:"32768"`  // 32MB in KB
+	Argon2Parallelism uint8  `env:"HASH_ARGON2_PARALLELISM" envDefault:"1"` // Ideal for 1 vCPU in cloud
+	Argon2Iterations  uint32 `env:"HASH_ARGON2_ITERATIONS" envDefault:"3"`
+	Argon2SaltLen     uint32 `env:"HASH_ARGON2_SALT_LEN" envDefault:"16"`
+	Argon2KeyLen      uint32 `env:"HASH_ARGON2_KEY_LEN" envDefault:"32"`
+	Argon2Pepper      string `env:"HASH_ARGON2_PEPPER,required"`
 }
 
 type ServerConfig struct {
@@ -16,9 +32,20 @@ type ServerConfig struct {
 }
 
 type AiConfig struct {
-	Key   string `env:"API_KEY_AI"`
-	Url   string `env:"API_URL_AI"`
-	Model string `env:"MODEL_AI"`
+	Key      string        `env:"API_KEY_AI"`
+	Url      string        `env:"API_URL_AI"`
+	Model    string        `env:"API_MODEL_AI"`
+	Provider string        `env:"API_PROVIDER"`
+	Timeout  time.Duration `env:"API_AI_TIMEOUT"`
+}
+
+type ScrapeAiConfig struct {
+	Activate bool          `env:"SCRAPE_AI_ACTIVATE"`
+	Provider string        `env:"SCRAPE_AI_PROVIDER"`
+	Key      string        `env:"SCRAPE_AI_KEY"`
+	Model    string        `env:"SCRAPE_AI_MODEL"`
+	Url      string        `env:"SCRAPE_AI_URL"`
+	Timeout  time.Duration `env:"SCRAPE_AI_TIMEOUT"`
 }
 
 type ProjectConfig struct {

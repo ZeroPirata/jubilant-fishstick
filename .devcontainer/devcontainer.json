@@ -2,18 +2,37 @@
   "name": "Go Dev Environment",
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
-  "workspaceFolder": "/workspaces/hackton-treino",
-  "postCreateCommand": "go install golang.org/x/tools/gopls@v0.16.2 && go install golang.org/x/tools/cmd/goimports@v0.28.0 && go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 && go install github.com/air-verse/air@v1.61.5",
+
+  "build": {
+    "args": {
+      "UID": "1000"
+    }
+  },
+
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "source=hackton-go-bin,target=/go/bin,type=volume",
+    "source=hackton-go-mod,target=/go/pkg/mod,type=volume",
+    "source=hackton-go-build,target=/home/devuser/.cache/go-build,type=volume"
+  ],
+  "postCreateCommand": "bash .devcontainer/install-tools.sh",
   "customizations": {
     "vscode": {
-      "extensions": ["golang.go", "tamasfe.even-better-toml"],
+      "extensions": [
+        "golang.go",
+        "tamasfe.even-better-toml",
+        "ms-azuretools.vscode-docker",
+        "eamodio.gitlens"
+      ],
       "settings": {
         "go.gopls": {
           "ui.semanticTokens": true
         },
         "go.lintTool": "golangci-lint",
-        "go.formatTool": "goimports"
+        "go.formatTool": "goimports",
+        "go.toolsManagement.checkForUpdates": "off"
       }
     }
-  }
-}
+  },
+  "remoteUser": "devuser"
+} 

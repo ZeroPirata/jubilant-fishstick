@@ -1,7 +1,14 @@
 version: "2"
 sql:
   - schema: "repository/schema.sql"
-    queries: "repository/query.sql"
+    queries:
+      - "repository/query/query.sql"
+      - "repository/query/jobs.sql"
+      - "repository/query/user.sql"
+      - "repository/query/feedback.sql"
+      - "repository/query/filters.sql"
+      - "repository/query/aliases.sql"
+      - "repository/query/worker.sql"
     engine: "postgresql"
     gen:
       go:

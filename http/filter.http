@@ -1,0 +1,23 @@
+@baseUrl = http://localhost:8080
+@userUuid = 6be94242-dc7b-4950-9357-f7c4f2a89744
+@jobId = 90afe508-dae8-4b27-a14f-d88f995a445f
+@size = 130
+@offset = 3
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTM1N2QyNzItZTg4Ny00YTlmLTlkMGEtODBjOTAzOTQxZjRlIiwiaXNzIjoiaGFja3Rvbi10cmVpbm8iLCJzdWIiOiIxMzU3ZDI3Mi1lODg3LTRhOWYtOWQwYS04MGM5MDM5NDFmNGUiLCJhdWQiOlsiaGFja2F0aG9uLXdlYiJdLCJleHAiOjE3NzYzNzk1NzIsIm5iZiI6MTc3NjI5MzE3MiwiaWF0IjoxNzc2MjkzMTcyLCJqdGkiOiJkY2ViMWU1NC03MWI4LTQwZTUtOTNmOS00ZTRmOGRhMDk3ZGMifQ.FQjsnE90qii8pMLPnPKMfmBPEfGepl4_UEL-Wq-LGok
+@filterId = 065c4c61-7654-4efb-a8ab-acb1e33b1de0
+### POST
+POST {{baseUrl}}/api/v1/filters HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+    "keyword": "python-test"
+}
+
+### GET MANY
+GET {{baseUrl}}/api/v1/filters?offset={{offset}}&size={{size}} HTTP/1.1
+Authorization: Bearer {{token}}
+
+### DELETE
+DELETE {{baseUrl}}/api/v1/filters/{{filterId}} HTTP/1.1
+Authorization: Bearer {{token}}

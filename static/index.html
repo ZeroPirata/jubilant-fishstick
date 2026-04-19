@@ -4,1084 +4,432 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Job Pipeline</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg: #0f1117;
-      --surface: #1a1d27;
-      --border: #2a2d3e;
-      --text: #e2e8f0;
-      --muted: #718096;
-      --accent: #6366f1;
-      --accent-hover: #4f52d9;
-      --green: #22c55e;
-      --yellow: #eab308;
-      --red: #ef4444;
-      --blue: #3b82f6;
-      --purple: #a855f7;
-      --orange: #f97316;
-    }
-
-    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
-
-    header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
-    header h1 { font-size: 18px; font-weight: 600; }
-    header span { color: var(--muted); font-size: 13px; }
-
-    nav { display: flex; border-bottom: 1px solid var(--border); padding: 0 24px; }
-    nav button { background: none; border: none; color: var(--muted); padding: 12px 16px; cursor: pointer; font-size: 14px; border-bottom: 2px solid transparent; transition: all 0.15s; }
-    nav button:hover { color: var(--text); }
-    nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
-
-    main { padding: 24px; max-width: 1200px; }
-
-    section { display: none; }
-    section.active { display: block; }
-
-    h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
-
-    /* Tabela */
-    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
-    table { width: 100%; border-collapse: collapse; }
-    th { background: var(--surface); text-align: left; padding: 10px 14px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
-    td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: rgba(255,255,255,0.02); }
-
-    /* Badges de status */
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
-    .badge-pendente    { background: rgba(234,179,8,0.15);   color: var(--yellow); }
-    .badge-processando { background: rgba(59,130,246,0.15);  color: var(--blue); }
-    .badge-gerado      { background: rgba(168,85,247,0.15);  color: var(--purple); }
-    .badge-revisado    { background: rgba(249,115,22,0.15);  color: var(--orange); }
-    .badge-enviado     { background: rgba(34,197,94,0.15);   color: var(--green); }
-    .badge-fora_do_perfil  { background: rgba(239,68,68,0.15);  color: var(--red); }
-    .badge-improcessavel   { background: rgba(113,128,150,0.15); color: var(--muted); }
-    .badge-medio      { background: rgba(234,179,8,0.15);   color: var(--yellow); }
-    .badge-bom        { background: rgba(59,130,246,0.15);  color: var(--blue); }
-    .badge-excelente  { background: rgba(34,197,94,0.15);   color: var(--green); }
-
-    .btn-delete { background: none; border: 1px solid transparent; color: var(--muted); padding: 2px 7px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.15s; }
-    .btn-delete:hover { color: var(--red); border-color: var(--red); background: rgba(239,68,68,0.1); }
-    .btn-delete:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    /* Filtros */
-    .toolbar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
-    select, input[type=text], input[type=url], textarea {
-      background: var(--surface); border: 1px solid var(--border); color: var(--text);
-      padding: 8px 12px; border-radius: 6px; font-size: 13px; outline: none;
-      transition: border-color 0.15s;
-    }
-    select:focus, input:focus, textarea:focus { border-color: var(--accent); }
-    textarea { resize: vertical; min-height: 80px; width: 100%; font-family: inherit; }
-
-    /* Formulário */
-    .form-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; max-width: 560px; }
-    .field { margin-bottom: 14px; }
-    .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
-    .field input, .field select, .field textarea { width: 100%; }
-
-    /* Botões */
-    .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; }
-    .btn-primary { background: var(--accent); color: white; }
-    .btn-primary:hover { background: var(--accent-hover); }
-    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-    .btn-ghost:hover { color: var(--text); border-color: var(--text); }
-
-    /* Cards de curriculo */
-    .curriculo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
-    .curriculo-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-    .curriculo-header-left h3 { font-size: 15px; font-weight: 600; }
-    .curriculo-header-left .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
-    .curriculo-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 18px; background: rgba(0,0,0,0.2); }
-    .curriculo-tabs button { background: none; border: none; color: var(--muted); padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; transition: all 0.15s; }
-    .curriculo-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
-    .curriculo-content { padding: 18px; }
-    .curriculo-text { white-space: pre-wrap; font-family: 'Cascadia Code', 'Fira Mono', monospace; font-size: 13px; line-height: 1.7; color: var(--text); }
-    .curriculo-content.hidden { display: none; }
-
-    /* Avaliação */
-    .rating-group { display: flex; gap: 8px; margin-top: 6px; }
-    .rating-btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; transition: all 0.15s; }
-    .rating-btn:hover { border-color: var(--accent); color: var(--text); }
-    .rating-btn.selected-medio    { background: rgba(234,179,8,0.15);  border-color: var(--yellow); color: var(--yellow); }
-    .rating-btn.selected-bom      { background: rgba(59,130,246,0.15); border-color: var(--blue);   color: var(--blue); }
-    .rating-btn.selected-excelente { background: rgba(34,197,94,0.15);  border-color: var(--green);  color: var(--green); }
-
-    /* Link externo */
-    a.url-link { color: var(--accent); text-decoration: none; font-size: 12px; }
-    a.url-link:hover { text-decoration: underline; }
-
-    /* Mensagens de estado */
-    .empty { color: var(--muted); padding: 40px; text-align: center; }
-    .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); transition: opacity 0.3s; z-index: 100; }
-    .toast.success { border-color: var(--green); color: var(--green); }
-    .toast.error   { border-color: var(--red);   color: var(--red); }
-    .toast.hidden  { opacity: 0; pointer-events: none; }
-
-    .truncate { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-    .btn-pdf { background: transparent; color: var(--green); border: 1px solid var(--green); padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
-    .btn-pdf:hover { background: rgba(34,197,94,0.1); }
-    .btn-pdf:disabled { opacity: 0.5; cursor: not-allowed; }
-    .pdf-links { display: flex; gap: 12px; padding: 10px 18px; background: rgba(34,197,94,0.05); border-top: 1px solid var(--border); flex-wrap: wrap; align-items: center; }
-    .pdf-links span { font-size: 12px; color: var(--muted); }
-    .pdf-links a { font-size: 12px; color: var(--green); text-decoration: none; border: 1px solid var(--green); padding: 3px 10px; border-radius: 4px; transition: background 0.15s; }
-    .pdf-links a:hover { background: rgba(34,197,94,0.1); }
-  </style>
+  <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 
-<header>
-  <h1>Job Pipeline</h1>
-  <span>Gestão de vagas e currículos gerados</span>
-</header>
+<!-- ═══════════════ AUTH SCREEN ═══════════════ -->
+<div id="auth-screen" class="auth-screen hidden">
+  <div class="auth-card">
+    <h1>Job Pipeline</h1>
+    <p>Gestão de vagas e currículos gerados por IA</p>
 
-<nav>
-  <button class="active" onclick="showTab('vagas', this)">Vagas</button>
-  <button onclick="showTab('nova-vaga', this)">Nova Vaga</button>
-  <button onclick="showTab('curriculos', this)">Currículos Gerados</button>
-  <button onclick="showTab('avaliacao', this)">Avaliação</button>
-  <button onclick="showTab('perfil', this)">Perfil</button>
-</nav>
-
-<main>
-
-  <!-- ───────────── VAGAS ───────────── -->
-  <section id="vagas" class="active">
-    <h2>Vagas Cadastradas</h2>
-    <div class="toolbar">
-      <select id="filtroStatus" onchange="carregarVagas()">
-        <option value="">Todos os status</option>
-        <option value="pendente">Pendente</option>
-        <option value="processando">Processando</option>
-        <option value="gerado">Gerado</option>
-        <option value="revisado">Revisado</option>
-        <option value="enviado">Enviado</option>
-        <option value="fora_do_perfil">Fora do Perfil</option>
-        <option value="improcessavel">Improcessável</option>
-      </select>
-      <button class="btn btn-ghost" onclick="carregarVagas()">↻ Atualizar</button>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Empresa</th>
-            <th>Título</th>
-            <th>Status</th>
-            <th>Alterar Status</th>
-            <th>Cadastrada em</th>
-            <th>URL</th>
-          </tr>
-        </thead>
-        <tbody id="vagasBody">
-          <tr><td colspan="7" class="empty">Carregando...</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ───────────── NOVA VAGA ───────────── -->
-  <section id="nova-vaga">
-    <h2>Cadastrar Nova Vaga</h2>
-    <div class="form-card">
-      <div class="field">
-        <label>URL da Vaga *</label>
-        <input type="url" id="vagaUrl" placeholder="https://www.linkedin.com/jobs/..." />
-      </div>
-      <div class="field">
-        <label>Título (opcional)</label>
-        <input type="text" id="vagaTitulo" placeholder="Ex: Engenheiro de Software Senior" />
-      </div>
-      <div class="field">
-        <label>Empresa (opcional)</label>
-        <input type="text" id="vagaEmpresa" placeholder="Ex: Acme Corp" />
-      </div>
-      <div class="field">
-        <label>Descrição (opcional)</label>
-        <textarea id="vagaDescricao" placeholder="Descrição da vaga..."></textarea>
-      </div>
-      <div class="field">
-        <label>Stack (opcional, separado por vírgula)</label>
-        <input type="text" id="vagaStack" placeholder="Ex: Go, Docker, Kubernetes" />
-      </div>
-      <div class="field">
-        <label>Requisitos (opcional)</label>
-        <textarea id="vagaRequisitos" placeholder="Requisitos da vaga..."></textarea>
-      </div>
-      <div class="field">
-        <label>Idioma do currículo</label>
-        <select id="vagaIdioma">
-          <option value="ptbr">Português (PT-BR)</option>
-          <option value="en">English (EN)</option>
-        </select>
-      </div>
-      <button class="btn btn-primary" onclick="cadastrarVaga()">Cadastrar Vaga</button>
-    </div>
-  </section>
-
-  <!-- ───────────── CURRÍCULOS ───────────── -->
-  <section id="curriculos">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-      <h2 style="margin:0">Currículos Gerados</h2>
-      <button class="btn btn-ghost" onclick="carregarCurriculos()">↻ Atualizar</button>
-    </div>
-    <div id="curriculosContainer">
-      <p class="empty">Carregando...</p>
-    </div>
-  </section>
-
-  <!-- ───────────── AVALIAÇÃO ───────────── -->
-  <section id="avaliacao">
-    <h2>Avaliar Currículo</h2>
-    <div class="form-card">
-      <div class="field">
-        <label>Currículo</label>
-        <select id="feedbackCurriculo" onchange="preencherVagaDoFeedback()">
-          <option value="">Selecione um currículo...</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Vaga</label>
-        <input type="text" id="feedbackVagaInfo" readonly placeholder="Preenchido automaticamente" style="color:var(--muted)" />
-      </div>
-      <div class="field">
-        <label>Avaliação</label>
-        <div class="rating-group">
-          <button class="rating-btn" onclick="selecionarRating('medio', this)">Médio</button>
-          <button class="rating-btn" onclick="selecionarRating('bom', this)">Bom</button>
-          <button class="rating-btn" onclick="selecionarRating('excelente', this)">Excelente</button>
-        </div>
-      </div>
-      <div class="field">
-        <label>Comentário (opcional)</label>
-        <textarea id="feedbackComentario" placeholder="O que chamou atenção? O que melhorar?"></textarea>
-      </div>
-      <button class="btn btn-primary" onclick="enviarFeedback()">Salvar Avaliação</button>
-    </div>
-  </section>
-
-  <!-- ───────────── PERFIL ───────────── -->
-  <section id="perfil">
-    <h2>Meu Perfil</h2>
-
-    <!-- Sub-tabs -->
-    <div class="curriculo-tabs" style="margin-bottom:20px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:0 12px;">
-      <button class="active" onclick="showPerfilTab('perfil-info', this)">Info Básica</button>
-      <button onclick="showPerfilTab('perfil-experiencias', this)">Experiências</button>
-      <button onclick="showPerfilTab('perfil-habilidades', this)">Habilidades</button>
-      <button onclick="showPerfilTab('perfil-projetos', this)">Projetos</button>
-      <button onclick="showPerfilTab('perfil-filtros', this)">Filtros</button>
-      <button onclick="showPerfilTab('perfil-certificacoes', this); carregarCertificacoes()">Certificações</button>
+    <div class="auth-tabs">
+      <button class="active" data-mode="login">Entrar</button>
+      <button data-mode="register">Criar conta</button>
     </div>
 
-    <!-- Info Básica -->
-    <div id="perfil-info" class="perfil-sub active">
-      <div class="form-card" style="max-width:640px; margin-bottom:20px;">
-        <h2 style="margin-bottom:14px;">Informações Básicas</h2>
-        <div class="field"><label>Nome</label><input type="text" id="infoNome" /></div>
-        <div class="field"><label>Email</label><input type="text" id="infoEmail" /></div>
-        <div class="field"><label>Telefone</label><input type="text" id="infoTelefone" /></div>
-        <div class="field"><label>LinkedIn</label><input type="text" id="infoLinkedin" /></div>
-        <div class="field"><label>GitHub</label><input type="text" id="infoGithub" /></div>
-        <div class="field"><label>Portfolio</label><input type="text" id="infoPortfolio" /></div>
-        <div class="field"><label>Resumo</label><textarea id="infoResumo"></textarea></div>
-        <button class="btn btn-primary" onclick="salvarInfo()">Salvar</button>
+    <!-- Login -->
+    <div id="auth-login">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="seu@email.com" autocomplete="username" />
       </div>
+      <div class="field">
+        <label>Senha</label>
+        <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
+      </div>
+      <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Entrar</button>
     </div>
 
-    <!-- Experiências -->
-    <div id="perfil-experiencias" class="perfil-sub" style="display:none">
-      <div class="form-card" style="max-width:640px; margin-bottom:20px;">
-        <h2 style="margin-bottom:14px;">Nova Experiência</h2>
-        <div class="field"><label>Empresa *</label><input type="text" id="expEmpresa" /></div>
-        <div class="field"><label>Cargo *</label><input type="text" id="expCargo" /></div>
-        <div class="field"><label>Descrição</label><textarea id="expDescricao"></textarea></div>
-        <div class="field"><label>Data Início (AAAA-MM-DD) *</label><input type="text" id="expInicio" placeholder="2023-01-15" /></div>
-        <div class="field"><label>Data Fim (AAAA-MM-DD)</label><input type="text" id="expFim" placeholder="deixe vazio se atual" /></div>
-        <div class="field" style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="expAtual" style="width:auto" />
-          <label style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--text)">Emprego atual</label>
-        </div>
-        <div class="field"><label>Stack (vírgula)</label><input type="text" id="expStack" placeholder="Go, Docker" /></div>
-        <div class="field"><label>Conquistas (vírgula)</label><input type="text" id="expConquistas" placeholder="Reduziu latência em 40%" /></div>
-        <div class="field"><label>Tags (vírgula)</label><input type="text" id="expTags" placeholder="backend, cloud" /></div>
-        <button class="btn btn-primary" onclick="adicionarExperiencia()">Adicionar</button>
+    <!-- Register -->
+    <div id="auth-register" class="hidden">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="reg-email" placeholder="seu@email.com" autocomplete="username" />
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>#</th><th>Empresa</th><th>Cargo</th><th>Período</th><th>Stack</th><th></th></tr></thead>
-          <tbody id="expBody"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
-        </table>
+      <div class="field">
+        <label>Senha (mín. 8 caracteres)</label>
+        <input type="password" id="reg-password" placeholder="••••••••" autocomplete="new-password" />
       </div>
+      <button class="btn btn-primary" style="width:100%" onclick="doRegister()">Criar conta</button>
     </div>
+  </div>
+</div>
 
-    <!-- Habilidades -->
-    <div id="perfil-habilidades" class="perfil-sub" style="display:none">
-      <div class="form-card" style="max-width:480px; margin-bottom:20px;">
-        <h2 style="margin-bottom:14px;">Nova Habilidade</h2>
-        <div class="field"><label>Nome *</label><input type="text" id="habNome" /></div>
-        <div class="field">
-          <label>Nível *</label>
-          <select id="habNivel">
-            <option value="basico">Básico</option>
-            <option value="intermediario">Intermediário</option>
-            <option value="avancado">Avançado</option>
-            <option value="expert">Expert</option>
+<!-- ═══════════════ MAIN APP ═══════════════ -->
+<div id="app" class="hidden">
+
+  <header>
+    <h1>Job Pipeline</h1>
+    <span>Gestão de vagas e currículos gerados por IA</span>
+    <button class="btn-logout" onclick="doLogout()">Sair</button>
+  </header>
+
+  <nav>
+    <button data-tab="vagas"      class="active">Vagas</button>
+    <button data-tab="nova-vaga">Nova Vaga</button>
+    <button data-tab="curriculos">Currículos</button>
+    <button data-tab="perfil">Perfil</button>
+    <button data-tab="filtros">Filtros</button>
+  </nav>
+
+  <main>
+
+    <!-- ─── VAGAS ─── -->
+    <section id="tab-vagas" data-tab class="active">
+      <div class="section-header">
+        <h2>Vagas Cadastradas</h2>
+        <div class="toolbar" style="margin:0">
+          <select id="jobs-status-filter" onchange="loadJobs()">
+            <option value="">Todos os status</option>
+            <option value="pending">Pendente</option>
+            <option value="processing">Processando</option>
+            <option value="scraping_basic">Coletando</option>
+            <option value="scraping_nl">Analisando</option>
+            <option value="completed">Concluído</option>
+            <option value="error">Erro</option>
           </select>
+          <button class="btn btn-ghost" onclick="loadJobs()">↻ Atualizar</button>
         </div>
-        <div class="field"><label>Tags (vírgula)</label><input type="text" id="habTags" placeholder="backend, linguagem" /></div>
-        <button class="btn btn-primary" onclick="adicionarHabilidade()">Adicionar</button>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>#</th><th>Nome</th><th>Nível</th><th>Tags</th><th></th></tr></thead>
-          <tbody id="habBody"><tr><td colspan="5" class="empty">Carregando...</td></tr></tbody>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Empresa</th>
+              <th>Título</th>
+              <th>Status</th>
+              <th>Qualidade</th>
+              <th>Cadastrada em</th>
+              <th>URL</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="jobs-body">
+            <tr><td colspan="8" class="empty">Carregando...</td></tr>
+          </tbody>
         </table>
       </div>
-    </div>
+    </section>
 
-    <!-- Projetos -->
-    <div id="perfil-projetos" class="perfil-sub" style="display:none">
-      <div class="form-card" style="max-width:640px; margin-bottom:20px;">
-        <h2 style="margin-bottom:14px;">Novo Projeto</h2>
-        <div class="field"><label>Nome *</label><input type="text" id="projNome" /></div>
-        <div class="field"><label>Descrição</label><textarea id="projDescricao"></textarea></div>
-        <div class="field"><label>Link</label><input type="text" id="projLink" placeholder="https://github.com/..." /></div>
-        <div class="field"><label>Tags (vírgula)</label><input type="text" id="projTags" /></div>
-        <div class="field"><label>Data Início (AAAA-MM-DD) *</label><input type="text" id="projInicio" placeholder="2023-01-15" /></div>
-        <div class="field"><label>Data Fim (AAAA-MM-DD)</label><input type="text" id="projFim" /></div>
-        <div class="field" style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="projFacultativo" style="width:auto" />
-          <label style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--text)">Facultativo</label>
+    <!-- ─── NOVA VAGA ─── -->
+    <section id="tab-nova-vaga" data-tab>
+      <h2>Cadastrar Nova Vaga</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
+
+        <!-- Coluna esquerda: vaga detalhada -->
+        <div class="form-card">
+          <p style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px">Vaga Detalhada</p>
+          <div class="field">
+            <label>URL da vaga *</label>
+            <input type="url" id="new-job-url" placeholder="https://www.linkedin.com/jobs/..." />
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Empresa (opcional)</label>
+              <input type="text" id="new-job-company" placeholder="Acme Corp" />
+            </div>
+            <div class="field">
+              <label>Título (opcional)</label>
+              <input type="text" id="new-job-title" placeholder="Eng. de Software Sr." />
+            </div>
+          </div>
+          <div class="field">
+            <label>Descrição (opcional)</label>
+            <textarea id="new-job-desc" placeholder="Descrição da vaga..."></textarea>
+          </div>
+          <div class="field">
+            <label>Stack (opcional — separado por vírgula)</label>
+            <input type="text" id="new-job-stack" placeholder="Go, Docker, Kubernetes" />
+          </div>
+          <div class="field">
+            <label>Idioma do currículo</label>
+            <select id="new-job-lang">
+              <option value="ptbr">Português (PT-BR)</option>
+              <option value="en">English (EN)</option>
+            </select>
+          </div>
+          <button id="btn-create-job" class="btn btn-primary" onclick="createJob()">Cadastrar Vaga</button>
         </div>
-        <button class="btn btn-primary" onclick="adicionarProjeto()">Adicionar</button>
+
+        <!-- Coluna direita: lote de links -->
+        <div class="form-card">
+          <p style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px">Lote de Links</p>
+          <div class="field-row" style="align-items:flex-end">
+            <div class="field" style="flex:1">
+              <label>URL</label>
+              <input type="url" id="bulk-url-input" placeholder="https://..." onkeydown="if(event.key==='Enter')addBulkUrl()" />
+            </div>
+            <div class="field" style="max-width:160px">
+              <label>Idioma</label>
+              <select id="bulk-lang">
+                <option value="ptbr">PT-BR</option>
+                <option value="en">EN</option>
+              </select>
+            </div>
+            <button class="btn btn-ghost" style="margin-bottom:2px" onclick="addBulkUrl()">+ Adicionar</button>
+          </div>
+          <div id="bulk-url-list" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;margin-bottom:16px;max-height:320px;overflow-y:auto"></div>
+          <p id="bulk-url-empty" style="font-size:13px;color:var(--muted);margin-bottom:16px">Nenhum link adicionado.</p>
+          <button id="btn-bulk-submit" class="btn btn-primary" onclick="submitBulkUrls()" disabled>Enviar 0 vagas</button>
+        </div>
+
       </div>
-      <div class="table-wrap">
+    </section>
+
+    <!-- ─── CURRÍCULOS ─── -->
+    <section id="tab-curriculos" data-tab>
+      <div class="section-header">
+        <h2>Currículos Gerados</h2>
+        <button class="btn btn-ghost" onclick="loadResumesTab()">↻ Atualizar</button>
+      </div>
+      <div id="curriculos-container">
+        <p class="empty">Selecione a aba para carregar...</p>
+      </div>
+    </section>
+
+    <!-- ─── PERFIL ─── -->
+    <section id="tab-perfil" data-tab>
+      <h2>Meu Perfil</h2>
+
+      <div class="sub-nav">
+        <button class="active" data-perf="info"         onclick="showPerfilTab('info',this)">Info Básica</button>
+        <button                data-perf="links"        onclick="showPerfilTab('links',this)">Links</button>
+        <button                data-perf="experiences"  onclick="showPerfilTab('experiences',this)">Experiências</button>
+        <button                data-perf="academic"     onclick="showPerfilTab('academic',this)">Formação</button>
+        <button                data-perf="skills"       onclick="showPerfilTab('skills',this)">Habilidades</button>
+        <button                data-perf="projects"     onclick="showPerfilTab('projects',this)">Projetos</button>
+        <button                data-perf="certificates" onclick="showPerfilTab('certificates',this)">Certificados</button>
+      </div>
+
+      <!-- Info Básica -->
+      <div id="perf-info" class="sub-section active">
+        <div class="form-card">
+          <div class="field"><label>Nome completo *</label><input type="text" id="info-nome" /></div>
+          <div class="field"><label>Email (somente leitura)</label><input type="email" id="info-email" readonly style="opacity:.6" /></div>
+          <div class="field"><label>Telefone</label><input type="text" id="info-telefone" placeholder="+55 11 99999-9999" /></div>
+          <div class="field"><label>Resumo / About</label><textarea id="info-resumo" placeholder="Breve descrição sobre você..."></textarea></div>
+          <button class="btn btn-primary" onclick="saveProfileInfo()">Salvar</button>
+        </div>
+      </div>
+
+      <!-- Links -->
+      <div id="perf-links" class="sub-section">
+        <div class="form-card">
+          <div class="field"><label>LinkedIn</label><input type="url" id="link-linkedin" placeholder="https://linkedin.com/in/..." /></div>
+          <div class="field"><label>GitHub</label><input type="url" id="link-github" placeholder="https://github.com/..." /></div>
+          <div class="field"><label>Portfolio</label><input type="url" id="link-portfolio" placeholder="https://seusite.dev" /></div>
+
+          <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+          <p style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--text)">Outros Links</p>
+          <div id="other-links-list"></div>
+          <div class="field-row" style="margin-top:8px">
+            <div class="field">
+              <label>Nome</label>
+              <input type="text" id="other-link-label" placeholder="Ex: Blog, Portfólio..." />
+            </div>
+            <div class="field">
+              <label>URL</label>
+              <input type="url" id="other-link-url" placeholder="https://..." />
+            </div>
+            <div class="field" style="max-width:130px">
+              <label>Linguagem</label>
+              <input type="text" id="other-link-language" placeholder="Ex: Go, TS..." />
+            </div>
+            <button class="btn btn-ghost" style="align-self:flex-end;margin-bottom:2px" onclick="addOtherLink()">+ Link</button>
+          </div>
+
+          <button class="btn btn-primary" style="margin-top:16px" onclick="saveLinks()">Salvar Tudo</button>
+        </div>
+      </div>
+
+      <!-- Experiências -->
+      <div id="perf-experiences" class="sub-section">
+        <div class="form-card" style="margin-bottom:20px">
+          <h2 style="margin-bottom:14px">Nova Experiência</h2>
+          <div class="field-row">
+            <div class="field"><label>Empresa *</label><input type="text" id="exp-empresa" /></div>
+            <div class="field"><label>Cargo *</label><input type="text" id="exp-cargo" /></div>
+          </div>
+          <div class="field"><label>Descrição</label><textarea id="exp-descricao"></textarea></div>
+          <div class="field-row">
+            <div class="field"><label>Início (AAAA-MM-DD) *</label><input type="text" id="exp-inicio" placeholder="2023-01-15" /></div>
+            <div class="field"><label>Fim (AAAA-MM-DD)</label><input type="text" id="exp-fim" placeholder="deixe vazio se atual" /></div>
+          </div>
+          <div class="field-check">
+            <input type="checkbox" id="exp-atual" />
+            <label for="exp-atual">Emprego atual</label>
+          </div>
+          <div class="field"><label>Stack (vírgula)</label><input type="text" id="exp-stack" placeholder="Go, Docker" /></div>
+          <div class="field"><label>Conquistas (vírgula)</label><input type="text" id="exp-conquistas" placeholder="Reduziu latência em 40%" /></div>
+          <div class="field"><label>Tags (vírgula)</label><input type="text" id="exp-tags" placeholder="backend, cloud" /></div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <button id="exp-submit-btn" class="btn btn-primary" onclick="addExperience()">Adicionar</button>
+            <button id="exp-cancel" class="btn btn-ghost hidden" onclick="cancelEditExperience()">Cancelar</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Empresa</th><th>Cargo</th><th>Período</th><th>Stack</th><th>Tags</th><th></th></tr></thead>
+            <tbody id="exp-body"><tr><td colspan="7" class="empty">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Formação Acadêmica -->
+      <div id="perf-academic" class="sub-section">
+        <div class="form-card" style="margin-bottom:20px">
+          <h2 style="margin-bottom:14px">Nova Formação</h2>
+          <div class="field"><label>Instituição *</label><input type="text" id="ac-instituicao" placeholder="Universidade de São Paulo" /></div>
+          <div class="field"><label>Curso *</label><input type="text" id="ac-curso" placeholder="Ciência da Computação" /></div>
+          <div class="field-row">
+            <div class="field"><label>Início (AAAA-MM-DD) *</label><input type="text" id="ac-inicio" placeholder="2019-02-01" /></div>
+            <div class="field"><label>Fim (AAAA-MM-DD)</label><input type="text" id="ac-fim" placeholder="2023-12-01" /></div>
+          </div>
+          <div class="field"><label>Descrição</label><textarea id="ac-desc" placeholder="Detalhes adicionais..."></textarea></div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <button id="ac-submit-btn" class="btn btn-primary" onclick="addAcademic()">Adicionar</button>
+            <button id="ac-cancel" class="btn btn-ghost hidden" onclick="cancelEditAcademic()">Cancelar</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Instituição</th><th>Curso</th><th>Período</th><th>Descrição</th><th></th></tr></thead>
+            <tbody id="academic-body"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Habilidades -->
+      <div id="perf-skills" class="sub-section">
+        <div class="form-card" style="margin-bottom:20px;max-width:420px">
+          <h2 style="margin-bottom:14px">Nova Habilidade</h2>
+          <div class="field"><label>Nome *</label><input type="text" id="sk-nome" /></div>
+          <div class="field">
+            <label>Nível *</label>
+            <select id="sk-nivel">
+              <option value="basic">Básico</option>
+              <option value="intermediate">Intermediário</option>
+              <option value="advanced" selected>Avançado</option>
+              <option value="expert">Expert</option>
+            </select>
+          </div>
+          <div class="field"><label>Tags (vírgula)</label><input type="text" id="sk-tags" placeholder="backend, linguagem" /></div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <button id="sk-submit-btn" class="btn btn-primary" onclick="addSkill()">Adicionar</button>
+            <button id="sk-cancel" class="btn btn-ghost hidden" onclick="cancelEditSkill()">Cancelar</button>
+          </div>
+        </div>
+        <div class="table-wrap" style="max-width:560px">
+          <table>
+            <thead><tr><th>Nome</th><th>Nível</th><th>Tags</th><th></th></tr></thead>
+            <tbody id="skills-body"><tr><td colspan="5" class="empty">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Projetos -->
+      <div id="perf-projects" class="sub-section">
+        <div class="form-card" style="margin-bottom:20px">
+          <h2 style="margin-bottom:14px">Novo Projeto</h2>
+          <div class="field"><label>Nome *</label><input type="text" id="proj-nome" /></div>
+          <div class="field"><label>Descrição *</label><textarea id="proj-desc"></textarea></div>
+          <div class="field"><label>Link</label><input type="url" id="proj-link" placeholder="https://github.com/..." /></div>
+          <div class="field"><label>Tags (vírgula)</label><input type="text" id="proj-tags" /></div>
+          <div class="field-row">
+            <div class="field"><label>Início (AAAA-MM-DD) *</label><input type="text" id="proj-inicio" placeholder="2023-01-01" /></div>
+            <div class="field"><label>Fim (AAAA-MM-DD)</label><input type="text" id="proj-fim" /></div>
+          </div>
+          <div class="field-check">
+            <input type="checkbox" id="proj-academico" />
+            <label for="proj-academico">Projeto acadêmico</label>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <button id="proj-submit-btn" class="btn btn-primary" onclick="addProject()">Adicionar</button>
+            <button id="proj-cancel" class="btn btn-ghost hidden" onclick="cancelEditProject()">Cancelar</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Nome</th><th>Link</th><th>Período</th><th>Tags</th><th></th></tr></thead>
+            <tbody id="proj-body"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Certificados -->
+      <div id="perf-certificates" class="sub-section">
+        <div class="form-card" style="margin-bottom:20px">
+          <h2 style="margin-bottom:14px">Novo Certificado</h2>
+          <div class="field"><label>Nome *</label><input type="text" id="cert-nome" placeholder="AWS Solutions Architect" /></div>
+          <div class="field"><label>Emissor *</label><input type="text" id="cert-emissor" placeholder="Amazon Web Services" /></div>
+          <div class="field"><label>Data de emissão (AAAA-MM-DD) *</label><input type="text" id="cert-data" placeholder="2024-06-15" /></div>
+          <div class="field"><label>URL de verificação</label><input type="url" id="cert-link" placeholder="https://..." /></div>
+          <div class="field"><label>Tags (vírgula)</label><input type="text" id="cert-tags" placeholder="cloud, aws" /></div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <button id="cert-submit-btn" class="btn btn-primary" onclick="addCertificate()">Adicionar</button>
+            <button id="cert-cancel" class="btn btn-ghost hidden" onclick="cancelEditCertificate()">Cancelar</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Nome</th><th>Emissor</th><th>Data</th><th>Link</th><th></th></tr></thead>
+            <tbody id="cert-body"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ─── FILTROS ─── -->
+    <section id="tab-filtros" data-tab>
+      <h2>Filtros de Keywords</h2>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:20px">
+        Palavras-chave que serão excluídas automaticamente do matching de vagas.
+      </p>
+      <div class="form-card" style="max-width:420px;margin-bottom:20px">
+        <div class="field">
+          <label>Keyword *</label>
+          <input type="text" id="filter-keyword" placeholder="Ex: react, mobile, .NET" />
+        </div>
+        <button class="btn btn-primary" onclick="addFilter()">Adicionar</button>
+      </div>
+      <div class="table-wrap" style="max-width:420px">
         <table>
-          <thead><tr><th>#</th><th>Nome</th><th>Link</th><th>Período</th><th>Tags</th><th></th></tr></thead>
-          <tbody id="projBody"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
+          <thead><tr><th>Keyword</th><th></th></tr></thead>
+          <tbody id="filters-body"><tr><td colspan="2" class="empty">Carregando...</td></tr></tbody>
         </table>
       </div>
-    </div>
+    </section>
 
-    <!-- Filtros -->
-    <div id="perfil-filtros" class="perfil-sub" style="display:none">
-      <div class="form-card" style="max-width:400px; margin-bottom:20px;">
-        <h2 style="margin-bottom:14px;">Novo Filtro</h2>
-        <div class="field"><label>Keyword *</label><input type="text" id="filtroKeyword" placeholder="Ex: react" /></div>
-        <button class="btn btn-primary" onclick="adicionarFiltro()">Adicionar</button>
-      </div>
-      <div class="table-wrap" style="max-width:400px;">
-        <table>
-          <thead><tr><th>#</th><th>Keyword</th><th></th></tr></thead>
-          <tbody id="filtroBody"><tr><td colspan="3" class="empty">Carregando...</td></tr></tbody>
-        </table>
-      </div>
-    </div>
+  </main>
+</div>
 
-    <!-- Certificações -->
-    <div id="perfil-certificacoes" class="perfil-sub" style="display:none">
-      <div class="form-card" style="max-width:640px; margin-bottom:20px;">
-        <h2 style="margin-bottom:14px;">Nova Certificação</h2>
-        <div class="field"><label>Nome *</label><input type="text" id="certNome" placeholder="SQL (Advanced)" /></div>
-        <div class="field"><label>Emissor *</label><input type="text" id="certEmissor" placeholder="HackerRank" /></div>
-        <div class="field"><label>Emitido em (AAAA-MM-DD)</label><input type="text" id="certEmitidoEm" placeholder="2025-10-01" /></div>
-        <div class="field"><label>Código</label><input type="text" id="certCodigo" placeholder="abc123" /></div>
-        <div class="field"><label>Link</label><input type="text" id="certLink" placeholder="https://..." /></div>
-        <div class="field"><label>Tags (vírgula)</label><input type="text" id="certTags" placeholder="sql, database" /></div>
-        <button class="btn btn-primary" onclick="adicionarCertificacao()">Adicionar</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>#</th><th>Nome</th><th>Emissor</th><th>Emitido em</th><th>Link</th><th></th></tr></thead>
-          <tbody id="certBody"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
-        </table>
+<!-- ─── Feedback Modal ─── -->
+<div id="feedback-modal" class="hidden" style="
+  position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;
+  align-items:center;justify-content:center;z-index:1000;
+">
+  <div class="form-card" style="max-width:440px;width:100%;margin:16px">
+    <h2 style="margin-bottom:16px">Avaliar Currículo</h2>
+    <div class="field">
+      <label>Avaliação *</label>
+      <div class="rating-group">
+        <button class="rating-btn" onclick="selectRating('poor',this)">Fraco</button>
+        <button class="rating-btn" onclick="selectRating('fair',this)">Regular</button>
+        <button class="rating-btn" onclick="selectRating('good',this)">Bom</button>
+        <button class="rating-btn" onclick="selectRating('excellent',this)">Excelente</button>
       </div>
     </div>
-  </section>
-
-</main>
+    <div class="field">
+      <label>Comentário *</label>
+      <textarea id="feedback-comment" placeholder="O que chamou atenção? O que melhorar?"></textarea>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-primary" onclick="submitFeedback()">Salvar Avaliação</button>
+      <button class="btn btn-ghost"   onclick="closeFeedback()">Cancelar</button>
+    </div>
+  </div>
+</div>
 
 <div id="toast" class="toast hidden"></div>
 
-<script>
-  // ── Config — mude para '' quando acessar pelo servidor Go diretamente
-  const BASE_URL = 'http://localhost:8080';
-
-  // ── Estado global
-  let curriculos = [];
-  let ratingAtual = '';
-
-  // ── Navegação entre tabs
-  function showTab(id, btn) {
-    document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
-    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-    btn.classList.add('active');
-
-    if (id === 'vagas') carregarVagas();
-    if (id === 'curriculos') carregarCurriculos();
-    if (id === 'avaliacao') preencherSelectCurriculos();
-    if (id === 'perfil') { carregarInfo(); carregarExperiencias(); carregarHabilidades(); carregarProjetos(); carregarFiltros(); }
-  }
-
-  // ── Toast
-  function toast(msg, tipo = 'success') {
-    const el = document.getElementById('toast');
-    el.textContent = msg;
-    el.className = `toast ${tipo}`;
-    setTimeout(() => el.classList.add('hidden'), 3000);
-  }
-
-  // ── Formatar data
-  function fmtData(iso) {
-    if (!iso) return '—';
-    return new Date(iso).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
-  }
-
-  // ── Badge de status
-  function badge(status) {
-    return `<span class="badge badge-${status}">${status.replace('_', ' ')}</span>`;
-  }
-
-  // ─────────────────────────────────────────
-  // VAGAS
-  // ─────────────────────────────────────────
-  async function carregarVagas() {
-    const status = document.getElementById('filtroStatus').value;
-    const qs = status ? `?status=${status}&limit=50` : '?limit=50';
-    const tbody = document.getElementById('vagasBody');
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">Carregando...</td></tr>';
-
-    try {
-      const res = await fetch(BASE_URL + '/vagas' + qs);
-      const vagas = await res.json();
-
-      if (!vagas || vagas.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhuma vaga encontrada.</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = vagas.map(v => `
-        <tr>
-          <td style="color:var(--muted)">${v.id}</td>
-          <td>${v.empresa || '—'}</td>
-          <td class="truncate" title="${v.titulo || ''}">${v.titulo || '—'}</td>
-          <td>${badge(v.status)}</td>
-          <td>
-            <select style="font-size:12px;padding:4px 8px" onchange="alterarStatusVaga(${v.id}, this)">
-              <option value="">— alterar —</option>
-              <option value="pendente">pendente</option>
-              <option value="processando">processando</option>
-              <option value="gerado">gerado</option>
-              <option value="revisado">revisado</option>
-              <option value="enviado">enviado</option>
-              <option value="fora_do_perfil">fora_do_perfil</option>
-              <option value="improcessavel">improcessavel</option>
-            </select>
-          </td>
-          <td style="color:var(--muted)">${fmtData(v.criado_em)}</td>
-          <td style="display:flex;gap:8px;align-items:center">
-            <a class="url-link" href="${v.url}" target="_blank" rel="noopener">↗ abrir</a>
-            <button class="btn-delete" onclick="deletarVaga(${v.id}, this)">✕</button>
-          </td>
-        </tr>
-      `).join('');
-    } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty">Erro ao carregar vagas.</td></tr>';
-    }
-  }
-
-  async function deletarVaga(id, btn) {
-    if (!confirm(`Deletar vaga #${id}?`)) return;
-    btn.disabled = true;
-    try {
-      const res = await fetch(BASE_URL + '/vagas/' + id, { method: 'DELETE' });
-      if (!res.ok) { toast('Erro ao deletar vaga.', 'error'); btn.disabled = false; return; }
-      btn.closest('tr').remove();
-      toast('Vaga deletada.');
-    } catch (e) {
-      toast('Erro de conexão.', 'error');
-      btn.disabled = false;
-    }
-  }
-
-  // ─────────────────────────────────────────
-  // NOVA VAGA
-  // ─────────────────────────────────────────
-  async function cadastrarVaga() {
-    const url    = document.getElementById('vagaUrl').value.trim();
-    const idioma = document.getElementById('vagaIdioma').value;
-
-    if (!url) { toast('Informe a URL da vaga.', 'error'); return; }
-
-    const titulo    = document.getElementById('vagaTitulo').value.trim();
-    const empresa   = document.getElementById('vagaEmpresa').value.trim();
-    const descricao = document.getElementById('vagaDescricao').value.trim();
-    const stackRaw  = document.getElementById('vagaStack').value.trim();
-    const requisitos = document.getElementById('vagaRequisitos').value.trim();
-
-    const body = { url, idioma };
-    if (titulo)    body.title       = titulo;
-    if (empresa)   body.enterprise  = empresa;
-    if (descricao) body.description = descricao;
-    if (stackRaw)  body.stack       = stackRaw.split(',').map(s => s.trim()).filter(Boolean);
-    if (requisitos) body.requirements = [requisitos];
-
-    try {
-      const res = await fetch(BASE_URL + '/vagas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-
-      if (res.status === 409) { toast('Vaga já cadastrada.', 'error'); return; }
-      if (!res.ok) { toast('Erro ao cadastrar vaga.', 'error'); return; }
-
-      ['vagaUrl','vagaTitulo','vagaEmpresa','vagaDescricao','vagaStack','vagaRequisitos'].forEach(id => document.getElementById(id).value = '');
-      toast('Vaga cadastrada! O worker irá processá-la em breve.');
-    } catch (e) {
-      toast('Erro de conexão.', 'error');
-    }
-  }
-
-  // ─────────────────────────────────────────
-  // CURRÍCULOS
-  // ─────────────────────────────────────────
-  async function carregarCurriculos() {
-    const container = document.getElementById('curriculosContainer');
-    container.innerHTML = '<p class="empty">Carregando...</p>';
-
-    try {
-      const res = await fetch(BASE_URL + '/curriculos?limit=20');
-      curriculos = await res.json();
-
-      if (!curriculos || curriculos.length === 0) {
-        container.innerHTML = '<p class="empty">Nenhum currículo gerado ainda.</p>';
-        return;
-      }
-
-      container.innerHTML = curriculos.map((c, i) => `
-        <div class="curriculo-card">
-          <div class="curriculo-header">
-            <div class="curriculo-header-left">
-              <h3>${c.empresa || 'Empresa não identificada'} — ${c.titulo || 'Vaga sem título'}</h3>
-              <div class="meta">
-                ID #${c.id} · Gerado em ${fmtData(c.criado_em)}
-                · <a class="url-link" href="${c.url}" target="_blank" rel="noopener">↗ ver vaga</a>
-              </div>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <button id="btn-pdf-${c.id}" class="btn-pdf" onclick="gerarPDF(${c.id}, this)">⬇ Gerar PDF</button>
-              <button class="btn btn-ghost" onclick="avaliarCurriculo(${c.id}, ${c.vaga_id})">Avaliar</button>
-              <button class="btn-delete" onclick="deletarCurriculo(${c.id}, this)">✕</button>
-            </div>
-          </div>
-          <div id="pdf-links-${c.id}" class="pdf-links" style="display:none"></div>
-          <div class="curriculo-tabs">
-            <button class="active" onclick="switchCurriculoTab(this, 'curriculo-${i}')">Currículo</button>
-            <button onclick="switchCurriculoTab(this, 'cover-${i}')">Cover Letter</button>
-          </div>
-          <div id="curriculo-${i}" class="curriculo-content">
-            <pre class="curriculo-text">${escHtml(c.conteudo?.curriculo || '')}</pre>
-          </div>
-          <div id="cover-${i}" class="curriculo-content hidden">
-            <pre class="curriculo-text">${escHtml(c.conteudo?.cover_letter || '')}</pre>
-          </div>
-        </div>
-      `).join('');
-    } catch (e) {
-      container.innerHTML = '<p class="empty">Erro ao carregar currículos.</p>';
-    }
-  }
-
-  async function gerarPDF(id, btn) {
-    btn.disabled = true;
-    btn.textContent = '⏳ Gerando...';
-
-    try {
-      const res = await fetch(`${BASE_URL}/curriculos/${id}/gerar-pdf`, { method: 'POST' });
-
-      if (!res.ok) {
-        const txt = await res.text();
-        toast('Erro ao gerar PDF: ' + txt, 'error');
-        btn.disabled = false;
-        btn.textContent = '⬇ Gerar PDF';
-        return;
-      }
-
-      const data = await res.json();
-
-      btn.textContent = '↻ Regerar PDF';
-      btn.disabled = false;
-
-      const linksEl = document.getElementById(`pdf-links-${id}`);
-      linksEl.style.display = 'flex';
-      linksEl.innerHTML = `
-        <span>PDFs gerados:</span>
-        <a href="${BASE_URL}/${data.resume_path}" target="_blank" download>📄 Currículo</a>
-        <a href="${BASE_URL}/${data.cover_letter_path}" target="_blank" download>📄 Cover Letter</a>
-      `;
-
-      toast('PDFs gerados com sucesso!');
-    } catch (e) {
-      toast('Erro de conexão.', 'error');
-      btn.disabled = false;
-      btn.textContent = '⬇ Gerar PDF';
-    }
-  }
-
-  async function deletarCurriculo(id, btn) {
-    if (!confirm(`Deletar currículo #${id}?`)) return;
-    btn.disabled = true;
-    try {
-      const res = await fetch(BASE_URL + '/curriculos/' + id, { method: 'DELETE' });
-      if (!res.ok) { toast('Erro ao deletar currículo.', 'error'); btn.disabled = false; return; }
-      btn.closest('.curriculo-card').remove();
-      toast('Currículo deletado.');
-    } catch (e) {
-      toast('Erro de conexão.', 'error');
-      btn.disabled = false;
-    }
-  }
-
-  function switchCurriculoTab(btn, targetId) {
-    const card = btn.closest('.curriculo-card');
-    card.querySelectorAll('.curriculo-tabs button').forEach(b => b.classList.remove('active'));
-    card.querySelectorAll('.curriculo-content').forEach(c => c.classList.add('hidden'));
-    btn.classList.add('active');
-    document.getElementById(targetId).classList.remove('hidden');
-  }
-
-  function escHtml(str) {
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-
-  // ─────────────────────────────────────────
-  // AVALIAÇÃO
-  // ─────────────────────────────────────────
-  function preencherSelectCurriculos() {
-    const sel = document.getElementById('feedbackCurriculo');
-    sel.innerHTML = '<option value="">Selecione um currículo...</option>';
-    curriculos.forEach(c => {
-      const opt = document.createElement('option');
-      opt.value = JSON.stringify({ id: c.id, vaga_id: c.vaga_id, empresa: c.empresa, titulo: c.titulo });
-      opt.textContent = `#${c.id} — ${c.empresa || '?'} · ${c.titulo || '?'}`;
-      sel.appendChild(opt);
-    });
-  }
-
-  function preencherVagaDoFeedback() {
-    const val = document.getElementById('feedbackCurriculo').value;
-    const info = document.getElementById('feedbackVagaInfo');
-    if (!val) { info.value = ''; return; }
-    const c = JSON.parse(val);
-    info.value = `${c.empresa || '—'} — ${c.titulo || '—'}`;
-  }
-
-  function selecionarRating(val, btn) {
-    ratingAtual = val;
-    document.querySelectorAll('.rating-btn').forEach(b => {
-      b.className = 'rating-btn';
-    });
-    btn.classList.add(`selected-${val}`);
-  }
-
-  // Atalho: botão "Avaliar" direto de um card de currículo
-  function avaliarCurriculo(curriculoId, vagaId) {
-    showTab('avaliacao', document.querySelectorAll('nav button')[3]);
-    setTimeout(() => {
-      const sel = document.getElementById('feedbackCurriculo');
-      for (const opt of sel.options) {
-        if (!opt.value) continue;
-        const c = JSON.parse(opt.value);
-        if (c.id === curriculoId) { sel.value = opt.value; break; }
-      }
-      preencherVagaDoFeedback();
-    }, 100);
-  }
-
-  async function enviarFeedback() {
-    const val = document.getElementById('feedbackCurriculo').value;
-    if (!val) { toast('Selecione um currículo.', 'error'); return; }
-    if (!ratingAtual) { toast('Selecione uma avaliação.', 'error'); return; }
-
-    const c = JSON.parse(val);
-    const comentario = document.getElementById('feedbackComentario').value.trim();
-
-    try {
-      const res = await fetch(BASE_URL + '/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          curriculo_id: c.id,
-          vaga_id: c.vaga_id,
-          status: ratingAtual,
-          comentario
-        })
-      });
-
-      if (!res.ok) { toast('Erro ao salvar avaliação.', 'error'); return; }
-
-      document.getElementById('feedbackCurriculo').value = '';
-      document.getElementById('feedbackVagaInfo').value = '';
-      document.getElementById('feedbackComentario').value = '';
-      document.querySelectorAll('.rating-btn').forEach(b => b.className = 'rating-btn');
-      ratingAtual = '';
-      toast('Avaliação salva!');
-    } catch (e) {
-      toast('Erro de conexão.', 'error');
-    }
-  }
-
-  // ─────────────────────────────────────────
-  // VAGAS — status inline
-  // ─────────────────────────────────────────
-  async function alterarStatusVaga(id, select) {
-    const status = select.value;
-    try {
-      const res = await fetch(BASE_URL + '/vagas/' + id + '/status', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
-      });
-      if (!res.ok) { toast('Erro ao alterar status.', 'error'); return; }
-      toast('Status atualizado.');
-      carregarVagas();
-    } catch (e) {
-      toast('Erro de conexão.', 'error');
-    }
-  }
-
-  // ─────────────────────────────────────────
-  // PERFIL — navegação sub-tabs
-  // ─────────────────────────────────────────
-  function showPerfilTab(id, btn) {
-    document.querySelectorAll('.perfil-sub').forEach(s => s.style.display = 'none');
-    document.querySelectorAll('.curriculo-tabs button').forEach(b => b.classList.remove('active'));
-    document.getElementById(id).style.display = 'block';
-    btn.classList.add('active');
-  }
-
-  // ─────────────────────────────────────────
-  // PERFIL — Info Básica
-  // ─────────────────────────────────────────
-  let infoId = 0;
-
-  async function carregarInfo() {
-    try {
-      const res = await fetch(BASE_URL + '/perfil/info');
-      if (!res.ok) return;
-      const d = await res.json();
-      infoId = d.id || 0;
-      document.getElementById('infoNome').value      = d.nome      || '';
-      document.getElementById('infoEmail').value     = d.email     || '';
-      document.getElementById('infoTelefone').value  = d.telefone  || '';
-      document.getElementById('infoLinkedin').value  = d.linkedin  || '';
-      document.getElementById('infoGithub').value    = d.github    || '';
-      document.getElementById('infoPortfolio').value = d.portfolio || '';
-      document.getElementById('infoResumo').value    = d.resumo    || '';
-    } catch (_) {}
-  }
-
-  async function salvarInfo() {
-    const body = {
-      nome:      document.getElementById('infoNome').value.trim(),
-      email:     document.getElementById('infoEmail').value.trim(),
-      telefone:  document.getElementById('infoTelefone').value.trim(),
-      linkedin:  document.getElementById('infoLinkedin').value.trim(),
-      github:    document.getElementById('infoGithub').value.trim(),
-      portfolio: document.getElementById('infoPortfolio').value.trim(),
-      resumo:    document.getElementById('infoResumo').value.trim(),
-    };
-    if (!body.nome || !body.email) { toast('Nome e email são obrigatórios.', 'error'); return; }
-    try {
-      const res = await fetch(BASE_URL + '/perfil/info/' + infoId, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) { toast('Erro ao salvar info.', 'error'); return; }
-      const saved = await res.json();
-      infoId = saved.id || infoId;
-      toast('Informações salvas!');
-    } catch (e) {
-      toast('Erro de conexão.', 'error');
-    }
-  }
-
-  // ─────────────────────────────────────────
-  // PERFIL — Experiências
-  // ─────────────────────────────────────────
-  function splitCsv(s) { return s.split(',').map(x => x.trim()).filter(Boolean); }
-  function fmtDate(d) { return d?.Time ? d.Time.slice(0,10) : (d || ''); }
-
-  async function carregarExperiencias() {
-    const tbody = document.getElementById('expBody');
-    try {
-      const res = await fetch(BASE_URL + '/perfil/experiencias');
-      const rows = await res.json();
-      if (!rows || rows.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhuma experiência.</td></tr>'; return; }
-      tbody.innerHTML = rows.map(e => `
-        <tr>
-          <td style="color:var(--muted)">${e.id}</td>
-          <td>${e.empresa}</td>
-          <td>${e.cargo}</td>
-          <td style="color:var(--muted)">${fmtDate(e.data_inicio)} → ${e.atual ? 'atual' : fmtDate(e.data_fim)}</td>
-          <td style="color:var(--muted)">${(e.stack||[]).join(', ')}</td>
-          <td><button class="btn-delete" onclick="deletarExperiencia(${e.id}, this)">✕</button></td>
-        </tr>
-      `).join('');
-    } catch (_) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Erro ao carregar.</td></tr>'; }
-  }
-
-  async function adicionarExperiencia() {
-    const body = {
-      empresa:    document.getElementById('expEmpresa').value.trim(),
-      cargo:      document.getElementById('expCargo').value.trim(),
-      descricao:  document.getElementById('expDescricao').value.trim(),
-      atual:      document.getElementById('expAtual').checked,
-      data_inicio: document.getElementById('expInicio').value.trim(),
-      data_fim:   document.getElementById('expFim').value.trim(),
-      stack:      splitCsv(document.getElementById('expStack').value),
-      conquistas: splitCsv(document.getElementById('expConquistas').value),
-      tags:       splitCsv(document.getElementById('expTags').value),
-    };
-    if (!body.empresa || !body.cargo || !body.data_inicio) { toast('Empresa, cargo e data início são obrigatórios.', 'error'); return; }
-    try {
-      const res = await fetch(BASE_URL + '/perfil/experiencias', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-      });
-      if (!res.ok) { toast('Erro ao adicionar experiência.', 'error'); return; }
-      ['expEmpresa','expCargo','expDescricao','expInicio','expFim','expStack','expConquistas','expTags'].forEach(id => document.getElementById(id).value = '');
-      document.getElementById('expAtual').checked = false;
-      toast('Experiência adicionada!');
-      carregarExperiencias();
-    } catch (e) { toast('Erro de conexão.', 'error'); }
-  }
-
-  async function deletarExperiencia(id, btn) {
-    if (!confirm(`Deletar experiência #${id}?`)) return;
-    btn.disabled = true;
-    try {
-      const res = await fetch(BASE_URL + '/perfil/experiencias/' + id, { method: 'DELETE' });
-      if (!res.ok) { toast('Erro ao deletar.', 'error'); btn.disabled = false; return; }
-      btn.closest('tr').remove();
-      toast('Experiência removida.');
-    } catch (e) { toast('Erro de conexão.', 'error'); btn.disabled = false; }
-  }
-
-  // ─────────────────────────────────────────
-  // PERFIL — Habilidades
-  // ─────────────────────────────────────────
-  async function carregarHabilidades() {
-    const tbody = document.getElementById('habBody');
-    try {
-      const res = await fetch(BASE_URL + '/perfil/habilidades');
-      const rows = await res.json();
-      if (!rows || rows.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="empty">Nenhuma habilidade.</td></tr>'; return; }
-      tbody.innerHTML = rows.map(h => `
-        <tr>
-          <td style="color:var(--muted)">${h.id}</td>
-          <td>${h.nome}</td>
-          <td><span class="badge badge-${h.nivel}">${h.nivel}</span></td>
-          <td style="color:var(--muted)">${(h.tags||[]).join(', ')}</td>
-          <td><button class="btn-delete" onclick="deletarHabilidade(${h.id}, this)">✕</button></td>
-        </tr>
-      `).join('');
-    } catch (_) { tbody.innerHTML = '<tr><td colspan="5" class="empty">Erro ao carregar.</td></tr>'; }
-  }
-
-  async function adicionarHabilidade() {
-    const body = {
-      nome:  document.getElementById('habNome').value.trim(),
-      nivel: document.getElementById('habNivel').value,
-      tags:  splitCsv(document.getElementById('habTags').value),
-    };
-    if (!body.nome) { toast('Nome é obrigatório.', 'error'); return; }
-    try {
-      const res = await fetch(BASE_URL + '/perfil/habilidades', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-      });
-      if (!res.ok) { toast('Erro ao adicionar habilidade.', 'error'); return; }
-      document.getElementById('habNome').value = '';
-      document.getElementById('habTags').value = '';
-      toast('Habilidade adicionada!');
-      carregarHabilidades();
-    } catch (e) { toast('Erro de conexão.', 'error'); }
-  }
-
-  async function deletarHabilidade(id, btn) {
-    if (!confirm(`Deletar habilidade #${id}?`)) return;
-    btn.disabled = true;
-    try {
-      const res = await fetch(BASE_URL + '/perfil/habilidades/' + id, { method: 'DELETE' });
-      if (!res.ok) { toast('Erro ao deletar.', 'error'); btn.disabled = false; return; }
-      btn.closest('tr').remove();
-      toast('Habilidade removida.');
-    } catch (e) { toast('Erro de conexão.', 'error'); btn.disabled = false; }
-  }
-
-  // ─────────────────────────────────────────
-  // PERFIL — Projetos
-  // ─────────────────────────────────────────
-  async function carregarProjetos() {
-    const tbody = document.getElementById('projBody');
-    try {
-      const res = await fetch(BASE_URL + '/perfil/projetos');
-      const rows = await res.json();
-      if (!rows || rows.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhum projeto.</td></tr>'; return; }
-      tbody.innerHTML = rows.map(p => `
-        <tr>
-          <td style="color:var(--muted)">${p.id}</td>
-          <td>${p.nome}</td>
-          <td>${p.link ? `<a class="url-link" href="${p.link.String}" target="_blank">↗ link</a>` : '—'}</td>
-          <td style="color:var(--muted)">${fmtDate(p.data_inicio)} → ${fmtDate(p.data_fim)}</td>
-          <td style="color:var(--muted)">${(p.tags||[]).join(', ')}</td>
-          <td><button class="btn-delete" onclick="deletarProjeto(${p.id}, this)">✕</button></td>
-        </tr>
-      `).join('');
-    } catch (_) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Erro ao carregar.</td></tr>'; }
-  }
-
-  async function adicionarProjeto() {
-    const body = {
-      nome:        document.getElementById('projNome').value.trim(),
-      descricao:   document.getElementById('projDescricao').value.trim(),
-      link:        document.getElementById('projLink').value.trim(),
-      tags:        splitCsv(document.getElementById('projTags').value),
-      data_inicio: document.getElementById('projInicio').value.trim(),
-      data_fim:    document.getElementById('projFim').value.trim(),
-      facultativo: document.getElementById('projFacultativo').checked,
-    };
-    if (!body.nome || !body.data_inicio) { toast('Nome e data início são obrigatórios.', 'error'); return; }
-    try {
-      const res = await fetch(BASE_URL + '/perfil/projetos', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-      });
-      if (!res.ok) { toast('Erro ao adicionar projeto.', 'error'); return; }
-      ['projNome','projDescricao','projLink','projTags','projInicio','projFim'].forEach(id => document.getElementById(id).value = '');
-      document.getElementById('projFacultativo').checked = false;
-      toast('Projeto adicionado!');
-      carregarProjetos();
-    } catch (e) { toast('Erro de conexão.', 'error'); }
-  }
-
-  async function deletarProjeto(id, btn) {
-    if (!confirm(`Deletar projeto #${id}?`)) return;
-    btn.disabled = true;
-    try {
-      const res = await fetch(BASE_URL + '/perfil/projetos/' + id, { method: 'DELETE' });
-      if (!res.ok) { toast('Erro ao deletar.', 'error'); btn.disabled = false; return; }
-      btn.closest('tr').remove();
-      toast('Projeto removido.');
-    } catch (e) { toast('Erro de conexão.', 'error'); btn.disabled = false; }
-  }
-
-  // ─────────────────────────────────────────
-  // PERFIL — Filtros
-  // ─────────────────────────────────────────
-  async function carregarFiltros() {
-    const tbody = document.getElementById('filtroBody');
-    try {
-      const res = await fetch(BASE_URL + '/perfil/filtros');
-      const rows = await res.json();
-      if (!rows || rows.length === 0) { tbody.innerHTML = '<tr><td colspan="3" class="empty">Nenhum filtro.</td></tr>'; return; }
-      tbody.innerHTML = rows.map(f => `
-        <tr>
-          <td style="color:var(--muted)">${f.id}</td>
-          <td>${f.keyword}</td>
-          <td><button class="btn-delete" onclick="deletarFiltro(${f.id}, this)">✕</button></td>
-        </tr>
-      `).join('');
-    } catch (_) { tbody.innerHTML = '<tr><td colspan="3" class="empty">Erro ao carregar.</td></tr>'; }
-  }
-
-  async function adicionarFiltro() {
-    const keyword = document.getElementById('filtroKeyword').value.trim();
-    if (!keyword) { toast('Keyword é obrigatória.', 'error'); return; }
-    try {
-      const res = await fetch(BASE_URL + '/perfil/filtros', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keyword })
-      });
-      if (!res.ok) { toast('Erro ao adicionar filtro.', 'error'); return; }
-      document.getElementById('filtroKeyword').value = '';
-      toast('Filtro adicionado!');
-      carregarFiltros();
-    } catch (e) { toast('Erro de conexão.', 'error'); }
-  }
-
-  async function deletarFiltro(id, btn) {
-    if (!confirm(`Deletar filtro #${id}?`)) return;
-    btn.disabled = true;
-    try {
-      const res = await fetch(BASE_URL + '/perfil/filtros/' + id, { method: 'DELETE' });
-      if (!res.ok) { toast('Erro ao deletar.', 'error'); btn.disabled = false; return; }
-      btn.closest('tr').remove();
-      toast('Filtro removido.');
-    } catch (e) { toast('Erro de conexão.', 'error'); btn.disabled = false; }
-  }
-
-  // ─────────────────────────────────────────
-  // PERFIL — Certificações
-  // ─────────────────────────────────────────
-  async function carregarCertificacoes() {
-    const tbody = document.getElementById('certBody');
-    try {
-      const res = await fetch(BASE_URL + '/perfil/certificacoes');
-      const rows = await res.json();
-      if (!rows || rows.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhuma certificação.</td></tr>'; return; }
-      tbody.innerHTML = rows.map(c => `
-        <tr>
-          <td style="color:var(--muted)">${c.id}</td>
-          <td>${c.nome}</td>
-          <td style="color:var(--muted)">${c.emissor}</td>
-          <td style="color:var(--muted)">${fmtDate(c.emitido_em)}</td>
-          <td>${c.link?.String ? `<a class="url-link" href="${c.link.String}" target="_blank">↗ link</a>` : '—'}</td>
-          <td><button class="btn-delete" onclick="deletarCertificacao(${c.id}, this)">✕</button></td>
-        </tr>
-      `).join('');
-    } catch (_) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Erro ao carregar.</td></tr>'; }
-  }
-
-  async function adicionarCertificacao() {
-    const body = {
-      nome:       document.getElementById('certNome').value.trim(),
-      emissor:    document.getElementById('certEmissor').value.trim(),
-      emitido_em: document.getElementById('certEmitidoEm').value.trim(),
-      codigo:     document.getElementById('certCodigo').value.trim(),
-      link:       document.getElementById('certLink').value.trim(),
-      tags:       splitCsv(document.getElementById('certTags').value),
-    };
-    if (!body.nome || !body.emissor) { toast('Nome e emissor são obrigatórios.', 'error'); return; }
-    try {
-      const res = await fetch(BASE_URL + '/perfil/certificacoes', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-      });
-      if (!res.ok) { toast('Erro ao adicionar certificação.', 'error'); return; }
-      ['certNome','certEmissor','certEmitidoEm','certCodigo','certLink','certTags'].forEach(id => document.getElementById(id).value = '');
-      toast('Certificação adicionada!');
-      carregarCertificacoes();
-    } catch (e) { toast('Erro de conexão.', 'error'); }
-  }
-
-  async function deletarCertificacao(id, btn) {
-    if (!confirm(`Deletar certificação #${id}?`)) return;
-    btn.disabled = true;
-    try {
-      const res = await fetch(BASE_URL + '/perfil/certificacoes/' + id, { method: 'DELETE' });
-      if (!res.ok) { toast('Erro ao deletar.', 'error'); btn.disabled = false; return; }
-      btn.closest('tr').remove();
-      toast('Certificação removida.');
-    } catch (e) { toast('Erro de conexão.', 'error'); btn.disabled = false; }
-  }
-
-  // ── Init
-  carregarVagas();
-</script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/jobs.js"></script>
+<script src="/static/js/profile.js"></script>
+<script src="/static/js/filters.js"></script>
 </body>
 </html>

@@ -1,0 +1,51 @@
+@baseUrl = http://localhost:8080
+@userUuid = 6be94242-dc7b-4950-9357-f7c4f2a89744
+@jobId = ad052295-e846-478c-b765-e87f55b89aa3
+@size = 10
+@offset = 0
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTM1N2QyNzItZTg4Ny00YTlmLTlkMGEtODBjOTAzOTQxZjRlIiwiaXNzIjoiaGFja3Rvbi10cmVpbm8iLCJzdWIiOiIxMzU3ZDI3Mi1lODg3LTRhOWYtOWQwYS04MGM5MDM5NDFmNGUiLCJhdWQiOlsiaGFja2F0aG9uLXdlYiJdLCJleHAiOjE3NzY2MzUyNDYsIm5iZiI6MTc3NjU0ODg0NiwiaWF0IjoxNzc2NTQ4ODQ2LCJqdGkiOiI5Yzk2MDRlNi1jNWU0LTRhMzItYjczMi02MzFlMWU5MmFkM2MifQ.SpjT5dUp2Ug2jyS6HAoxS7JesNW4uU19Y9Nhe0-MIqo
+### insert a new job
+
+POST {{baseUrl}}/api/v1/jobs HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+    "url": "https://www.linkedin.com/jobs/collections/recommended/?currentJobId=4397979280"
+}
+
+### get all jobs
+
+GET {{baseUrl}}/api/v1/jobs?offset={{offset}}&size={{size}} HTTP/1.1
+Authorization: Bearer {{token}}
+
+### update a job
+PUT {{baseUrl}}/api/v1/jobs/{{jobId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+    "company_name": "testing-url-update"
+}
+
+### retry a job
+PUT {{baseUrl}}/api/v1/jobs/{{jobId}}/retry HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+### delete a job
+DELETE {{baseUrl}}/api/v1/jobs/{{jobId}} HTTP/1.1
+Authorization: Bearer {{token}}
+
+### get resumes for a job
+GET {{baseUrl}}/api/v1/jobs/{{jobId}}/resumes HTTP/1.1
+Authorization: Bearer {{token}}
+
+### get resume
+@resumeId = c87e86b4-c666-44a6-a3bc-b7692785a2c2
+GET {{baseUrl}}/api/v1/jobs/{{jobId}}/resumes/{{resumeId}} HTTP/1.1
+Authorization: Bearer {{token}} 
+
+### generate PDF for a resume
+POST {{baseUrl}}/api/v1/jobs/{{jobId}}/resumes/{{resumeId}}/pdf HTTP/1.1
+Authorization: Bearer {{token}}

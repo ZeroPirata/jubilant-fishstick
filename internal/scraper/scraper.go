@@ -13,15 +13,21 @@ type Scraper struct {
 	Logger *zap.Logger
 }
 
-type ScraperResult struct {
-	Title        string
-	Company      string
-	Location     string
-	Description  string
-	Requirements []string
-	CompanySize  string
-	Industry     string
-	Stack        []string
+type BasicScraperResult struct {
+	Title            string
+	Company          string
+	BasicDescription string
+}
+
+type NLScraperResult struct {
+	Stack                 []string `json:"Stack"`
+	Requirements          []string `json:"Requirements"`
+	CompressedDescription string   `json:"Description"`
+}
+
+type ResultScraper struct {
+	BasicScraperResult
+	NLScraperResult
 }
 
 func NewScraper(url string, logger *zap.Logger) Scraper {
@@ -31,23 +37,23 @@ func NewScraper(url string, logger *zap.Logger) Scraper {
 	}
 }
 
-func (s *Scraper) Scrape() (ScraperResult, error) {
+func (s *Scraper) Scrape() (BasicScraperResult, error) {
 	domain, err := url.Parse(s.Url)
 	if err != nil {
-		return ScraperResult{}, err
+		return BasicScraperResult{}, err
 	}
-
 	s.Logger.Info("Iniciando scrape", zap.String("url", s.Url), zap.String("domain", domain.Hostname()))
 	hostname := strings.Split(domain.Hostname(), ".")[1]
-
-	switch hostname {
-	case "linkedin":
-		return s.scrapLinkedIn()
-	case "amazon":
-		return s.scrapAmazon()
-	case "geekhunter":
-		return s.scrapGeekHunter()
-	default:
-		return ScraperResult{}, fmt.Errorf("domínio não suportado: %s", hostname)
+	scraps := map[string]func() (BasicScraperResult, error){
+		"linkedin":   s.scrapLinkedIn,
+		"amazon":     s.scrapAmazon,
+		"geekhunter": s.scrapGeekHunter,
 	}
+
+	scraper, ok := scraps[hostname]
+	if !ok {
+		return BasicScraperResult{}, fmt.Errorf("domínio não suportado: %s", hostname)
+	}
+
+	return scraper()
 }

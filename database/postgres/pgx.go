@@ -26,7 +26,6 @@ func GetDataBasePool(c *config.Config, logr *zap.Logger) (*pgxpool.Pool, error) 
 
 func CreateConnection(c *config.Config, logr *zap.Logger) (*pgxpool.Pool, error) {
 	database := getDatabaseConfig(c)
-	print(database)
 	config, err := setupPoolConfig(database, c, logr)
 	if err != nil {
 		return nil, err
@@ -42,7 +41,6 @@ func CreateConnection(c *config.Config, logr *zap.Logger) (*pgxpool.Pool, error)
 		pool.Close()
 		return nil, err
 	}
-	logr.Info("Pool de conexões criado com sucesso")
 	return pool, nil
 }
 

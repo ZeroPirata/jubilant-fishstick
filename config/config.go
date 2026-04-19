@@ -73,6 +73,10 @@ func parseEnv(cfg any) error {
 				return fmt.Errorf("required environment variable not set: %s", envKey)
 			}
 			envValue = defaultValue
+			// Fall back to the separate envDefault struct tag if nothing else set a value
+			if envValue == "" {
+				envValue = field.Tag.Get("envDefault")
+			}
 		}
 
 		if envValue == "" {
@@ -102,6 +106,24 @@ func parseEnv(cfg any) error {
 				}
 				fieldValue.SetInt(i)
 			}
+		case reflect.Uint, reflect.Uint64:
+			u, err := strconv.ParseUint(envValue, 10, 64)
+			if err != nil {
+				return fmt.Errorf("could not parse %s as uint: %w", envKey, err)
+			}
+			fieldValue.SetUint(u)
+		case reflect.Uint32:
+			u, err := strconv.ParseUint(envValue, 10, 32)
+			if err != nil {
+				return fmt.Errorf("could not parse %s as uint32: %w", envKey, err)
+			}
+			fieldValue.SetUint(u)
+		case reflect.Uint8:
+			u, err := strconv.ParseUint(envValue, 10, 8)
+			if err != nil {
+				return fmt.Errorf("could not parse %s as uint8: %w", envKey, err)
+			}
+			fieldValue.SetUint(u)
 		}
 	}
 

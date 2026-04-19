@@ -7,25 +7,15 @@ import (
 	"hackton-treino/internal/services"
 )
 
-func (w *Worker) buildUserPrompt(vaga *db.Vaga, match *services.MatchResult) (string, error) {
+func (w *Worker) buildUserPrompt(job *db.Job, match *services.MatchResult) (string, error) {
 	vagaP := vagaPrompt{
-		Empresa:    vaga.Empresa.String,
-		Titulo:     vaga.Titulo.String,
-		Stack:      vaga.Stack,
-		Requisitos: vaga.Requisitos,
+		Empresa:    job.CompanyName.String,
+		Titulo:     job.JobTitle.String,
+		Stack:      job.TechStack,
+		Requisitos: job.Requirements,
 	}
-	if len(vaga.Requisitos) == 0 {
-		vagaP.Descricao = vaga.Descricao.String
-	}
-
-	excelentes := make([]string, 0, len(match.Excelentes))
-	for _, e := range match.Excelentes {
-		excelentes = append(excelentes, string(e))
-	}
-
-	comentarios := make([]string, 0, len(match.Feedbacks))
-	for _, f := range match.Feedbacks {
-		comentarios = append(comentarios, f.String)
+	if len(job.Requirements) == 0 {
+		vagaP.Descricao = job.Description.String
 	}
 
 	prompt := userPrompt{
@@ -35,76 +25,94 @@ func (w *Worker) buildUserPrompt(vaga *db.Vaga, match *services.MatchResult) (st
 		Projetos:     make([]projetoPrompt, 0, len(match.Projetos)),
 		Formacoes:    make([]formacaoPrompt, 0, len(match.Formacoes)),
 		Feedback: feedbackPrompt{
-			ExemplosExcelentes:    excelentes,
-			ComentariosAnteriores: comentarios,
+			ExemplosExcelentes:    make([]string, 0, len(match.Excelentes)),
+			ComentariosAnteriores: match.Feedbacks,
 		},
-		// Certificacoes: make([]certificacaoPrompt, 0, len(match.Certificacoes)),
 	}
 
-	for _, e := range match.Experiencias {
-		conquistas := e.Conquistas
+	const maxExcelentes = 1
+	excelentes := match.Excelentes
+	if len(excelentes) > maxExcelentes {
+		excelentes = excelentes[:maxExcelentes]
+	}
+	for _, e := range excelentes {
+		prompt.Feedback.ExemplosExcelentes = append(prompt.Feedback.ExemplosExcelentes, string(e))
+	}
+
+	const maxExperiencias = 5
+	experiencias := match.Experiencias
+	if len(experiencias) > maxExperiencias {
+		experiencias = experiencias[:maxExperiencias]
+	}
+
+	for _, e := range experiencias {
+		conquistas := e.Achievements
 		if len(conquistas) > 4 {
 			conquistas = conquistas[:4]
 		}
 		ep := experienciaPrompt{
-			Empresa:    e.Empresa,
-			Cargo:      e.Cargo,
-			Descricao:  e.Descricao.String,
-			Atual:      e.Atual,
-			Stack:      e.Stack,
+			Empresa:    e.CompanyName,
+			Cargo:      e.JobRole,
+			Descricao:  e.Description.String,
+			Atual:      e.IsCurrentJob,
+			Stack:      e.TechStack,
 			Conquistas: conquistas,
 		}
-		if e.DataInicio.Valid {
-			ep.DataInicio = fmt.Sprintf("%04d-%02d", e.DataInicio.Time.Year(), e.DataInicio.Time.Month())
+		if e.StartDate.Valid {
+			ep.DataInicio = fmt.Sprintf("%04d-%02d", e.StartDate.Time.Year(), e.StartDate.Time.Month())
 		}
-		if e.DataFim.Valid {
-			ep.DataFim = fmt.Sprintf("%04d-%02d", e.DataFim.Time.Year(), e.DataFim.Time.Month())
+		if e.EndDate.Valid {
+			ep.DataFim = fmt.Sprintf("%04d-%02d", e.EndDate.Time.Year(), e.EndDate.Time.Month())
 		}
 		prompt.Experiencias = append(prompt.Experiencias, ep)
 	}
 
 	for _, h := range match.Habilidades {
 		prompt.Habilidades = append(prompt.Habilidades, habilidadePrompt{
-			Nome:  h.Nome,
-			Nivel: string(h.Nivel),
+			Nome:  h.SkillName,
+			Nivel: string(h.ProficiencyLevel),
 		})
 	}
 
-	for _, p := range match.Projetos {
+	// Limitar a 6 projetos mais recentes — o LLM escolhe os mais relevantes
+	projetos := match.Projetos
+	const maxProjetos = 6
+	if len(projetos) > maxProjetos {
+		projetos = projetos[:maxProjetos]
+	}
+	for _, p := range projetos {
 		prompt.Projetos = append(prompt.Projetos, projetoPrompt{
-			Nome:      p.Nome,
-			Descricao: p.Descricao.String,
-			Link:      p.Link.String,
+			Nome:      p.ProjectName,
+			Descricao: p.Description,
+			Link:      p.ProjectUrl.String,
 		})
 	}
 
 	for _, f := range match.Formacoes {
 		fp := formacaoPrompt{
-			Instituicao: f.Instituicao,
-			Curso:       f.Curso,
+			Instituicao: f.InstitutionName,
+			Curso:       f.CourseName,
 		}
-		if f.DataInicio.Valid {
-			fp.DataInicio = fmt.Sprintf("%04d-%02d", f.DataInicio.Time.Year(), f.DataInicio.Time.Month())
+		if f.StartDate.Valid {
+			fp.DataInicio = fmt.Sprintf("%04d-%02d", f.StartDate.Time.Year(), f.StartDate.Time.Month())
 		}
-		if f.DataFim.Valid {
-			fp.DataFim = fmt.Sprintf("%04d-%02d", f.DataFim.Time.Year(), f.DataFim.Time.Month())
+		if f.EndDate.Valid {
+			fp.DataFim = fmt.Sprintf("%04d-%02d", f.EndDate.Time.Year(), f.EndDate.Time.Month())
 		}
 		prompt.Formacoes = append(prompt.Formacoes, fp)
 	}
 
-	// for _, c := range match.Certificacoes {
-	// 	cp := certificacaoPrompt{
-	// 		Nome:    c.Nome,
-	// 		Emissor: c.Emissor,
-	// 	}
-	// 	if c.EmitidoEm.Valid {
-	// 		cp.EmitidoEm = fmt.Sprintf("%04d-%02d", c.EmitidoEm.Time.Year(), c.EmitidoEm.Time.Month())
-	// 	}
-	// 	if c.Link.Valid {
-	// 		cp.Link = c.Link.String
-	// 	}
-	// 	prompt.Certificacoes = append(prompt.Certificacoes, cp)
-	// }
+	for _, c := range match.Certificacoes {
+		cp := certificacaoPrompt{
+			Nome:    c.CertificateName,
+			Emissor: c.IssuingOrganization,
+			Link:    c.CredentialUrl.String,
+		}
+		if c.IssueDate.Valid {
+			cp.EmitidoEm = fmt.Sprintf("%04d-%02d", c.IssueDate.Time.Year(), c.IssueDate.Time.Month())
+		}
+		prompt.Certificacoes = append(prompt.Certificacoes, cp)
+	}
 
 	raw, err := json.Marshal(prompt)
 	if err != nil {

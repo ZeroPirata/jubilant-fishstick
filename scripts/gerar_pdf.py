@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import traceback
+import unicodedata
 
 from weasyprint import HTML, CSS
 
@@ -130,7 +131,7 @@ li { font-size: 9.5pt; margin-bottom: 1pt; line-height: 1.4; text-align: justify
     font-weight: bold;
     font-size: 9pt;
     color: #1a3a5c;
-    margin-top: 4pt;
+    margin-top: 5pt;
     margin-bottom: 0.5pt;
 }
 
@@ -141,7 +142,7 @@ li { font-size: 9.5pt; margin-bottom: 1pt; line-height: 1.4; text-align: justify
     font-size: 9pt;
 }
 
-.cert-meta { font-size: 7.5pt; color: #1a3a5c; margin-bottom: 2pt; }
+.cert-meta { font-size: 7.5pt; color: #555; margin-bottom: 2pt; }
 
 /* ── Generic ── */
 p { font-size: 9.5pt; margin: 2pt 0; line-height: 1.45; text-align: justify; }
@@ -190,13 +191,25 @@ def _url_label(url: str) -> str:
     return 'Portfólio'
 
 
+_URL_RE = re.compile(r'(https?://\S+)', re.IGNORECASE)
+
+
+def _is_url(s: str) -> bool:
+    return bool(re.match(r'^https?://', s, re.IGNORECASE))
+
+
+def _normalize_url(s: str) -> str:
+    """Lowercase the scheme so 'Https://' becomes 'https://'."""
+    return re.sub(r'^https?://', lambda m: m.group(0).lower(), s, count=1)
+
+
 def _linkify_and_esc(s: str) -> str:
     """Escape HTML but wrap bare URLs in <a> tags (full URL as label)."""
-    parts = re.split(r'(https?://\S+)', s)
+    parts = _URL_RE.split(s)
     result = []
     for part in parts:
-        if part.startswith("http://") or part.startswith("https://"):
-            url = _esc(part.rstrip(".,)>"))
+        if _is_url(part):
+            url = _esc(_normalize_url(part.rstrip(".,)>")))
             result.append(f'<a href="{url}">{url}</a>')
         else:
             result.append(_esc(part))
@@ -205,11 +218,11 @@ def _linkify_and_esc(s: str) -> str:
 
 def _contact_linkify(s: str) -> str:
     """Like _linkify_and_esc but uses friendly label instead of raw URL for contact lines."""
-    parts = re.split(r'(https?://\S+)', s)
+    parts = _URL_RE.split(s)
     result = []
     for part in parts:
-        if part.startswith("http://") or part.startswith("https://"):
-            url_clean = part.rstrip(".,)>")
+        if _is_url(part):
+            url_clean = _normalize_url(part.rstrip(".,)>"))
             url_esc = _esc(url_clean)
             label = _esc(_url_label(url_clean))
             result.append(f'<a href="{url_esc}">{label}</a>')
@@ -226,8 +239,34 @@ def _inline(s: str) -> str:
     return s
 
 
+def _normalize_spaced_section(line: str) -> str | None:
+    """Collapse letter-spaced section names back to normal.
+
+    'S U M M A R Y'                          → 'SUMMARY'
+    'R E S U M O  P R O F I S S I O N A L'  → 'RESUMO PROFISSIONAL'
+    Returns None if the line doesn't look like a letter-spaced section.
+    """
+    # NFC so accented chars like Ç (NFD = C + combining cedilla) count as len==1
+    tokens = unicodedata.normalize('NFC', line).strip().upper().split()
+    if not tokens or not all(len(t) == 1 for t in tokens):
+        return None
+    # Try single-word match
+    collapsed = ''.join(tokens)
+    if collapsed in _ALL_SECTIONS:
+        return collapsed
+    # Try two-word match (all known sections have at most 2 words)
+    for split in range(1, len(tokens)):
+        candidate = ''.join(tokens[:split]) + ' ' + ''.join(tokens[split:])
+        if candidate in _ALL_SECTIONS:
+            return candidate
+    return None
+
+
 def _is_section(line: str) -> bool:
-    return line.strip().upper() in _ALL_SECTIONS
+    nfc = unicodedata.normalize('NFC', line)
+    if nfc.strip().upper() in _ALL_SECTIONS:
+        return True
+    return _normalize_spaced_section(nfc) is not None
 
 
 def _is_skill_line(line: str) -> bool:
@@ -296,18 +335,22 @@ def _render_proj_buffer(html: list, lines: list[str]) -> None:
 
     for line in lines[1:]:
         # Bare URL → link (signals end, but keep looping to collect any stray lines)
-        if line.startswith('http://') or line.startswith('https://'):
+        if _is_url(line):
             if not link:
-                link = line.rstrip('.,)')
+                link = _normalize_url(line.rstrip('.,)'))
             continue
-        # Inline link: "description fragment | https://..."
-        m = re.search(r'\s*\|\s*(https?://\S+)\s*$', line)
+        # "Company | https://..." or "description | https://..."
+        m = re.search(r'\s*\|\s*(https?://\S+)\s*$', line, re.IGNORECASE)
         if m:
             if not link:
-                link = m.group(1).rstrip('.,)')
+                link = _normalize_url(m.group(1).rstrip('.,)'))
             fragment = line[:m.start()].strip()
             if fragment:
-                desc_parts.append(fragment)
+                # Short fragment before URL with no sentence punctuation = company name
+                if not company and not desc_parts and len(fragment) < 70 and not any(c in fragment for c in '.!?'):
+                    company = fragment
+                else:
+                    desc_parts.append(fragment)
             continue
         # Standalone label word without URL (e.g. "GitHub", "GitLab") → skip silently
         if line.strip().lower() in _LINK_LABELS:
@@ -339,10 +382,9 @@ def _render_proj_buffer(html: list, lines: list[str]) -> None:
         meta_parts.append(_esc(company))
     if link:
         link_esc = _esc(link)
-        label    = _esc(_url_label(link))
-        meta_parts.append(f'<a href="{link_esc}">{label}</a>')
+        meta_parts.append(f'<a href="{link_esc}">Link</a>')
     if meta_parts:
-        html.append(f'<div class="proj-meta">{" \u2014 ".join(meta_parts)}</div>')
+        html.append(f'<div class="proj-meta">{" - ".join(meta_parts)}</div>')
 
     if desc:
         html.append(f'<div class="proj-desc">{_inline(desc)}</div>')
@@ -442,18 +484,34 @@ def curriculo_para_html(texto: str) -> str:
             html.append('</ul>')
             in_ul = False
 
-    def flush_cert() -> None:
+    def flush_cert(meta: str = '') -> None:
         nonlocal pending_cert
         if pending_cert is None:
             return
         name = pending_cert['name']
         link = pending_cert.get('link')
+
+        # Parse "HackerRank — Out/2025" → "HackerRank (Out/2025)"
+        meta_text = ''
+        if meta:
+            if '\u2014' in meta:
+                issuer, _, date = meta.partition('\u2014')
+                meta_text = f'{issuer.strip()} ({date.strip()})'
+            else:
+                meta_text = meta.strip()
+
         if link:
             link_url = _esc(link.rstrip(".,)>"))
-            name_rendered = f'<a class="cert-name-link" href="{link_url}">{_esc(name)}</a>'
+            cert_part = f'<a class="cert-name-link" href="{link_url}">{_esc(name)}</a>'
         else:
-            name_rendered = _esc(name)
-        html.append(f'<div class="cert-name">{name_rendered}</div>')
+            cert_part = _esc(name)
+
+        if meta_text:
+            line_html = f'{cert_part} \u2014 {_esc(meta_text)}'
+        else:
+            line_html = cert_part
+
+        html.append(f'<div class="cert-name">{line_html}</div>')
         pending_cert = None
 
     def flush_exp(date: str = '') -> None:
@@ -514,12 +572,16 @@ def curriculo_para_html(texto: str) -> str:
             flush_cert()
             flush_skill()
             expect_date = False
-            current_section = stripped.upper()
-            html.append(f'<h2>{_esc(stripped)}</h2>')
+            # Normalize letter-spaced names ("S U M M A R Y" → "SUMMARY") before storing and rendering
+            normalized = stripped.upper()
+            if normalized not in _ALL_SECTIONS:
+                normalized = _normalize_spaced_section(stripped) or normalized
+            current_section = normalized
+            html.append(f'<h2>{_esc(normalized)}</h2>')
             continue
 
         # Bullet
-        if stripped.startswith('- ') or stripped.startswith('* '):
+        if stripped.startswith('- ') or stripped.startswith('* ') or stripped.startswith('• '):
             flush_exp()
             expect_date = False
             if not in_ul:
@@ -531,29 +593,49 @@ def curriculo_para_html(texto: str) -> str:
         # PROJECTS — buffer content lines; detect project boundaries by content
         if current_section in _PROJ_SECTIONS:
             close_ul()
-            is_url = stripped.startswith('http://') or stripped.startswith('https://')
-            has_inline_link = bool(re.search(r'\|\s*https?://', stripped))
+            is_url = _is_url(stripped)
+            has_inline_link = bool(re.search(r'\|\s*https?://', stripped, re.IGNORECASE))
 
             # Em-dash line after buffer already has a link/desc → new project starting
             if proj_buffer and '\u2014' in stripped and not is_url:
                 buf_has_end = any(
-                    l.startswith('http') or bool(re.search(r'\|\s*https?://', l)) or len(l) > 70
+                    _is_url(l) or bool(re.search(r'\|\s*https?://', l, re.IGNORECASE)) or len(l) > 70
                     for l in proj_buffer
                 )
                 if buf_has_end:
                     flush_proj()
 
             proj_buffer.append(stripped)
+            continue
 
-            # Bare URL or inline link = last line of this project → flush immediately
-            if is_url or has_inline_link:
-                flush_proj()
+        # Certification — processada ANTES do em-dash e do expect_date porque a linha de
+        # meta ("Emissor — Mês/Ano") contém em-dash e seria sequestrada pelo handler abaixo.
+        if current_section in _CERT_SECTIONS:
+            close_ul()
+            _HAS_YEAR = bool(re.search(r'\b(20\d\d|19\d\d)\b', stripped))
+            _HAS_MONTH = bool(re.search(
+                r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec'
+                r'|jan|fev|mar|abr|mai|ago|set|out)\b', stripped, re.IGNORECASE))
+            _LOOKS_LIKE_META = '|' not in stripped and (_HAS_YEAR or _HAS_MONTH)
+            is_meta = pending_cert is not None and _LOOKS_LIKE_META
+            if is_meta:
+                flush_cert(meta=stripped)
+            else:
+                flush_cert()  # flush previous cert without meta if LLM skipped it
+                if '|' in stripped:
+                    name_part, _, link_part = stripped.partition('|')
+                    link_candidate = link_part.strip()
+                    if link_candidate.lower().startswith('http'):
+                        pending_cert = {'name': name_part.strip(), 'link': link_candidate}
+                    else:
+                        pending_cert = {'name': stripped, 'link': None}
+                else:
+                    pending_cert = {'name': stripped, 'link': None}
             continue
 
         # Date line — checked BEFORE em-dash so "2025-01 — 2024-06" isn't re-parsed as a header
         if expect_date:
             expect_date = False
-            # Collect the current line; peek ahead for a second date-like line (split dates)
             date_text = stripped
             j = i
             while j < n and not lines[j].strip():  # skip blanks
@@ -580,13 +662,11 @@ def curriculo_para_html(texto: str) -> str:
 
             if current_section in _EXP_SECTIONS:
                 flush_exp()
-                # Company — Role
                 exp_company, exp_role = left, right
                 expect_date = True
 
             elif current_section in _EDU_SECTIONS:
                 flush_edu()
-                # Institution — Course
                 edu_institution, edu_course = left, right
                 expect_date = True
 
@@ -600,7 +680,8 @@ def curriculo_para_html(texto: str) -> str:
         # Skill section lines
         if current_section in _SKILL_SECTIONS:
             close_ul()
-            # One-liner format: "Category: item1, item2, item3"
+            if re.match(r'^[•\-\*]\s*$', stripped):
+                continue
             if _is_skill_line(stripped):
                 flush_skill()
                 idx = stripped.index(':')
@@ -612,39 +693,18 @@ def curriculo_para_html(texto: str) -> str:
                     f'</p>'
                 )
                 continue
-            # Header-only line: "Category:" (bullet items follow on next lines)
             if stripped.endswith(':') and len(stripped.split()) <= 4:
                 flush_skill()
                 skill_key = stripped[:-1].strip()
                 skill_items = []
                 continue
-            # Bullet item under a pending skill key: "• item" or "- item"
             if skill_key is not None and (stripped.startswith('•') or stripped.startswith('-') or stripped.startswith('*')):
                 item = stripped.lstrip('•-* ').strip()
                 if item:
                     skill_items.append(item)
                 continue
-            # Anything else in skills section → flush pending key, treat as paragraph
             flush_skill()
             html.append(f'<p>{_inline(stripped)}</p>')
-            continue
-
-        # Certification — detect by content, not by line position
-        # Meta line = has em-dash AND we have a pending cert waiting for it
-        # Name line = everything else (flush previous cert first, then buffer new one)
-        if current_section in _CERT_SECTIONS:
-            close_ul()
-            is_meta = pending_cert is not None and '\u2014' in stripped
-            if is_meta:
-                flush_cert()
-                html.append(f'<div class="cert-meta">{_esc(stripped)}</div>')
-            else:
-                flush_cert()  # flush previous cert without meta if LLM skipped it
-                if '|' in stripped:
-                    name_part, _, link_part = stripped.partition('|')
-                    pending_cert = {'name': name_part.strip(), 'link': link_part.strip()}
-                else:
-                    pending_cert = {'name': stripped, 'link': None}
             continue
 
         # Default paragraph
@@ -702,8 +762,7 @@ def gerar_pdf_cover_letter(texto: str, caminho_saida: str) -> None:
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
-def main() -> None:
-    dados = json.load(sys.stdin)
+def _process(dados: dict) -> dict:
     curriculo    = dados.get("curriculo", "")
     cover_letter = dados.get("cover_letter", "")
     output_dir   = dados.get("output_dir", "output")
@@ -716,12 +775,37 @@ def main() -> None:
     gerar_pdf_curriculo(curriculo, resume_path)
     gerar_pdf_cover_letter(cover_letter, cover_letter_path)
 
-    print(json.dumps({"resume_path": resume_path, "cover_letter_path": cover_letter_path}))
+    return {"resume_path": resume_path, "cover_letter_path": cover_letter_path}
+
+
+def serve() -> None:
+    """Modo servidor: lê um JSON por linha do stdin, responde um JSON por linha no stdout.
+    O processo Go mantém este processo vivo, eliminando o cold start do WeasyPrint."""
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            dados = json.loads(line)
+            result = _process(dados)
+        except Exception as e:
+            result = {"error": str(e), "traceback": traceback.format_exc()}
+        sys.stdout.write(json.dumps(result) + "\n")
+        sys.stdout.flush()
+
+
+def main() -> None:
+    dados = json.load(sys.stdin)
+    result = _process(dados)
+    print(json.dumps(result))
 
 
 if __name__ == "__main__":
     try:
-        main()
+        if len(sys.argv) > 1 and sys.argv[1] == "--serve":
+            serve()
+        else:
+            main()
     except Exception as e:
         print(json.dumps({"error": str(e), "traceback": traceback.format_exc()}))
         sys.exit(1)

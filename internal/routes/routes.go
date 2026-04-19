@@ -1,45 +1,43 @@
 package routes
 
 import (
+	"hackton-treino/config"
 	"hackton-treino/internal/handler"
-	"hackton-treino/internal/repository"
+	"hackton-treino/internal/middleware"
+	"hackton-treino/internal/security"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
-func PipeCurriculoStup(mux *http.ServeMux, logger *zap.Logger, dbPool *pgxpool.Pool) {
-	r := repository.NewRepository(dbPool)
-	h := &handler.PipelineCurriculo{Logger: logger, DataBase: r}
-	p := &handler.PerfilHandler{Logger: logger, DataBase: r}
-	// Vagas
-	mux.HandleFunc("GET /", handler.ServeUI)
-	mux.Handle("GET /output/", http.StripPrefix("/output/", http.FileServer(http.Dir("output"))))
-	mux.HandleFunc("POST /vagas", h.CreateVaga)
-	mux.HandleFunc("GET /vagas", h.ListarVagas)
-	mux.HandleFunc("DELETE /vagas/{id}", h.DeleteVaga)
-	mux.HandleFunc("PATCH /vagas/{id}/status", h.UpdateVagaStatus)
-	mux.HandleFunc("GET /curriculos", h.ListarCurriculos)
-	mux.HandleFunc("DELETE /curriculos/{id}", h.DeleteCurriculoGerado)
-	mux.HandleFunc("POST /curriculos/{id}/gerar-pdf", h.GerarPDF)
-	mux.HandleFunc("POST /feedback", h.InserirFeedback)
-	// Perfil
-	mux.HandleFunc("GET /perfil/info", p.GetInformacoesBasicas)
-	mux.HandleFunc("POST /perfil/info/{id}", p.UpsertInformacoesBasicas)
-	mux.HandleFunc("GET /perfil/experiencias", p.ListExperiencias)
-	mux.HandleFunc("POST /perfil/experiencias", p.InsertExperiencia)
-	mux.HandleFunc("DELETE /perfil/experiencias/{id}", p.DeleteExperiencia)
-	mux.HandleFunc("GET /perfil/habilidades", p.ListHabilidades)
-	mux.HandleFunc("POST /perfil/habilidades", p.InsertHabilidade)
-	mux.HandleFunc("DELETE /perfil/habilidades/{id}", p.DeleteHabilidade)
-	mux.HandleFunc("GET /perfil/projetos", p.ListProjetos)
-	mux.HandleFunc("POST /perfil/projetos", p.InsertProjeto)
-	mux.HandleFunc("DELETE /perfil/projetos/{id}", p.DeleteProjeto)
-	mux.HandleFunc("GET /perfil/filtros", p.ListFiltros)
-	mux.HandleFunc("POST /perfil/filtros", p.InsertFiltro)
-	mux.HandleFunc("DELETE /perfil/filtros/{id}", p.DeleteFiltro)
-	mux.HandleFunc("GET /perfil/certificacoes", p.ListCertificacoes)
-	mux.HandleFunc("POST /perfil/certificacoes", p.InsertCertificacao)
-	mux.HandleFunc("DELETE /perfil/certificacoes/{id}", p.DeleteCertificacao)
+func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.Config, rds *redis.Client) {
+	timeout := config.GetConfigDurationOrDefault(cfg.Project.ContextTimeout, 60*time.Second)
+	hash := config.LoadHashConfig(cfg)
+	hasher := security.NewHasher(hash)
+	jwtManager := security.NewJwtManager(cfg.Jwt.Secret, cfg.Jwt.Expiration)
+
+	mux.HandleFunc("/", handler.ServeUI)
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	outputFS := http.FileServer(http.Dir("output"))
+	mux.Handle("/output/", http.StripPrefix("/output/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Disposition", "attachment")
+		outputFS.ServeHTTP(w, r)
+	})))
+
+	apiMux := http.NewServeMux()
+	setupAuthRoutes(AuthRoutes{Mux: apiMux, Logger: logger, Db: db, Hasher: hasher, Jwt: jwtManager})
+
+	protectedMux := http.NewServeMux()
+	setupJobRoutes(protectedMux, logger, db)
+	setupUserRoutes(protectedMux, logger, db, rds)
+	setupFilterRoutes(protectedMux, logger, db)
+
+	protectedHandler := middleware.AuthMiddleware(jwtManager)(protectedMux)
+	apiMux.Handle("/", protectedHandler)
+
+	apiHandler := middleware.TimeoutMiddleware(timeout)(apiMux)
+	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", apiHandler))
 }

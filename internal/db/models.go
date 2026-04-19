@@ -11,298 +11,332 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type NivelHabilidade string
+type FeedbackStatus string
 
 const (
-	NivelHabilidadeBasico        NivelHabilidade = "basico"
-	NivelHabilidadeIntermediario NivelHabilidade = "intermediario"
-	NivelHabilidadeAvancado      NivelHabilidade = "avancado"
-	NivelHabilidadeExpert        NivelHabilidade = "expert"
+	FeedbackStatusPoor      FeedbackStatus = "poor"
+	FeedbackStatusFair      FeedbackStatus = "fair"
+	FeedbackStatusGood      FeedbackStatus = "good"
+	FeedbackStatusExcellent FeedbackStatus = "excellent"
 )
 
-func (e *NivelHabilidade) Scan(src interface{}) error {
+func (e *FeedbackStatus) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = NivelHabilidade(s)
+		*e = FeedbackStatus(s)
 	case string:
-		*e = NivelHabilidade(s)
+		*e = FeedbackStatus(s)
 	default:
-		return fmt.Errorf("unsupported scan type for NivelHabilidade: %T", src)
+		return fmt.Errorf("unsupported scan type for FeedbackStatus: %T", src)
 	}
 	return nil
 }
 
-type NullNivelHabilidade struct {
-	NivelHabilidade NivelHabilidade `json:"nivel_habilidade"`
-	Valid           bool            `json:"valid"` // Valid is true if NivelHabilidade is not NULL
+type NullFeedbackStatus struct {
+	FeedbackStatus FeedbackStatus `json:"feedback_status"`
+	Valid          bool           `json:"valid"` // Valid is true if FeedbackStatus is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullNivelHabilidade) Scan(value interface{}) error {
+func (ns *NullFeedbackStatus) Scan(value interface{}) error {
 	if value == nil {
-		ns.NivelHabilidade, ns.Valid = "", false
+		ns.FeedbackStatus, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.NivelHabilidade.Scan(value)
+	return ns.FeedbackStatus.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullNivelHabilidade) Value() (driver.Value, error) {
+func (ns NullFeedbackStatus) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.NivelHabilidade), nil
+	return string(ns.FeedbackStatus), nil
 }
 
-type SensorStatus string
+type JobQuality string
 
 const (
-	SensorStatusNORMAL     SensorStatus = "NORMAL"
-	SensorStatusALERTA     SensorStatus = "ALERTA"
-	SensorStatusEMERGENCIA SensorStatus = "EMERGENCIA"
+	JobQualityLow  JobQuality = "low"
+	JobQualityMid  JobQuality = "mid"
+	JobQualityHigh JobQuality = "high"
 )
 
-func (e *SensorStatus) Scan(src interface{}) error {
+func (e *JobQuality) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = SensorStatus(s)
+		*e = JobQuality(s)
 	case string:
-		*e = SensorStatus(s)
+		*e = JobQuality(s)
 	default:
-		return fmt.Errorf("unsupported scan type for SensorStatus: %T", src)
+		return fmt.Errorf("unsupported scan type for JobQuality: %T", src)
 	}
 	return nil
 }
 
-type NullSensorStatus struct {
-	SensorStatus SensorStatus `json:"sensor_status"`
-	Valid        bool         `json:"valid"` // Valid is true if SensorStatus is not NULL
+type NullJobQuality struct {
+	JobQuality JobQuality `json:"job_quality"`
+	Valid      bool       `json:"valid"` // Valid is true if JobQuality is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullSensorStatus) Scan(value interface{}) error {
+func (ns *NullJobQuality) Scan(value interface{}) error {
 	if value == nil {
-		ns.SensorStatus, ns.Valid = "", false
+		ns.JobQuality, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.SensorStatus.Scan(value)
+	return ns.JobQuality.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullSensorStatus) Value() (driver.Value, error) {
+func (ns NullJobQuality) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.SensorStatus), nil
+	return string(ns.JobQuality), nil
 }
 
-type StatusFeedback string
+type JobStatus string
 
 const (
-	StatusFeedbackMedio     StatusFeedback = "medio"
-	StatusFeedbackBom       StatusFeedback = "bom"
-	StatusFeedbackExcelente StatusFeedback = "excelente"
+	JobStatusPending       JobStatus = "pending"
+	JobStatusError         JobStatus = "error"
+	JobStatusProcessing    JobStatus = "processing"
+	JobStatusScrapingBasic JobStatus = "scraping_basic"
+	JobStatusScrapingNl    JobStatus = "scraping_nl"
+	JobStatusCompleted     JobStatus = "completed"
 )
 
-func (e *StatusFeedback) Scan(src interface{}) error {
+func (e *JobStatus) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = StatusFeedback(s)
+		*e = JobStatus(s)
 	case string:
-		*e = StatusFeedback(s)
+		*e = JobStatus(s)
 	default:
-		return fmt.Errorf("unsupported scan type for StatusFeedback: %T", src)
+		return fmt.Errorf("unsupported scan type for JobStatus: %T", src)
 	}
 	return nil
 }
 
-type NullStatusFeedback struct {
-	StatusFeedback StatusFeedback `json:"status_feedback"`
-	Valid          bool           `json:"valid"` // Valid is true if StatusFeedback is not NULL
+type NullJobStatus struct {
+	JobStatus JobStatus `json:"job_status"`
+	Valid     bool      `json:"valid"` // Valid is true if JobStatus is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullStatusFeedback) Scan(value interface{}) error {
+func (ns *NullJobStatus) Scan(value interface{}) error {
 	if value == nil {
-		ns.StatusFeedback, ns.Valid = "", false
+		ns.JobStatus, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.StatusFeedback.Scan(value)
+	return ns.JobStatus.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullStatusFeedback) Value() (driver.Value, error) {
+func (ns NullJobStatus) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.StatusFeedback), nil
+	return string(ns.JobStatus), nil
 }
 
-type StatusVaga string
+type SkillLevel string
 
 const (
-	StatusVagaPendente      StatusVaga = "pendente"
-	StatusVagaProcessando   StatusVaga = "processando"
-	StatusVagaGerado        StatusVaga = "gerado"
-	StatusVagaRevisado      StatusVaga = "revisado"
-	StatusVagaEnviado       StatusVaga = "enviado"
-	StatusVagaForaDoPerfil  StatusVaga = "fora_do_perfil"
-	StatusVagaImprocessavel StatusVaga = "improcessavel"
+	SkillLevelBasic        SkillLevel = "basic"
+	SkillLevelIntermediate SkillLevel = "intermediate"
+	SkillLevelAdvanced     SkillLevel = "advanced"
+	SkillLevelExpert       SkillLevel = "expert"
 )
 
-func (e *StatusVaga) Scan(src interface{}) error {
+func (e *SkillLevel) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = StatusVaga(s)
+		*e = SkillLevel(s)
 	case string:
-		*e = StatusVaga(s)
+		*e = SkillLevel(s)
 	default:
-		return fmt.Errorf("unsupported scan type for StatusVaga: %T", src)
+		return fmt.Errorf("unsupported scan type for SkillLevel: %T", src)
 	}
 	return nil
 }
 
-type NullStatusVaga struct {
-	StatusVaga StatusVaga `json:"status_vaga"`
-	Valid      bool       `json:"valid"` // Valid is true if StatusVaga is not NULL
+type NullSkillLevel struct {
+	SkillLevel SkillLevel `json:"skill_level"`
+	Valid      bool       `json:"valid"` // Valid is true if SkillLevel is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullStatusVaga) Scan(value interface{}) error {
+func (ns *NullSkillLevel) Scan(value interface{}) error {
 	if value == nil {
-		ns.StatusVaga, ns.Valid = "", false
+		ns.SkillLevel, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.StatusVaga.Scan(value)
+	return ns.SkillLevel.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullStatusVaga) Value() (driver.Value, error) {
+func (ns NullSkillLevel) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.StatusVaga), nil
+	return string(ns.SkillLevel), nil
 }
 
-type Alertum struct {
-	ID        int64            `json:"id"`
-	SensorID  int64            `json:"sensor_id"`
-	Status    SensorStatus     `json:"status"`
-	AlertTime pgtype.Timestamp `json:"alert_time"`
+type GeneratedResume struct {
+	ID              pgtype.UUID        `json:"id"`
+	JobID           pgtype.UUID        `json:"job_id"`
+	UserID          pgtype.UUID        `json:"user_id"`
+	ContentJson     []byte             `json:"content_json"`
+	ResumePdfPath   pgtype.Text        `json:"resume_pdf_path"`
+	CoverLetterPath pgtype.Text        `json:"cover_letter_path"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type Certificaco struct {
-	ID        int64       `json:"id"`
-	Nome      string      `json:"nome"`
-	Emissor   string      `json:"emissor"`
-	EmitidoEm pgtype.Date `json:"emitido_em"`
-	Codigo    pgtype.Text `json:"codigo"`
-	Link      pgtype.Text `json:"link"`
-	Tags      []string    `json:"tags"`
+type Job struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	ExternalUrl  string             `json:"external_url"`
+	CompanyName  pgtype.Text        `json:"company_name"`
+	JobTitle     pgtype.Text        `json:"job_title"`
+	Description  pgtype.Text        `json:"description"`
+	TechStack    []string           `json:"tech_stack"`
+	Requirements []string           `json:"requirements"`
+	Status       JobStatus          `json:"status"`
+	Quality      NullJobQuality     `json:"quality"`
+	Language     pgtype.Text        `json:"language"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type CurriculosGerado struct {
-	ID              int64            `json:"id"`
-	VagaID          int64            `json:"vaga_id"`
-	ConteudoJson    []byte           `json:"conteudo_json"`
-	ResumePath      pgtype.Text      `json:"resume_path"`
-	CoverLetterPath pgtype.Text      `json:"cover_letter_path"`
-	CriadoEm        pgtype.Timestamp `json:"criado_em"`
+type ResumesFeedback struct {
+	ID        pgtype.UUID        `json:"id"`
+	ResumeID  pgtype.UUID        `json:"resume_id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Status    FeedbackStatus     `json:"status"`
+	Comments  pgtype.Text        `json:"comments"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
-type Experiencia struct {
-	ID         int64       `json:"id"`
-	Empresa    string      `json:"empresa"`
-	Cargo      string      `json:"cargo"`
-	Descricao  pgtype.Text `json:"descricao"`
-	Atual      bool        `json:"atual"`
-	DataInicio pgtype.Date `json:"data_inicio"`
-	DataFim    pgtype.Date `json:"data_fim"`
-	Stack      []string    `json:"stack"`
-	Conquistas []string    `json:"conquistas"`
-	Tags       []string    `json:"tags"`
+type StackAlias struct {
+	ID        pgtype.UUID        `json:"id"`
+	AliasFrom string             `json:"alias_from"`
+	AliasTo   string             `json:"alias_to"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
-type Feedback struct {
-	ID          int64            `json:"id"`
-	CurriculoID int64            `json:"curriculo_id"`
-	VagaID      int64            `json:"vaga_id"`
-	Status      StatusFeedback   `json:"status"`
-	Comentario  pgtype.Text      `json:"comentario"`
-	CriadoEm    pgtype.Timestamp `json:"criado_em"`
+type UserAcademicHistory struct {
+	ID              pgtype.UUID        `json:"id"`
+	UserID          pgtype.UUID        `json:"user_id"`
+	InstitutionName string             `json:"institution_name"`
+	CourseName      string             `json:"course_name"`
+	StartDate       pgtype.Date        `json:"start_date"`
+	EndDate         pgtype.Date        `json:"end_date"`
+	Description     pgtype.Text        `json:"description"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type Filtro struct {
-	ID      int64  `json:"id"`
-	Keyword string `json:"keyword"`
+type UserAccount struct {
+	ID           pgtype.UUID        `json:"id"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type Formacao struct {
-	ID          int64       `json:"id"`
-	Instituicao string      `json:"instituicao"`
-	Curso       string      `json:"curso"`
-	DataInicio  pgtype.Date `json:"data_inicio"`
-	DataFim     pgtype.Date `json:"data_fim"`
-	Descricao   pgtype.Text `json:"descricao"`
+type UserCertificate struct {
+	ID                  pgtype.UUID        `json:"id"`
+	UserID              pgtype.UUID        `json:"user_id"`
+	CertificateName     string             `json:"certificate_name"`
+	IssuingOrganization string             `json:"issuing_organization"`
+	IssueDate           pgtype.Date        `json:"issue_date"`
+	CredentialUrl       pgtype.Text        `json:"credential_url"`
+	Tags                []string           `json:"tags"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type Habilidade struct {
-	ID    int64           `json:"id"`
-	Nome  string          `json:"nome"`
-	Nivel NivelHabilidade `json:"nivel"`
-	Tags  []string        `json:"tags"`
+type UserExperience struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	CompanyName  string             `json:"company_name"`
+	JobRole      string             `json:"job_role"`
+	Description  pgtype.Text        `json:"description"`
+	IsCurrentJob bool               `json:"is_current_job"`
+	StartDate    pgtype.Date        `json:"start_date"`
+	EndDate      pgtype.Date        `json:"end_date"`
+	TechStack    []string           `json:"tech_stack"`
+	Achievements []string           `json:"achievements"`
+	Tags         []string           `json:"tags"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type Historico struct {
-	ID        int64            `json:"id"`
-	SensorID  int64            `json:"sensor_id"`
-	Value     float64          `json:"value"`
-	CreatedAt pgtype.Timestamp `json:"created_at"`
+type UserJobFilter struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Keyword   string             `json:"keyword"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type InformacoesBasica struct {
-	ID        int64            `json:"id"`
-	Nome      string           `json:"nome"`
-	Email     string           `json:"email"`
-	Telefone  pgtype.Text      `json:"telefone"`
-	Linkedin  pgtype.Text      `json:"linkedin"`
-	Github    pgtype.Text      `json:"github"`
-	Portfolio pgtype.Text      `json:"portfolio"`
-	Resumo    pgtype.Text      `json:"resumo"`
-	CriadoEm  pgtype.Timestamp `json:"criado_em"`
+type UserLink struct {
+	UserID       pgtype.UUID        `json:"user_id"`
+	LinkedinUrl  pgtype.Text        `json:"linkedin_url"`
+	GithubUrl    pgtype.Text        `json:"github_url"`
+	PortfolioUrl pgtype.Text        `json:"portfolio_url"`
+	OtherLinks   []byte             `json:"other_links"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type Projeto struct {
-	ID          int64       `json:"id"`
-	Nome        string      `json:"nome"`
-	Descricao   pgtype.Text `json:"descricao"`
-	Link        pgtype.Text `json:"link"`
-	Tags        []string    `json:"tags"`
-	DataInicio  pgtype.Date `json:"data_inicio"`
-	DataFim     pgtype.Date `json:"data_fim"`
-	Facultativo bool        `json:"facultativo"`
+type UserProfile struct {
+	UserID    pgtype.UUID        `json:"user_id"`
+	FullName  string             `json:"full_name"`
+	Phone     pgtype.Text        `json:"phone"`
+	About     pgtype.Text        `json:"about"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type Sensore struct {
-	ID     int64        `json:"id"`
-	Nome   string       `json:"nome"`
-	Loc    string       `json:"loc"`
-	Status SensorStatus `json:"status"`
+type UserProject struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	ProjectName string             `json:"project_name"`
+	Description string             `json:"description"`
+	ProjectUrl  pgtype.Text        `json:"project_url"`
+	Tags        []string           `json:"tags"`
+	StartDate   pgtype.Date        `json:"start_date"`
+	EndDate     pgtype.Date        `json:"end_date"`
+	IsAcademic  bool               `json:"is_academic"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type Vaga struct {
-	ID         int64            `json:"id"`
-	Url        string           `json:"url"`
-	Empresa    pgtype.Text      `json:"empresa"`
-	Titulo     pgtype.Text      `json:"titulo"`
-	Descricao  pgtype.Text      `json:"descricao"`
-	Stack      []string         `json:"stack"`
-	Requisitos []string         `json:"requisitos"`
-	Status     StatusVaga       `json:"status"`
-	CriadoEm   pgtype.Timestamp `json:"criado_em"`
-	Idioma     pgtype.Text      `json:"idioma"`
+type UserSkill struct {
+	ID               pgtype.UUID        `json:"id"`
+	UserID           pgtype.UUID        `json:"user_id"`
+	SkillName        string             `json:"skill_name"`
+	ProficiencyLevel SkillLevel         `json:"proficiency_level"`
+	Tags             []string           `json:"tags"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
 }

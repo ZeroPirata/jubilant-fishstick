@@ -1,16 +1,35 @@
-FROM golang:1.25
+FROM golang:1.26.2-alpine3.23
 
-WORKDIR /workspaces/hackton-treino
+WORKDIR /workspace
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
     python3 \
-    python3-pip \
-    python3-venv \
-    && rm -rf /var/lib/apt/lists/*
+    py3-pip \
+    bash \
+    git \
+    ca-certificates \
+    make \
+    pango \
+    cairo \
+    gdk-pixbuf \
+    fontconfig \
+    ttf-liberation \
+    py3-cffi \
+    py3-brotli \
+    libffi-dev \
+    jpeg-dev \
+    zlib-dev \
+    && pip install weasyprint --break-system-packages
 
-RUN go install github.com/air-verse/air@v1.61.5 && \
-    go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 && \
-    go install golang.org/x/tools/cmd/goimports@v0.28.0 && \
-    go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+ARG UID=1000
+RUN adduser -D -u ${UID} devuser
+
+ENV GOMODCACHE=/go/pkg/mod
+ENV GOCACHE=/home/devuser/.cache/go-build
+
+RUN mkdir -p /go/pkg/mod /go/pkg/sumdb /home/devuser/.cache/go-build
+RUN chown -R devuser:devuser /go /home/devuser
+
+USER devuser
 
 CMD ["sleep", "infinity"]

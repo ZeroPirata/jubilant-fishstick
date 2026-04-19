@@ -1,51 +1,61 @@
+version: "3.9"
+
 services:
   app:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
+      args:
+        UID: 1000
     volumes:
-      - ..:/workspaces/hackton-treino:cached
+      - ..:/workspace:cached
+    working_dir: /workspace
     ports:
       - "8080:8080"
     depends_on:
-      - db
-      - cache
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
     networks:
       - desafio-network
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 1G
+    mem_limit: 2g
+    security_opt:
+      - no-new-privileges:true
+    stdin_open: true
+    tty: true
 
   pgadmin:
     image: dpage/pgadmin4
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@teste.com
       PGADMIN_DEFAULT_PASSWORD: senha123
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    volumes:
+      - ./data/pgadmin:/var/lib/pgadmin
+      - ./data/pgadmin_logs:/var/log/pgadmin
     ports:
       - "8081:80"
+    user: "5050"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - desafio-network
-    deploy:
-      resources:
-        limits:
-          memory: 512M
+    mem_limit: 512m
 
   db:
     image: postgres:17-alpine
     restart: always
     environment:
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=pass
-      - POSTGRES_DB=desafio_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: desafio_db
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data  
+      - ./data/pgdata:/var/lib/postgresql/data
+      - ../repository/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     networks:
       - desafio-network
     healthcheck:
@@ -54,16 +64,15 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
+    mem_limit: 512m
 
   cache:
     image: redis:7-alpine
     restart: always
     ports:
       - "6379:6379"
+    volumes:
+      - ./data/redis:/data
     networks:
       - desafio-network
     healthcheck:
@@ -71,10 +80,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    mem_limit: 256m
 
 networks:
   desafio-network:
     driver: bridge
-
-volumes:
-  pgdata: 

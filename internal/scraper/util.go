@@ -39,7 +39,7 @@ func randomUserAgent() string {
 	return userAgents[rand.Intn(len(userAgents))]
 }
 
-func applyHeaders(req *http.Request) {
+func ApplyHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", randomUserAgent())
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7")
@@ -49,24 +49,22 @@ func applyHeaders(req *http.Request) {
 	req.Header.Set("Upgrade-Insecure-Requests", "1")
 }
 
-func doRequestWithRetry(client *http.Client, req *http.Request, maxRetries int) (*http.Response, error) {
+func DoRequestWithRetry(client *http.Client, req *http.Request, maxRetries int) (*http.Response, error) {
 	var resp *http.Response
 	var err error
 
 	for i := range maxRetries {
-		applyHeaders(req)
-
+		ApplyHeaders(req)
 		resp, err = client.Do(req)
-		if err == nil && resp.StatusCode < 500 {
+		if err == nil && resp.StatusCode == http.StatusOK {
 			return resp, nil
 		}
-
 		time.Sleep(time.Duration(500*(i+1)) * time.Millisecond)
 	}
 
 	return nil, fmt.Errorf("falha após %d tentativas: %v", maxRetries, err)
 }
 
-func cleanString(s string) string {
+func CleanString(s string) string {
 	return strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
 }
