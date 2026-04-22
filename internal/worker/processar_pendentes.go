@@ -89,7 +89,11 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		matchCh <- matchOut{m, err}
 	}()
 	go func() {
-		f, err := w.Filters.QuerySelectFiltersForUser(ctx, userID)
+		f, repoErr := w.Filters.QuerySelectFiltersForUser(ctx, userID)
+		var err error
+		if repoErr != nil {
+			err = repoErr
+		}
 		filtersCh <- filtersOut{f, err}
 	}()
 

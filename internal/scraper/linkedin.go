@@ -52,7 +52,17 @@ func extractJobIdFromLinkedInUrl(link string) string {
 	if err != nil {
 		return ""
 	}
-	return parsed.Query().Get("currentJobId")
+	if id := parsed.Query().Get("currentJobId"); id != "" {
+		return id
+	}
+	// /jobs/view/4385241558/ ou /jobs/view/4385241558
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		if parts[i] != "" {
+			return parts[i]
+		}
+	}
+	return ""
 }
 
 func (s *Scraper) readHtmlGoquery(doc *goquery.Document) (BasicScraperResult, error) {

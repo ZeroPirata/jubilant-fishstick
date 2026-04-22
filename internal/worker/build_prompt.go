@@ -102,18 +102,6 @@ func (w *Worker) buildUserPrompt(job *db.Job, match *services.MatchResult) (stri
 		prompt.Formacoes = append(prompt.Formacoes, fp)
 	}
 
-	for _, c := range match.Certificacoes {
-		cp := certificacaoPrompt{
-			Nome:    c.CertificateName,
-			Emissor: c.IssuingOrganization,
-			Link:    c.CredentialUrl.String,
-		}
-		if c.IssueDate.Valid {
-			cp.EmitidoEm = fmt.Sprintf("%04d-%02d", c.IssueDate.Time.Year(), c.IssueDate.Time.Month())
-		}
-		prompt.Certificacoes = append(prompt.Certificacoes, cp)
-	}
-
 	raw, err := json.Marshal(prompt)
 	if err != nil {
 		return "", fmt.Errorf("build prompt: %w", err)

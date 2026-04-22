@@ -43,11 +43,13 @@ func (s *Scraper) Scrape() (BasicScraperResult, error) {
 		return BasicScraperResult{}, err
 	}
 	s.Logger.Info("Iniciando scrape", zap.String("url", s.Url), zap.String("domain", domain.Hostname()))
-	hostname := strings.Split(domain.Hostname(), ".")[1]
+	parts := strings.Split(domain.Hostname(), ".")
+	hostname := parts[len(parts)-2]
 	scraps := map[string]func() (BasicScraperResult, error){
 		"linkedin":   s.scrapLinkedIn,
 		"amazon":     s.scrapAmazon,
 		"geekhunter": s.scrapGeekHunter,
+		"jobright":   s.scrapJobRight,
 	}
 
 	scraper, ok := scraps[hostname]
