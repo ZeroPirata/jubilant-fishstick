@@ -10,17 +10,16 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      # 1. Baixa o código na pasta padrão do runner (~/actions-runner/_work/...)
+      # 1. Baixa o código no local padrão do runner
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Sincroniza os arquivos da pasta do runner para o /opt
+      # 2. Sincroniza os arquivos para a pasta final no /opt
       - name: Sync files to /opt
         run: |
-          # O rsyc copia apenas o que mudou e ignora a pasta .git para ficar leve
-          sudo rsync -av --delete --exclude '.git' . /opt/jubilant-fishstick/
+          sudo rsync -av --delete --exclude '.git' ./ /opt/jubilant-fishstick/
 
-      # 3. Roda o Docker na pasta final
+      # 3. Roda o Docker na pasta de destino
       - name: Build and Restart Containers
         working-directory: /opt/jubilant-fishstick
         run: |
