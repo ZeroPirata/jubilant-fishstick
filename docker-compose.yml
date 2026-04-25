@@ -8,7 +8,7 @@ services:
     environment:
       - OUTPUT_DIR=/app/storage
     ports:
-      - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
+      - "127.0.0.1:${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
     volumes:
       - ./data/storage:/app/storage
     depends_on:
@@ -44,6 +44,8 @@ services:
       retries: 5
       start_period: 30s
     mem_limit: 512m
+    security_opt:
+      - no-new-privileges:true
 
   cache:
     image: redis:7-alpine
@@ -59,6 +61,10 @@ services:
       retries: 5
       start_period: 30s
     mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
 networks:
   desafio-network:
