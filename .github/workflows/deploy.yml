@@ -1,0 +1,24 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to Local Opt
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          path: /opt/jubilant-fishstick
+          clean: false
+
+      - name: Build and Restart Containers
+        working-directory: /opt/jubilant-fishstick
+        run: |
+          set -e
+          docker compose up -d --build
+          docker image prune -f
