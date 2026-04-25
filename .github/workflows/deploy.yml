@@ -15,7 +15,7 @@ jobs:
 
       - name: Sync files to /opt
         run: |
-          rsync -av --delete --exclude '.git' ./ /opt/jubilant-fishstick/
+          rsync -av --delete --exclude '.git' --exclude '.env' ./ /opt/jubilant-fishstick/
 
       - name: Build and Restart Containers
         working-directory: /opt/jubilant-fishstick
