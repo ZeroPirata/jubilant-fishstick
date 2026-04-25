@@ -17,7 +17,8 @@ services:
       cache:
         condition: service_healthy
     networks:
-      - desafio-network
+      - db-network
+      - cache-network
     mem_limit: 2g
     security_opt:
       - no-new-privileges:true
@@ -36,7 +37,7 @@ services:
       - ./data/pgdata:/var/lib/postgresql/data
       - ./repository/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     networks:
-      - desafio-network
+      - db-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-desafio_db}"]
       interval: 10s
@@ -53,7 +54,7 @@ services:
     volumes:
       - ./data/redis:/data
     networks:
-      - desafio-network
+      - cache-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -67,5 +68,9 @@ services:
       - ALL
 
 networks:
-  desafio-network:
+  db-network:
     driver: bridge
+    internal: true
+  cache-network:
+    driver: bridge
+    internal: true
