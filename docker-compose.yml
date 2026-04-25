@@ -1,76 +1,29 @@
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    env_file:
-      - .env
-    environment:
-      - OUTPUT_DIR=/app/storage
-    ports:
-      - "127.0.0.1:${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
-    volumes:
-      - ./data/storage:/app/storage
-    depends_on:
-      db:
-        condition: service_healthy
-      cache:
-        condition: service_healthy
-    networks:
-      - db-network
-      - cache-network
-    mem_limit: 2g
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    restart: unless-stopped
+name: Deploy
 
-  db:
-    image: postgres:17-alpine
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
-      POSTGRES_DB: ${POSTGRES_DB:-desafio_db}
-    volumes:
-      - ./data/pgdata:/var/lib/postgresql/data
-      - ./repository/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
-    networks:
-      - db-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-desafio_db}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    mem_limit: 512m
-    security_opt:
-      - no-new-privileges:true
+on:
+  push:
+    branches: [main]
 
-  cache:
-    image: redis:7-alpine
-    restart: always
-    volumes:
-      - ./data/redis:/data
-    networks:
-      - cache-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 30s
-    mem_limit: 256m
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
+jobs:
+  deploy:
+    name: Deploy to Local Opt
+    runs-on: self-hosted
 
-networks:
-  db-network:
-    driver: bridge
-    internal: true
-  cache-network:
-    driver: bridge
-    internal: true
+    steps:
+      # 1. Baixa o código na pasta padrão do runner (~/actions-runner/_work/...)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Sincroniza os arquivos da pasta do runner para o /opt
+      - name: Sync files to /opt
+        run: |
+          # O rsyc copia apenas o que mudou e ignora a pasta .git para ficar leve
+          sudo rsync -av --delete --exclude '.git' . /opt/jubilant-fishstick/
+
+      # 3. Roda o Docker na pasta final
+      - name: Build and Restart Containers
+        working-directory: /opt/jubilant-fishstick
+        run: |
+          set -e
+          docker compose up -d --build
+          docker image prune -f
