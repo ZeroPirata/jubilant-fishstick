@@ -47,6 +47,12 @@ services:
     mem_limit: 512m
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - DAC_READ_SEARCH
 
   cache:
     image: redis:7-alpine
@@ -66,6 +72,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID
+      - SETGID
 
 networks:
   db-network:
