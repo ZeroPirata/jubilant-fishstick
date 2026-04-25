@@ -34,7 +34,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
       POSTGRES_DB: ${POSTGRES_DB:-desafio_db}
     volumes:
-      - ./data/pgdata:/var/lib/postgresql/data
+      - db_data::/var/lib/postgresql/data
       - ./repository/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     networks:
       - db-network
@@ -52,7 +52,7 @@ services:
     image: redis:7-alpine
     restart: always
     volumes:
-      - ./data/redis:/data
+      - cache_data:/data
     networks:
       - cache-network
     healthcheck:
@@ -74,3 +74,7 @@ networks:
   cache-network:
     driver: bridge
     internal: true
+
+volumes:
+  db_data:
+  cache_data:
