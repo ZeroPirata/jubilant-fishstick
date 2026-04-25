@@ -1,14 +1,16 @@
-version: "3.9"
-
 services:
   app:
     build:
-      context: ..
-      dockerfile: .devcontainer/Dockerfile.prod
+      context: .
+      dockerfile: Dockerfile
     env_file:
-      - ../.env
+      - .env
+    environment:
+      - OUTPUT_DIR=/app/storage
     ports:
-      - "8080:8080"
+      - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
+    volumes:
+      - ./data/storage:/app/storage
     depends_on:
       db:
         condition: service_healthy
@@ -19,35 +21,33 @@ services:
     mem_limit: 2g
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
 
   db:
     image: postgres:17-alpine
     restart: always
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
-      POSTGRES_DB: desafio_db
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
+      POSTGRES_DB: ${POSTGRES_DB:-desafio_db}
     volumes:
       - ./data/pgdata:/var/lib/postgresql/data
-      - ../repository/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - ./repository/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     networks:
       - desafio-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d desafio_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-desafio_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 30s
     mem_limit: 512m
 
   cache:
     image: redis:7-alpine
     restart: always
-    ports:
-      - "6379:6379"
     volumes:
       - ./data/redis:/data
     networks:
@@ -57,6 +57,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+      start_period: 30s
     mem_limit: 256m
 
 networks:

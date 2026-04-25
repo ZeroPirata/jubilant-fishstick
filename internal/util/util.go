@@ -1,9 +1,25 @@
 package util
 
 import (
+	"net/http"
 	"strings"
 	"time"
 )
+
+// ClientIP returns the real client IP, preferring Cloudflare's header.
+func ClientIP(r *http.Request) string {
+	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
+		return ip
+	}
+	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+		return ip
+	}
+	addr := r.RemoteAddr
+	if i := strings.LastIndex(addr, ":"); i != -1 {
+		return addr[:i]
+	}
+	return addr
+}
 
 func SafeStringSlice(values *[]string) []string {
 	if values == nil {

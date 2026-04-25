@@ -10,6 +10,7 @@ import (
 	"hackton-treino/internal/middleware"
 	"hackton-treino/internal/routes"
 	"hackton-treino/internal/services"
+	"hackton-treino/internal/sse"
 	"hackton-treino/internal/worker"
 	"log"
 	"net/http"
@@ -65,15 +66,17 @@ func run() error {
 	}
 	defer cache.Close(zap.L())
 
+	bus := sse.NewBus()
+
 	go func() {
-		if err := startServer(*cfg, db, rds); err != nil {
+		if err := startServer(*cfg, db, rds, bus); err != nil {
 			zap.L().Fatal("Erro fatal no servidor HTTP", zap.Error(err))
 		}
 	}()
 
 	llm := services.NewLLMService(cfg)
 	go func() {
-		worker.NewWorker(zap.L(), db, *llm, cfg.ScrapeAi.Activate, rds).Start(ctx)
+		worker.NewWorker(zap.L(), db, *llm, cfg.ScrapeAi.Activate, rds, bus).Start(ctx)
 	}()
 
 	<-ctx.Done()
@@ -81,7 +84,7 @@ func run() error {
 	return nil
 }
 
-func startServer(cfg config.Config, db *pgxpool.Pool, rds *redis.Client) error {
+func startServer(cfg config.Config, db *pgxpool.Pool, rds *redis.Client, bus *sse.Bus) error {
 	var port string
 	mux := http.NewServeMux()
 
@@ -91,8 +94,14 @@ func startServer(cfg config.Config, db *pgxpool.Pool, rds *redis.Client) error {
 		port = ":8080"
 	}
 
-	routes.Setup(mux, zap.L(), db, cfg, rds)
-	handler := middleware.CORSMiddleware(middleware.LoggingMiddleware(zap.L(), mux))
+	routes.Setup(mux, zap.L(), db, cfg, rds, bus)
+	handler := middleware.SecurityHeaders(
+		middleware.CORSMiddleware(cfg.Server.CORSAllowedOrigin)(
+			middleware.LoggingMiddleware(zap.L(),
+				middleware.BodyLimit(1<<20)(mux), // 1 MB
+			),
+		),
+	)
 	handler = middleware.MiddlewarePanicRecovery(zap.L())(handler)
 
 	server := &http.Server{

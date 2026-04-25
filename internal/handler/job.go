@@ -3,13 +3,17 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/middleware"
 	"hackton-treino/internal/repository"
 	"hackton-treino/internal/repository/feedbacks"
 	"hackton-treino/internal/repository/jobs"
+	"hackton-treino/internal/repository/secevents"
+	"hackton-treino/internal/sse"
 	"hackton-treino/internal/util"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -22,14 +26,57 @@ type JobHandler struct {
 	Jobs      jobs.Repository
 	Feedbacks feedbacks.Repository
 	PDF       *PDFService
+	Bus       *sse.Bus
+	SecLog    secevents.Repository
 }
 
-func NewJobHandler(logger *zap.Logger, conn *pgxpool.Pool, pdf *PDFService) *JobHandler {
+func NewJobHandler(logger *zap.Logger, conn *pgxpool.Pool, pdf *PDFService, bus *sse.Bus, secLog secevents.Repository) *JobHandler {
 	return &JobHandler{
 		BaseHandler: NewBaseHandler(logger),
 		Jobs:        jobs.New(conn),
 		Feedbacks:   feedbacks.New(conn),
 		PDF:         pdf,
+		Bus:         bus,
+		SecLog:      secLog,
+	}
+}
+
+func (h *JobHandler) StreamEvents(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	ch := h.Bus.Subscribe(userID.String())
+	defer h.Bus.Unsubscribe(userID.String(), ch)
+
+	keepalive := time.NewTicker(20 * time.Second)
+	defer keepalive.Stop()
+
+	for {
+		select {
+		case event := <-ch:
+			data, _ := json.Marshal(event)
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		case <-keepalive.C:
+			fmt.Fprintf(w, ": keepalive\n\n")
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
 	}
 }
 
@@ -49,6 +96,11 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := Validate(Required("url", req.Url)); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := util.ValidatePublicURL(req.Url); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -282,7 +334,7 @@ func (h *JobHandler) GeneratePDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	outputDir, err := buildOutputDir(row.CompanyName.String, row.JobTitle.String)
+	fsDir, urlPath, err := buildOutputDir(userID.String(), resumeIDStr, row.CompanyName.String, row.JobTitle.String)
 	if err != nil {
 		h.Logger.Error("erro ao criar diretório", zap.Error(err))
 		http.Error(w, "erro ao preparar diretório", http.StatusInternalServerError)
@@ -292,7 +344,7 @@ func (h *JobHandler) GeneratePDF(w http.ResponseWriter, r *http.Request) {
 	pyOut, err := h.PDF.Generate(ctx, pythonInput{
 		Curriculo:   conteudo["curriculo"],
 		CoverLetter: conteudo["cover_letter"],
-		OutputDir:   outputDir,
+		OutputDir:   fsDir,
 	})
 	if err != nil {
 		h.Logger.Error("erro ao gerar PDF", zap.Error(err))
@@ -304,9 +356,12 @@ func (h *JobHandler) GeneratePDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	resumeURL := filepath.Join(urlPath, "resume.pdf")
+	coverURL := filepath.Join(urlPath, "cover_letter.pdf")
+
 	appErr = h.Jobs.QueryUpdateResumePaths(ctx, db.QueryUpdateResumePathsParams{
-		ResumePdfPath:   pgtype.Text{String: pyOut.ResumePath, Valid: true},
-		CoverLetterPath: pgtype.Text{String: pyOut.CoverLetterPath, Valid: true},
+		ResumePdfPath:   pgtype.Text{String: resumeURL, Valid: true},
+		CoverLetterPath: pgtype.Text{String: coverURL, Valid: true},
 		ID:              resumeID,
 		UserID:          userID,
 	})
@@ -316,10 +371,17 @@ func (h *JobHandler) GeneratePDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.SecLog.Insert(r.Context(), secevents.InsertParams{
+		EventType: db.SecurityEventTypePdfGenerated,
+		IP:        util.ClientIP(r),
+		UserID:    userID.String(),
+		Metadata:  []byte(`{"resume_id":"` + resumeIDStr + `"}`),
+	})
+
 	w.WriteHeader(http.StatusOK)
 	errE := json.NewEncoder(w).Encode(map[string]string{
-		"resume_path":       pyOut.ResumePath,
-		"cover_letter_path": pyOut.CoverLetterPath,
+		"resume_path":       resumeURL,
+		"cover_letter_path": coverURL,
 	})
 
 	if errE != nil {
@@ -353,6 +415,7 @@ func (h *JobHandler) RetryJobProcessing(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	h.Bus.Publish(userId.String(), sse.JobEvent{ID: jobId, Status: string(db.JobStatusPending)})
 	w.WriteHeader(http.StatusNoContent)
 }
 

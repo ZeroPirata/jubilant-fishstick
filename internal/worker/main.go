@@ -3,12 +3,14 @@ package worker
 import (
 	"context"
 	"fmt"
+	"hackton-treino/internal/db"
 	"hackton-treino/internal/repository/aliases"
 	"hackton-treino/internal/repository/feedbacks"
 	"hackton-treino/internal/repository/filters"
 	"hackton-treino/internal/repository/users"
 	workerRepo "hackton-treino/internal/repository/worker"
 	"hackton-treino/internal/services"
+	"hackton-treino/internal/sse"
 	"os"
 	"time"
 
@@ -25,19 +27,22 @@ const (
 )
 
 type Worker struct {
-	Logger    *zap.Logger
-	Pipeline  workerRepo.Repository
-	Users     users.Repository
-	Filters   filters.Repository
-	Feedbacks feedbacks.Repository
-	Aliases   aliases.Repository
-	aliases   map[string]string
-	LLM       services.AiService
-	ScraperAi bool
-	Cache     ucache.Cache
+	Logger     *zap.Logger
+	Pipeline   workerRepo.Repository
+	Users      users.Repository
+	Filters    filters.Repository
+	Feedbacks  feedbacks.Repository
+	Aliases    aliases.Repository
+	aliases    map[string]string
+	promptPTBR string
+	promptEN   string
+	LLM        services.AiService
+	ScraperAi  bool
+	Cache      ucache.Cache
+	Bus        *sse.Bus
 }
 
-func NewWorker(logger *zap.Logger, conn *pgxpool.Pool, llm services.AiService, scraperAi bool, rds *redis.Client) *Worker {
+func NewWorker(logger *zap.Logger, conn *pgxpool.Pool, llm services.AiService, scraperAi bool, rds *redis.Client, bus *sse.Bus) *Worker {
 	return &Worker{
 		Logger:    logger,
 		LLM:       llm,
@@ -48,6 +53,31 @@ func NewWorker(logger *zap.Logger, conn *pgxpool.Pool, llm services.AiService, s
 		Aliases:   aliases.New(conn),
 		ScraperAi: scraperAi,
 		Cache:     ucache.New(rds),
+		Bus:       bus,
+	}
+}
+
+func (w *Worker) failJob(ctx context.Context, job *db.Job) {
+	_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusError, ID: job.ID})
+	if w.Bus != nil {
+		w.Bus.Publish(job.UserID.String(), sse.JobEvent{ID: job.ID.String(), Status: string(db.JobStatusError)})
+	}
+}
+
+func (w *Worker) completeJob(ctx context.Context, job *db.Job, quality db.JobQuality) {
+	_ = w.Pipeline.WorkerUpdateJobQuality(ctx, db.WorkerUpdateJobQualityParams{
+		Quality: db.NullJobQuality{JobQuality: quality, Valid: true},
+		ID:      job.ID,
+	})
+	_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusCompleted, ID: job.ID})
+	if w.Bus != nil {
+		w.Bus.Publish(job.UserID.String(), sse.JobEvent{
+			ID:          job.ID.String(),
+			Status:      string(db.JobStatusCompleted),
+			Quality:     string(quality),
+			CompanyName: job.CompanyName.String,
+			JobTitle:    job.JobTitle.String,
+		})
 	}
 }
 
@@ -69,6 +99,17 @@ func (w *Worker) Start(ctx context.Context) {
 		w.aliases = aliasMap
 	} else if err != nil {
 		w.Logger.Error("Erro ao buscar stack aliases", zap.Error(err))
+	}
+
+	if p, err := w.loadPrompt(promptPTBRPath); err != nil {
+		w.Logger.Fatal("Falha ao carregar system prompt pt-BR", zap.Error(err))
+	} else {
+		w.promptPTBR = p
+	}
+	if p, err := w.loadPrompt(promptENPath); err != nil {
+		w.Logger.Fatal("Falha ao carregar system prompt en", zap.Error(err))
+	} else {
+		w.promptEN = p
 	}
 
 	for {

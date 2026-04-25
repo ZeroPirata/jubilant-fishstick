@@ -747,33 +747,66 @@ def _wrap_html(body: str, title: str, lang: str = "pt-BR") -> str:
 
 
 def gerar_pdf_curriculo(texto: str, caminho_saida: str) -> None:
+    import sys
+    sys.stderr.write(f"[DEBUG] Iniciando gerar_pdf_curriculo, texto_len={len(texto)}\n")
+    sys.stderr.flush()
     corpo = curriculo_para_html(texto)
+    sys.stderr.write(f"[DEBUG] HTML gerado, corpo_len={len(corpo)}\n")
+    sys.stderr.flush()
     HTML(string=_wrap_html(corpo, "Currículo")).write_pdf(
         caminho_saida, stylesheets=[RESUME_CSS]
     )
+    sys.stderr.write(f"[DEBUG] PDF currículo escrito em {caminho_saida}\n")
+    sys.stderr.flush()
 
 
 def gerar_pdf_cover_letter(texto: str, caminho_saida: str) -> None:
+    import sys
+    sys.stderr.write(f"[DEBUG] Iniciando gerar_pdf_cover_letter, texto_len={len(texto)}\n")
+    sys.stderr.flush()
     corpo = cover_letter_para_html(texto)
+    sys.stderr.write(f"[DEBUG] HTML cover letter gerado, corpo_len={len(corpo)}\n")
+    sys.stderr.flush()
     HTML(string=_wrap_html(corpo, "Carta de Apresentação")).write_pdf(
         caminho_saida, stylesheets=[COVER_CSS]
     )
+    sys.stderr.write(f"[DEBUG] PDF cover letter escrito em {caminho_saida}\n")
+    sys.stderr.flush()
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def _process(dados: dict) -> dict:
+    import sys
     curriculo    = dados.get("curriculo", "")
     cover_letter = dados.get("cover_letter", "")
     output_dir   = dados.get("output_dir", "output")
+
+    sys.stderr.write(f"[INFO] Gerando PDFs para output_dir={output_dir}\n")
+    sys.stderr.flush()
 
     os.makedirs(output_dir, exist_ok=True)
 
     resume_path       = os.path.join(output_dir, "resume.pdf")
     cover_letter_path = os.path.join(output_dir, "cover_letter.pdf")
 
-    gerar_pdf_curriculo(curriculo, resume_path)
-    gerar_pdf_cover_letter(cover_letter, cover_letter_path)
+    try:
+        gerar_pdf_curriculo(curriculo, resume_path)
+        sys.stderr.write(f"[INFO] Currículo gerado: {resume_path}\n")
+        sys.stderr.flush()
+    except Exception as e:
+        sys.stderr.write(f"[ERROR] gerar_pdf_curriculo falhou: {e}\n")
+        sys.stderr.flush()
+        raise
+
+    try:
+        gerar_pdf_cover_letter(cover_letter, cover_letter_path)
+        sys.stderr.write(f"[INFO] Cover letter gerado: {cover_letter_path}\n")
+        sys.stderr.flush()
+    except Exception as e:
+        sys.stderr.write(f"[ERROR] gerar_pdf_cover_letter falhou: {e}\n")
+        sys.stderr.flush()
+        raise
 
     return {"resume_path": resume_path, "cover_letter_path": cover_letter_path}
 
@@ -781,6 +814,7 @@ def _process(dados: dict) -> dict:
 def serve() -> None:
     """Modo servidor: lê um JSON por linha do stdin, responde um JSON por linha no stdout.
     O processo Go mantém este processo vivo, eliminando o cold start do WeasyPrint."""
+    import sys
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -789,7 +823,11 @@ def serve() -> None:
             dados = json.loads(line)
             result = _process(dados)
         except Exception as e:
-            result = {"error": str(e), "traceback": traceback.format_exc()}
+            tb = traceback.format_exc()
+            sys.stderr.write(f"[ERROR] Exception in serve(): {e}\n")
+            sys.stderr.write(f"[ERROR] Traceback: {tb}\n")
+            sys.stderr.flush()
+            result = {"error": "failed to generate PDF"}
         sys.stdout.write(json.dumps(result) + "\n")
         sys.stdout.flush()
 

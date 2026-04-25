@@ -9,6 +9,7 @@ function showApp() {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   navigateTo('vagas');
+  connectSSE();
 }
 
 // ── Toast ──
@@ -92,6 +93,7 @@ async function doRegister() {
 }
 
 function doLogout() {
+  disconnectSSE();
   clearToken();
   showAuth();
 }

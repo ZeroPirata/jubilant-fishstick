@@ -27,8 +27,9 @@ type HashConfig struct {
 }
 
 type ServerConfig struct {
-	Host string `env:"SERVER_HOST,required"`
-	Port string `env:"SERVER_PORT,required"`
+	Host              string `env:"SERVER_HOST,required"`
+	Port              string `env:"SERVER_PORT,required"`
+	CORSAllowedOrigin string `env:"CORS_ALLOWED_ORIGIN" envDefault:"*"`
 }
 
 type AiConfig struct {

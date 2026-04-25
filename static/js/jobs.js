@@ -11,9 +11,10 @@ const statusLabels = {
 
 const qualityLabels = { low: 'Baixa', mid: 'Média', high: 'Alta' };
 
-function badge(status) {
+function badge(status, quality) {
   const label = statusLabels[status] || status;
-  return `<span class="badge badge-${status}">${label}</span>`;
+  const cls   = (status === 'completed' && quality === 'low') ? 'badge-error' : `badge-${status}`;
+  return `<span class="badge ${cls}">${label}</span>`;
 }
 
 function qualityBadge(jobId, q) {
@@ -39,6 +40,60 @@ async function getFilters() {
 
 // Cache job stack/requirements by ID (populated in loadJobs)
 const _jobMeta = new Map();
+
+// ── SSE ──
+let _evtSource = null;
+
+function connectSSE() {
+  const token = getToken();
+  if (!token) return;
+  if (_evtSource) return;
+  _evtSource = new EventSource(`${API_BASE}/jobs/events?token=${encodeURIComponent(token)}`);
+  _evtSource.onmessage = e => {
+    try { applyJobEvent(JSON.parse(e.data)); } catch (_) {}
+  };
+  _evtSource.onerror = () => {
+    _evtSource.close();
+    _evtSource = null;
+    setTimeout(connectSSE, 5000);
+  };
+}
+
+function disconnectSSE() {
+  if (_evtSource) {
+    _evtSource.close();
+    _evtSource = null;
+  }
+}
+
+function applyJobEvent(ev) {
+  const row = document.getElementById(`job-row-${ev.id}`);
+  if (!row) { loadJobs(); return; }
+
+  // Quality (atualiza meta antes do badge para que badge() leia correto)
+  if (ev.quality) {
+    const meta = _jobMeta.get(ev.id) || {};
+    _jobMeta.set(ev.id, { ...meta, quality: ev.quality });
+    row.cells[4].innerHTML = qualityBadge(ev.id, ev.quality);
+  }
+
+  // Status (usa quality já atualizado acima)
+  const q = (_jobMeta.get(ev.id) || {}).quality;
+  row.cells[3].innerHTML = badge(ev.status, q);
+
+  // Company / title (preenchidos após scrape)
+  if (ev.company_name) row.cells[1].textContent = ev.company_name;
+  if (ev.job_title)    row.cells[2].textContent = ev.job_title;
+
+  // Botões de ação
+  const isDone = ev.status === 'completed';
+  const isEnd  = isDone || ev.status === 'error';
+  row.cells[7].querySelector('div').innerHTML = `
+    ${isDone ? `<button class="btn-expand btn-sm" onclick="toggleResumes('${ev.id}', this)">Currículos</button>` : ''}
+    ${isEnd  ? `<button class="btn btn-ghost btn-sm" onclick="retryJob('${ev.id}', this)">Refazer</button>` : ''}
+    <button class="btn-delete" onclick="deleteJob('${ev.id}', this)">✕</button>
+  `;
+}
 
 // ── Quality details toggle ──
 async function toggleQualityDetails(jobId) {
@@ -169,7 +224,7 @@ async function loadJobs() {
         <td style="color:var(--muted);font-size:11px" class="truncate" title="${j.id}">${j.id.slice(0,8)}…</td>
         <td>${j.company_name || '<span style="color:var(--muted)">—</span>'}</td>
         <td class="truncate" title="${j.job_title||''}">${j.job_title || '<span style="color:var(--muted)">—</span>'}</td>
-        <td>${badge(j.status)}</td>
+        <td>${badge(j.status, j.quality)}</td>
         <td>${qualityBadge(j.id, quality)}</td>
         <td style="color:var(--muted)">${fmtDate(j.created_at)}</td>
         <td>

@@ -13,19 +13,20 @@ SET deleted_at = now()
 WHERE id = @id;
 
 -- name: QueryUpsertProfile :one
-INSERT INTO user_profiles(user_id, full_name, phone, about)
-VALUES (@user_id, @full_name, @phone, @about)
+INSERT INTO user_profiles(user_id, full_name, phone, about, contact_email)
+VALUES (@user_id, @full_name, @phone, @about, @contact_email)
 ON CONFLICT (user_id) DO UPDATE SET
-    full_name  = EXCLUDED.full_name,
-    phone      = EXCLUDED.phone,
-    about      = EXCLUDED.about,
-    updated_at = now()
+    full_name     = EXCLUDED.full_name,
+    phone         = EXCLUDED.phone,
+    about         = EXCLUDED.about,
+    contact_email = EXCLUDED.contact_email,
+    updated_at    = now()
 RETURNING *;
 
 -- name: QuerySelectProfile :one
 SELECT
     acc.email,
-    p.full_name, p.phone, p.about,
+    p.full_name, p.phone, p.about, p.contact_email,
     l.linkedin_url, l.github_url, l.portfolio_url, l.other_links
 FROM user_accounts acc
 LEFT JOIN user_profiles p ON p.user_id = acc.id

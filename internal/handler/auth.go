@@ -3,8 +3,11 @@ package handler
 import (
 	"encoding/json"
 	"hackton-treino/internal/db"
+	"hackton-treino/internal/lockout"
+	"hackton-treino/internal/repository/secevents"
 	"hackton-treino/internal/repository/users"
 	"hackton-treino/internal/security"
+	"hackton-treino/internal/util"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,17 +16,29 @@ import (
 
 type AuthHandler struct {
 	*BaseHandler
-	Users  users.Repository
-	Hasher *security.Hasher
-	Jwt    security.TokenProvider
+	Users     users.Repository
+	Hasher    *security.Hasher
+	Jwt       security.TokenProvider
+	SecLog    secevents.Repository
+	Locker    lockout.Locker
+	dummyHash string
 }
 
-func NewAuthHandler(logger *zap.Logger, conn *pgxpool.Pool, hasher *security.Hasher, jwt security.TokenProvider) *AuthHandler {
+func NewAuthHandler(logger *zap.Logger, conn *pgxpool.Pool, hasher *security.Hasher, jwt security.TokenProvider, secLog secevents.Repository, locker lockout.Locker) *AuthHandler {
+	// Pre-computa um hash válido para equalizar o tempo de resposta quando o
+	// usuário não existe (evita timing attack / enumeração de e-mails).
+	dummyHash, err := hasher.Hash("dummy-timing-protection-value")
+	if err != nil {
+		logger.Fatal("falha ao pre-computar dummy hash", zap.Error(err))
+	}
 	return &AuthHandler{
 		BaseHandler: NewBaseHandler(logger),
 		Users:       users.New(conn),
 		Hasher:      hasher,
 		Jwt:         jwt,
+		SecLog:      secLog,
+		Locker:      locker,
+		dummyHash:   dummyHash,
 	}
 }
 
@@ -81,9 +96,23 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.Locker.IsLocked(r.Context(), req.Email) {
+		writeError(w, http.StatusTooManyRequests, "conta temporariamente bloqueada, tente novamente em 15 minutos")
+		return
+	}
+
 	row, errR := h.Users.QuerySelectAccountByEmail(r.Context(), req.Email)
 	if errR != nil {
 		h.Logger.Error("failed to get user by email", zap.Error(errR))
+		// Timing equalization: run Argon2 even when user doesn't exist to prevent
+		// enumeration via response-time difference.
+		_, _ = h.Hasher.Verify("dummy-input", h.dummyHash)
+		h.Locker.RecordFailure(r.Context(), req.Email)
+		h.SecLog.Insert(r.Context(), secevents.InsertParams{
+			EventType: db.SecurityEventTypeLoginFailed,
+			IP:        util.ClientIP(r),
+			Metadata:  []byte(`{"reason":"user_not_found"}`),
+		})
 		writeError(w, http.StatusUnauthorized, ErrNotAuthorized.Error())
 		return
 	}
@@ -95,9 +124,18 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !valid {
+		h.Locker.RecordFailure(r.Context(), req.Email)
+		h.SecLog.Insert(r.Context(), secevents.InsertParams{
+			EventType: db.SecurityEventTypeLoginFailed,
+			IP:        util.ClientIP(r),
+			UserID:    row.ID.String(),
+			Metadata:  []byte(`{"reason":"invalid_password"}`),
+		})
 		writeError(w, http.StatusUnauthorized, ErrNotAuthorized.Error())
 		return
 	}
+
+	h.Locker.Reset(r.Context(), req.Email)
 
 	token, err := h.Jwt.Generate(row.ID.String())
 	if err != nil {

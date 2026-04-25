@@ -26,22 +26,51 @@ func GetDataBasePool(c *config.Config, logr *zap.Logger) (*pgxpool.Pool, error) 
 
 func CreateConnection(c *config.Config, logr *zap.Logger) (*pgxpool.Pool, error) {
 	database := getDatabaseConfig(c)
-	config, err := setupPoolConfig(database, c, logr)
+	logr.Info("conexão: ", zap.Any("url", database))
+	poolConfig, err := setupPoolConfig(database, c, logr)
 	if err != nil {
 		return nil, err
-	}
-	pool, err := pgxpool.NewWithConfig(context.Background(), config)
-	if err != nil {
-		return nil, fmt.Errorf("falha ao criar pool de conexões: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if err := testConnection(ctx, pool); err != nil {
-		pool.Close()
-		return nil, err
+	var pool *pgxpool.Pool
+	maxRetries := 5
+
+	for i := 1; i <= maxRetries; i++ {
+		logr.Info("Tentando conectar ao banco de dados...",
+			zap.Int("tentativa", i),
+			zap.Int("max_tentativas", maxRetries))
+
+		pool, err = pgxpool.NewWithConfig(context.Background(), poolConfig)
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			err = pool.Ping(ctx)
+			cancel()
+
+			if err == nil {
+				// Se o ping passou, testamos a query SELECT 1
+				ctxTest, cancelTest := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancelTest()
+				if errTest := testConnection(ctxTest, pool); errTest == nil {
+					logr.Info("Conexão com o banco estabelecida com sucesso!")
+					return pool, nil
+				} else {
+					err = errTest
+				}
+			}
+		}
+
+		if pool != nil {
+			pool.Close()
+		}
+
+		logr.Warn("Falha na conexão, agendando nova tentativa",
+			zap.Error(err),
+			zap.Duration("espera", time.Duration(i*2)*time.Second))
+
+		time.Sleep(time.Duration(i*2) * time.Second)
 	}
-	return pool, nil
+
+	return nil, fmt.Errorf("após %d tentativas, não foi possível conectar ao banco: %w", maxRetries, err)
 }
 
 func ClosePool(logr *zap.Logger) {

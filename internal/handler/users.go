@@ -69,6 +69,7 @@ func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		FullName:     row.FullName,
 		Phone:        row.Phone,
 		About:        row.About,
+		ContactEmail: row.ContactEmail,
 		LinkedinUrl:  row.LinkedinUrl,
 		GithubUrl:    row.GithubUrl,
 		PortfolioUrl: row.PortfolioUrl,
@@ -98,10 +99,11 @@ func (h *UserHandler) UpsertProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	row, errR := h.Users.QueryUpsertProfile(r.Context(), db.QueryUpsertProfileParams{
-		UserID:   userID,
-		FullName: req.FullName,
-		Phone:    util.ConvertToPgTextPtr(req.Phone),
-		About:    util.ConvertToPgTextPtr(req.About),
+		UserID:       userID,
+		FullName:     req.FullName,
+		Phone:        util.ConvertToPgTextPtr(req.Phone),
+		About:        util.ConvertToPgTextPtr(req.About),
+		ContactEmail: util.ConvertToPgTextPtr(req.ContactEmail),
 	})
 	if errR != nil {
 		writeRepositoryError(w, errR)

@@ -4,3 +4,8 @@
 bin
 obj
 vendor
+data
+tmp
+output
+.env
+.claude

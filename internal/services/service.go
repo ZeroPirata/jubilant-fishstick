@@ -84,51 +84,40 @@ SCHEMA:
 REGRA CRÍTICA — ANTI-ALUCINAÇÃO:
 Extraia APENAS tecnologias, ferramentas e domínios que aparecem LITERALMENTE no texto da vaga.
 É ESTRITAMENTE PROIBIDO inferir, extrapolar ou adicionar qualquer item não descrito explicitamente.
-Se o texto não menciona Python, Python NÃO entra na Stack. Sem exceções.
 
-REGRA FUNDAMENTAL DE Stack:
-Cada elemento do array Stack deve ser UMA ÚNICA tecnologia ou domínio — nunca agrupe múltiplas em um elemento.
+REGRA FUNDAMENTAL — um item por elemento:
+Nunca agrupe múltiplas tecnologias em um único elemento do array.
 ERRADO: ["DevOps Tools (Docker, Kubernetes, GitLab CI/CD)"]
 CERTO:  ["Docker", "Kubernetes", "GitLab CI/CD"]
 
-ERRADO: ["Arquitetura de Software (Eventos, DDD, Hexagonal)"]
-CERTO:  ["Domain-Driven Design", "Hexagonal Architecture", "Event-Driven Architecture"]
-
 REGRA DE SEPARAÇÃO — barras e listas inline:
-Quando o texto usar "/" ou "," para listar tecnologias juntas, separe cada uma em elemento próprio.
-ERRADO: ["RESTful/gRPC APIs"]
-CERTO:  ["gRPC", "REST"]
+Quando o texto usar "/" ou "," para listar itens juntos, separe cada um em elemento próprio.
+ERRADO: ["RESTful/gRPC APIs"]  →  CERTO: ["gRPC", "REST"]
+ERRADO: ["Kafka, RabbitMQ, or NATS"]  →  CERTO: ["Kafka", "RabbitMQ", "NATS"]
 
-ERRADO: ["Kafka, RabbitMQ, or NATS"]
-CERTO:  ["Kafka", "RabbitMQ", "NATS"]
-
-REGRA DE COMPLETUDE — não omita itens de enumerações:
-Se o texto menciona "X, Y ou Z", todos os três entram na Stack. Nunca ignore o último item de uma lista.
+REGRA DE COMPLETUDE — não omita itens:
+Se o texto menciona "X, Y e Z", todos os três entram. "etc." no final NÃO cancela os itens já listados.
+ERRADO (omitir o último): texto diz "SOLID, clean code, clean architecture etc." → Stack tem só ["SOLID", "Clean Code"]
+CERTO: ["SOLID", "Clean Code", "Clean Architecture"]
 
 REGRA DE SUFIXO — remova sufixos genéricos:
 Remova "API", "APIs", "Service", "Services" quando forem sufixo genérico, não parte do nome oficial.
-ERRADO: "gRPC APIs" → use "gRPC"
-ERRADO: "RESTful APIs" → use "REST"
-CERTO: "GraphQL" (nome oficial, não remova)
+"gRPC APIs" → "gRPC" · "RESTful APIs" → "REST" · "GraphQL" permanece (nome oficial)
 
-Stack inclui (somente se explicitamente citados): linguagens, frameworks, bancos, plataformas de nuvem, ferramentas, domínios técnicos e metodologias técnicas.
+REGRA DE RÓTULOS GENÉRICOS:
+"Boas Práticas" ou "Best Practices" como rótulo isolado → omita.
+Se vier seguido de itens nomeados, extraia cada item: "boas práticas como SOLID, clean code" → ["SOLID", "Clean Code"]
+
+Stack inclui (somente se explicitamente citados): linguagens, frameworks, bancos, cloud, ferramentas, domínios técnicos, metodologias e boas práticas nomeadas.
 Requirements inclui APENAS: anos de experiência, idiomas, formação acadêmica.
 
-IDIOMA DA STACK: Use SEMPRE o nome oficial em INGLÊS, independente do idioma da vaga.
-- "Arquitetura Hexagonal" → "Hexagonal Architecture"
-- "Arquitetura de Software (Eventos)" ou "Event-Driven" → "Event-Driven Architecture"
-- "Ports and Adapters" ou "Arq. Limpa" → "Ports and Adapters"
-- "Domain-Driven Design" → "Domain-Driven Design"
-- "Práticas de Segurança" ou "Desenvolvimento Seguro" → "Application Security"
-- "Boas Práticas" → omita (genérico demais)
-- Go/Golang → "Go". GitLab CI/CD → "GitLab CI/CD". Kubernetes → "Kubernetes". k8s → "Kubernetes".
-- RESTful → "REST". RESTful APIs → "REST". gRPC APIs → "gRPC".
+IDIOMA: extraia os termos como aparecem no texto. Não traduza nem normalize — a normalização é feita pelo sistema depois.
 
-EXEMPLO:
-Input: "Dev Backend. 3 anos com Golang e Postgres. Conhecimento em mensageria, segurança e AWS. Inglês fluente."
-Output: {"Description":"Desenvolvedor Backend com foco em mensageria e nuvem.","Stack":["Go","PostgreSQL","Mensageria","Segurança","AWS"],"Requirements":["3 anos de experiência","Inglês fluente"]}
+EXEMPLO PT-BR:
+Input: "Dev Backend. 3 anos com Golang e Postgres. Conhecimento em mensageria e AWS. Inglês fluente."
+Output: {"Description":"Desenvolvedor Backend com foco em mensageria e nuvem.","Stack":["Golang","PostgreSQL","Mensageria","AWS"],"Requirements":["3 anos de experiência","Inglês fluente"]}
 
-EXEMPLO COM LISTA E BARRA:
+EXEMPLO EN:
 Input: "Experience with RESTful/gRPC APIs, PostgreSQL, Docker. Kafka, RabbitMQ, or NATS is a plus."
 Output: {"Description":"Backend engineer with API and messaging experience.","Stack":["REST","gRPC","PostgreSQL","Docker","Kafka","RabbitMQ","NATS"],"Requirements":[]}`
 
@@ -150,15 +139,30 @@ Output: {"Description":"Backend engineer with API and messaging experience.","St
 			}
 		}
 
+		if scrapeProvider == "ollama" {
+			return map[string]any{
+				"model":  scrapeModel,
+				"stream": false,
+				"format": "json",
+				"options": map[string]any{
+					"temperature": 0.0,
+					"num_predict": 800,
+					"seed":        42,
+				},
+				"messages": []map[string]any{
+					{"role": "system", "content": systemPrompt},
+					{"role": "user", "content": userMsg},
+				},
+			}
+		}
+
+		// OpenAI-compatible (nvidia, groq, openai, etc.)
 		return map[string]any{
 			"model":  scrapeModel,
 			"stream": false,
-			"format": "json",
-			"options": map[string]any{
-				"temperature": 0.0,
-				"num_predict": 800,
-				"seed":        42,
-			},
+			"response_format": map[string]string{"type": "json_object"},
+			"temperature": 0.0,
+			"max_tokens":  800,
 			"messages": []map[string]any{
 				{"role": "system", "content": systemPrompt},
 				{"role": "user", "content": userMsg},
@@ -329,11 +333,11 @@ func (ai *AiService) sendRequest(ctx context.Context, payload []byte, isScrape b
 			return LLMResponse{}, fmt.Errorf("AiService: status %d: %s", resp.StatusCode, string(errBody))
 		}
 
-		defer resp.Body.Close()
-
 		if provider == "gemini" {
 			var gr geminiResponse
-			if err := json.NewDecoder(resp.Body).Decode(&gr); err != nil {
+			err := json.NewDecoder(resp.Body).Decode(&gr)
+			resp.Body.Close()
+			if err != nil {
 				return LLMResponse{}, fmt.Errorf("AiService: decode gemini: %w", err)
 			}
 			if len(gr.Candidates) == 0 || len(gr.Candidates[0].Content.Parts) == 0 {
@@ -346,7 +350,9 @@ func (ai *AiService) sendRequest(ctx context.Context, payload []byte, isScrape b
 		}
 
 		var raw LLMResponse
-		if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		err = json.NewDecoder(resp.Body).Decode(&raw)
+		resp.Body.Close()
+		if err != nil {
 			return LLMResponse{}, fmt.Errorf("AiService: decode: %w", err)
 		}
 		if len(raw.Choices) == 0 {

@@ -41,10 +41,11 @@ async function loadProfileInfo() {
     const res = await api.get('/users/me');
     if (!res.ok) return;
     const d = await apiData(res);
-    document.getElementById('info-nome').value      = n2e(d.full_name);
-    document.getElementById('info-email').value     = n2e(d.email);
-    document.getElementById('info-telefone').value  = n2e(d.phone);
-    document.getElementById('info-resumo').value    = n2e(d.about);
+    document.getElementById('info-nome').value          = n2e(d.full_name);
+    document.getElementById('info-email').value         = n2e(d.email);
+    document.getElementById('info-contact-email').value = n2e(d.contact_email);
+    document.getElementById('info-telefone').value      = n2e(d.phone);
+    document.getElementById('info-resumo').value        = n2e(d.about);
   } catch (_) {}
 }
 
@@ -52,11 +53,12 @@ async function saveProfileInfo() {
   const full_name = document.getElementById('info-nome').value.trim();
   if (!full_name) { toast('Nome é obrigatório.', 'error'); return; }
 
-  const phone = e2n(document.getElementById('info-telefone').value);
-  const about = e2n(document.getElementById('info-resumo').value);
+  const phone         = e2n(document.getElementById('info-telefone').value);
+  const about         = e2n(document.getElementById('info-resumo').value);
+  const contact_email = e2n(document.getElementById('info-contact-email').value);
 
   try {
-    const res = await api.put('/users/me/profile', { full_name, phone, about });
+    const res = await api.put('/users/me/profile', { full_name, phone, about, contact_email });
     if (!res.ok) { toast('Erro ao salvar perfil.', 'error'); return; }
     toast('Perfil salvo!');
   } catch (e) { toast(e.message, 'error'); }

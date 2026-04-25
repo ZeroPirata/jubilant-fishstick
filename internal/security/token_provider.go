@@ -8,9 +8,15 @@ import (
 	"github.com/google/uuid"
 )
 
+type ValidatedClaims struct {
+	UserID string
+	JTI    string
+	Exp    time.Time
+}
+
 type TokenProvider interface {
 	Generate(userID string) (string, error)
-	Validate(token string) (string, error)
+	Validate(token string) (ValidatedClaims, error)
 }
 
 type JwtManager struct {
@@ -52,7 +58,7 @@ func (m *JwtManager) Generate(userID string) (string, error) {
 	return token.SignedString(m.secret)
 }
 
-func (m *JwtManager) Validate(tokenStr string) (string, error) {
+func (m *JwtManager) Validate(tokenStr string) (ValidatedClaims, error) {
 	tokenParsed, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, jwt.ErrSignatureInvalid
@@ -60,13 +66,18 @@ func (m *JwtManager) Validate(tokenStr string) (string, error) {
 		return m.secret, nil
 	}, jwt.WithValidMethods([]string{"HS256"}))
 	if err != nil {
-		return "", err
+		return ValidatedClaims{}, err
 	}
 	if !tokenParsed.Valid {
-		return "", ErrInvalidToken
+		return ValidatedClaims{}, ErrInvalidToken
 	}
-	if claims, ok := tokenParsed.Claims.(*Claims); ok {
-		return claims.UserID, nil
+	claims, ok := tokenParsed.Claims.(*Claims)
+	if !ok {
+		return ValidatedClaims{}, ErrInvalidToken
 	}
-	return "", ErrInvalidToken
+	return ValidatedClaims{
+		UserID: claims.UserID,
+		JTI:    claims.ID,
+		Exp:    claims.ExpiresAt.Time,
+	}, nil
 }

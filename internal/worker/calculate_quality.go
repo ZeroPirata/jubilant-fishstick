@@ -40,7 +40,7 @@ func calcularQualidade(result *scraper.ResultScraper, filtros []string, aliases 
 	for _, item := range haystack {
 		itemNorm := util.Normalize(item)
 		for _, filtro := range normalizedFiltros {
-			if strings.Contains(itemNorm, filtro) || strings.Contains(filtro, itemNorm) {
+			if techMatch(itemNorm, filtro) {
 				matched++
 				break
 			}
@@ -56,6 +56,35 @@ func calcularQualidade(result *scraper.ResultScraper, filtros []string, aliases 
 	default:
 		return db.JobQualityLow
 	}
+}
+
+// techMatch verifica se item contém filtro com word-boundary awareness.
+// Previne falsos positivos como filtro "go" batendo em "django" ou "gorilla".
+//
+// Regras:
+//  1. match exato: "go" == "go"
+//  2. prefix com boundary: HasPrefix só vale se o próximo char for separador ou fim.
+//     "node.js" + "node" → ok (next='.'), "gorilla" + "go" → não (next='r')
+//  3. token exato: split por separadores, cada token comparado diretamente.
+//     "gitlab ci/cd" + "ci" → ok via token
+func techMatch(item, filtro string) bool {
+	if item == filtro {
+		return true
+	}
+	if strings.HasPrefix(item, filtro) {
+		rest := item[len(filtro):]
+		if rest == "" || rest[0] == ' ' || rest[0] == '.' || rest[0] == '-' || rest[0] == '/' || rest[0] == '_' {
+			return true
+		}
+	}
+	for _, token := range strings.FieldsFunc(item, func(r rune) bool {
+		return r == ' ' || r == '.' || r == '-' || r == '/' || r == '_'
+	}) {
+		if token == filtro {
+			return true
+		}
+	}
+	return false
 }
 
 func firstN(s string, n int) string {

@@ -9,6 +9,7 @@ sql:
       - "repository/query/filters.sql"
       - "repository/query/aliases.sql"
       - "repository/query/worker.sql"
+      - "repository/query/security.sql"
     engine: "postgresql"
     gen:
       go:

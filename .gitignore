@@ -36,4 +36,5 @@ tmp/
 scripts/__pycache__
 output/
 .devcontainer/data/
+data/
 .claude

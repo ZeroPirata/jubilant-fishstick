@@ -12,6 +12,15 @@ import (
 	"go.uber.org/zap"
 )
 
+func resolvePython() string {
+	for _, candidate := range []string{"/usr/bin/python3", "/usr/local/bin/python3", "python3"} {
+		if p, err := exec.LookPath(candidate); err == nil {
+			return p
+		}
+	}
+	return "python3"
+}
+
 // PDFService mantém um processo Python persistente para gerar PDFs.
 // Elimina o cold start do WeasyPrint (~1-3s) que ocorre a cada exec.Command.
 type PDFService struct {
@@ -29,8 +38,9 @@ func NewPDFService(logger *zap.Logger) *PDFService {
 }
 
 func (s *PDFService) start() {
+	python := resolvePython()
 	// -u desativa o buffer interno do Python — essencial para o protocolo linha-a-linha.
-	cmd := exec.Command("python3", "-u", "scripts/gerar_pdf.py", "--serve")
+	cmd := exec.Command(python, "-u", "scripts/gerar_pdf.py", "--serve")
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -40,6 +50,11 @@ func (s *PDFService) start() {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		s.logger.Error("pdf service: stdout pipe", zap.Error(err))
+		return
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		s.logger.Error("pdf service: stderr pipe", zap.Error(err))
 		return
 	}
 
@@ -52,6 +67,13 @@ func (s *PDFService) start() {
 	s.stdin = stdin
 	s.scanner = bufio.NewScanner(stdout)
 	s.logger.Info("pdf service: processo python iniciado", zap.Int("pid", cmd.Process.Pid))
+
+	go func() {
+		sc := bufio.NewScanner(stderr)
+		for sc.Scan() {
+			s.logger.Warn("pdf service: python stderr", zap.String("line", sc.Text()))
+		}
+	}()
 }
 
 func (s *PDFService) restart() {
@@ -83,7 +105,12 @@ func (s *PDFService) Generate(ctx context.Context, input pythonInput) (*pythonOu
 
 	if _, err := fmt.Fprintf(s.stdin, "%s\n", data); err != nil {
 		s.restart()
-		return nil, fmt.Errorf("pdf service: write falhou, processo reiniciado: %w", err)
+		if s.stdin == nil {
+			return nil, fmt.Errorf("pdf service: write falhou e restart não iniciou processo: %w", err)
+		}
+		if _, err2 := fmt.Fprintf(s.stdin, "%s\n", data); err2 != nil {
+			return nil, fmt.Errorf("pdf service: write falhou após restart: %w", err2)
+		}
 	}
 
 	type scanResult struct {
@@ -91,7 +118,7 @@ func (s *PDFService) Generate(ctx context.Context, input pythonInput) (*pythonOu
 		err  error
 	}
 	ch := make(chan scanResult, 1)
-	scanner := s.scanner // captura antes de qualquer restart
+	scanner := s.scanner // captura após possível restart acima
 	go func() {
 		if scanner.Scan() {
 			b := make([]byte, len(scanner.Bytes()))

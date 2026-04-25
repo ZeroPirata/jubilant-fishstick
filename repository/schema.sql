@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS user_profiles(
     full_name TEXT NOT NULL,
     phone TEXT,
     about TEXT,
+    contact_email TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ,
     deleted_at TIMESTAMPTZ
@@ -241,6 +242,22 @@ CREATE INDEX IF NOT EXISTS idx_jobs_pending_status
 ON jobs(status) 
 WHERE status = 'pending' AND deleted_at IS NULL;
 
-ALTER TABLE user_skills 
-ADD CONSTRAINT user_skills_user_id_skill_name_key 
+ALTER TABLE user_skills
+ADD CONSTRAINT user_skills_user_id_skill_name_key
 UNIQUE (user_id, skill_name);
+
+-- Eventos de segurança: login falho, rate limit, PDF gerado.
+CREATE TYPE security_event_type AS ENUM ('login_failed', 'rate_limited', 'pdf_generated');
+
+CREATE TABLE IF NOT EXISTS security_events (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type security_event_type NOT NULL,
+    ip         TEXT,
+    user_id    UUID REFERENCES user_accounts(id) ON DELETE SET NULL,
+    metadata   JSONB,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_security_events_created_at ON security_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_events_event_type ON security_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_security_events_ip        ON security_events(ip);

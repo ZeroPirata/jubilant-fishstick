@@ -17,39 +17,48 @@ const (
 )
 
 func GetUserID(ctx context.Context) (pgtype.UUID, bool) {
-	userID, ok := ctx.Value(ContextKeyUserID).(string)
-
-	pgUuid, err := util.ParseUUID(userID)
+	claims, ok := ctx.Value(ContextKeyUserID).(security.ValidatedClaims)
+	if !ok {
+		return pgtype.UUID{}, false
+	}
+	pgUuid, err := util.ParseUUID(claims.UserID)
 	if err != nil {
 		return pgtype.UUID{}, false
 	}
+	return pgUuid, true
+}
 
-	return pgUuid, ok
+func GetAuthClaims(ctx context.Context) (security.ValidatedClaims, bool) {
+	claims, ok := ctx.Value(ContextKeyUserID).(security.ValidatedClaims)
+	return claims, ok
 }
 
 func AuthMiddleware(provider security.TokenProvider) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
+			var tokenString string
+
+			if h := r.Header.Get("Authorization"); h != "" {
+				parts := strings.Split(h, " ")
+				if len(parts) == 2 && parts[0] == "Bearer" {
+					tokenString = parts[1]
+				}
+			}
+			// Fallback para query param — usado pelo EventSource (SSE) que não suporta headers
+			if tokenString == "" {
+				tokenString = r.URL.Query().Get("token")
+			}
+			if tokenString == "" {
 				http.Error(w, "missing Authorization header", http.StatusUnauthorized)
 				return
 			}
-
-			parts := strings.Split(authHeader, " ")
-			if len(parts) != 2 || parts[0] != "Bearer" {
-				http.Error(w, "invalid Authorization header", http.StatusUnauthorized)
-				return
-			}
-
-			tokenString := parts[1]
-			token, err := provider.Validate(tokenString)
+			claims, err := provider.Validate(tokenString)
 			if err != nil {
 				http.Error(w, "invalid token", http.StatusUnauthorized)
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), ContextKeyUserID, token)
+			ctx := context.WithValue(r.Context(), ContextKeyUserID, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

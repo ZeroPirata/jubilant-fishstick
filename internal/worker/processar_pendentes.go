@@ -7,6 +7,7 @@ import (
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/scraper"
 	"hackton-treino/internal/services"
+	"hackton-treino/internal/sse"
 	"hackton-treino/internal/util"
 	"regexp"
 	"strings"
@@ -61,6 +62,9 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		w.Logger.Error("Erro ao atualizar status da vaga para processing", zap.String("job_id", jobID), zap.Error(err))
 		return
 	}
+	if w.Bus != nil {
+		w.Bus.Publish(userID, sse.JobEvent{ID: jobID, Status: string(db.JobStatusProcessing)})
+	}
 
 	// Run scraper, match, and filters concurrently — all are independent at this stage.
 	type scraperOut struct {
@@ -106,7 +110,7 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 			return
 		}
 		w.Logger.Warn("Erro no scrape, marcando como error", zap.String("job_id", jobID), zap.Error(sOut.err))
-		_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusError, ID: job.ID})
+		w.failJob(ctx, job)
 		return
 	}
 
@@ -122,47 +126,39 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		ID:           job.ID,
 	}); err != nil {
 		w.Logger.Error("Erro ao salvar dados do scrape", zap.String("job_id", jobID), zap.Error(err))
-		_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusError, ID: job.ID})
+		w.failJob(ctx, job)
 		return
 	}
+	// Atualiza campos do job em memória para o evento SSE de completed ter company/title
+	job.CompanyName = util.ConvertToPgText(result.Company)
+	job.JobTitle = util.ConvertToPgText(result.Title)
 
 	if fOut.err != nil {
 		w.Logger.Error("Erro ao buscar filtros do usuário", zap.String("job_id", jobID), zap.Error(fOut.err))
 	}
 
 	quality := calcularQualidade(result, fOut.filtros, w.aliases)
-	if quality == db.JobQualityLow {
-		w.Logger.Info("Vaga fora do perfil", zap.String("job_id", jobID))
-		_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusCompleted, ID: job.ID})
-		_ = w.Pipeline.WorkerUpdateJobQuality(ctx, db.WorkerUpdateJobQualityParams{
-			Quality: db.NullJobQuality{JobQuality: db.JobQualityLow, Valid: true},
-			ID:      job.ID,
-		})
-		return
-	}
 
 	if mOut.err != nil {
 		w.Logger.Error("Erro ao fazer match com banco pessoal", zap.String("job_id", jobID), zap.Error(mOut.err))
-		_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusError, ID: job.ID})
+		w.failJob(ctx, job)
 		return
 	}
 
 	str, errJ := w.buildUserPrompt(job, &mOut.matches)
 	if errJ != nil {
 		w.Logger.Error("Erro ao montar user prompt", zap.String("job_id", jobID), zap.Error(errJ))
-		_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusError, ID: job.ID})
+		w.failJob(ctx, job)
 		return
 	}
 
-	promptPath := promptPTBRPath
+	prompt := w.promptPTBR
 	if job.Language.String == "en" {
-		promptPath = promptENPath
+		prompt = w.promptEN
 	}
-
-	prompt, errP := w.loadPrompt(promptPath)
-	if errP != nil {
-		w.Logger.Error("Erro ao carregar system prompt", zap.String("path", promptPath), zap.Error(errP))
-		_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusError, ID: job.ID})
+	if prompt == "" {
+		w.Logger.Error("System prompt não carregado", zap.String("job_id", jobID))
+		w.failJob(ctx, job)
 		return
 	}
 
@@ -172,7 +168,7 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 			return
 		}
 		w.Logger.Error("Erro ao chamar LLM", zap.String("job_id", jobID), zap.Error(errLLM))
-		_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusError, ID: job.ID})
+		w.failJob(ctx, job)
 		return
 	}
 
@@ -181,7 +177,7 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 			zap.String("job_id", jobID),
 			zap.String("preview", firstN(llmResponse.Curriculo, 120)),
 		)
-		_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusError, ID: job.ID})
+		w.failJob(ctx, job)
 		return
 	}
 
@@ -211,7 +207,12 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 
 	replacer := strings.NewReplacer(
 		"{{CANDIDATO_NOME}}", profile.FullName.String,
-		"{{CANDIDATO_EMAIL}}", profile.Email,
+		"{{CANDIDATO_EMAIL}}", func() string {
+			if profile.ContactEmail.Valid && profile.ContactEmail.String != "" {
+				return profile.ContactEmail.String
+			}
+			return profile.Email
+		}(),
 		"{{CANDIDATO_LINKEDIN}}", profile.LinkedinUrl.String,
 		"{{CANDIDATO_GITHUB}}", profile.GithubUrl.String,
 		"{{CANDIDATO_PORTFOLIO}}", portfolioStr,
@@ -237,7 +238,7 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 	conteudoJSON, errJSON := json.Marshal(conteudo)
 	if errJSON != nil {
 		w.Logger.Error("Erro ao serializar conteudo do curriculo", zap.String("job_id", jobID), zap.Error(errJSON))
-		_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusError, ID: job.ID})
+		w.failJob(ctx, job)
 		return
 	}
 
@@ -248,15 +249,11 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 	})
 	if errInsert != nil {
 		w.Logger.Error("Erro ao inserir curriculo gerado", zap.String("job_id", jobID), zap.Error(errInsert))
-		_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusError, ID: job.ID})
+		w.failJob(ctx, job)
 		return
 	}
 
-	_ = w.Pipeline.WorkerUpdateJobQuality(ctx, db.WorkerUpdateJobQualityParams{
-		Quality: db.NullJobQuality{JobQuality: quality, Valid: true},
-		ID:      job.ID,
-	})
-	_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusCompleted, ID: job.ID})
+	w.completeJob(ctx, job, quality)
 
 	w.Logger.Info("Vaga processada com sucesso", zap.String("url", job.ExternalUrl), zap.String("job_id", jobID))
 }

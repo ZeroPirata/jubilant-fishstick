@@ -88,9 +88,10 @@ type Certificate struct {
 // request bodies
 
 type upsertProfileReq struct {
-	FullName string  `json:"full_name"`
-	Phone    *string `json:"phone"`
-	About    *string `json:"about"`
+	FullName     string  `json:"full_name"`
+	Phone        *string `json:"phone"`
+	About        *string `json:"about"`
+	ContactEmail *string `json:"contact_email"`
 }
 
 type upsertLinksReq struct {
@@ -151,6 +152,7 @@ type profileResponse struct {
 	FullName     pgtype.Text     `json:"full_name"`
 	Phone        pgtype.Text     `json:"phone"`
 	About        pgtype.Text     `json:"about"`
+	ContactEmail pgtype.Text     `json:"contact_email"`
 	LinkedinUrl  pgtype.Text     `json:"linkedin_url"`
 	GithubUrl    pgtype.Text     `json:"github_url"`
 	PortfolioUrl pgtype.Text     `json:"portfolio_url"`

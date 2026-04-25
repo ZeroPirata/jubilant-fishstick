@@ -76,7 +76,7 @@ SELECT
     COUNT(*) OVER() AS total_count
 FROM generated_resumes gr
 JOIN jobs j ON j.id = gr.job_id
-WHERE gr.user_id = @user_id
+WHERE gr.user_id = @user_id AND j.id = @job_id
 ORDER BY gr.created_at DESC
 LIMIT @size OFFSET @cursor;
 
