@@ -12,9 +12,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          path: /opt/jubilant-fishstick
-          clean: false
+
+      - name: Sync files to /opt
+        run: |
+          # O './' é a pasta onde o runner baixou o código
+          sudo rsync -av --delete --exclude '.git' ./ /opt/jubilant-fishstick/
 
       - name: Build and Restart Containers
         working-directory: /opt/jubilant-fishstick
