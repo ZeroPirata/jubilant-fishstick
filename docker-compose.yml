@@ -8,7 +8,7 @@ services:
     environment:
       - OUTPUT_DIR=/app/storage
     ports:
-      - "127.0.0.1:${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
+      - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
     volumes:
       - app_data:/app/storage
     depends_on:
