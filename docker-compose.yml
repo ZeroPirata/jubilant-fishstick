@@ -20,6 +20,12 @@ services:
       - app-network
       - db-network
       - cache-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     mem_limit: 2g
     security_opt:
       - no-new-privileges:true
