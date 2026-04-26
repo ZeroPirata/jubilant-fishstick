@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"context"
 	"hackton-treino/config"
 	"hackton-treino/internal/handler"
 	"hackton-treino/internal/middleware"
@@ -29,7 +30,7 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	outputFS := http.FileServer(http.Dir(handler.OutputBaseDir()))
 	mux.Handle("/output/",
 		middleware.RevocationMiddleware(revoker)(
-			middleware.AuthMiddleware(jwtManager)(
+			downloadAuth(jwtManager)(
 				http.StripPrefix("/output/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					// First path segment after /output/ is the owner UUID.
 					ownerID := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/"), "/", 2)[0]
@@ -76,4 +77,24 @@ func noCacheStatic(next http.Handler) http.Handler {
 		w.Header().Set("Cache-Control", "no-cache")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// downloadAuth aceita JWT tanto no header Authorization quanto no query param ?token=
+// para permitir downloads diretos via <a href> no browser.
+func downloadAuth(jwt security.TokenProvider) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if tokenParam := r.URL.Query().Get("token"); tokenParam != "" {
+				claims, err := jwt.Validate(tokenParam)
+				if err != nil {
+					http.Error(w, "invalid token", http.StatusUnauthorized)
+					return
+				}
+				ctx := context.WithValue(r.Context(), middleware.ContextKeyUserID, claims)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+			middleware.AuthMiddleware(jwt)(next).ServeHTTP(w, r)
+		})
+	}
 }

@@ -358,21 +358,15 @@ function pdfBar(resumePath, coverPath, resumeId) {
   `;
 }
 
-async function downloadPdf(path, filename) {
+function downloadPdf(path, filename) {
   const token = getToken();
-  const res = await fetch('/' + path, {
-    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-  });
-  if (!res.ok) { alert('Erro ao baixar o PDF. Tente novamente.'); return; }
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
+  const url = '/' + path + (token ? '?token=' + encodeURIComponent(token) : '');
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 function switchResumeTab(btn, targetId) {
