@@ -13,6 +13,8 @@ jobs:
 
       - name: Run tests
         run: go test ./... -count=1 -timeout 60s
+        env:
+          PATH: /usr/local/go/bin:${{ env.PATH }}
 
   deploy:
     name: Deploy to server
