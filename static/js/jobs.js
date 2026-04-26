@@ -358,15 +358,31 @@ function pdfBar(resumePath, coverPath, resumeId) {
   `;
 }
 
-function downloadPdf(path, filename) {
+async function downloadPdf(path, filename) {
   const token = getToken();
-  const url = '/' + path + (token ? '?token=' + encodeURIComponent(token) : '');
+  let res;
+  try {
+    res = await fetch('/' + path, {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    });
+  } catch (e) {
+    alert('Erro de rede: ' + e.message);
+    return;
+  }
+  if (res.status === 401) { alert('ERRO 401: token ausente ou inválido'); return; }
+  if (res.status === 403) { alert('ERRO 403: acesso negado (dono errado?)'); return; }
+  if (res.status === 404) { alert('ERRO 404: arquivo não existe no servidor'); return; }
+  if (!res.ok)            { alert('ERRO HTTP ' + res.status); return; }
+  const blob = await res.blob();
+  if (blob.size === 0)    { alert('ERRO: arquivo vazio (0 bytes)'); return; }
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 function switchResumeTab(btn, targetId) {
