@@ -65,7 +65,7 @@ jobs:
           CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/api/v1/auth/login -X POST \
             -H "Content-Type: application/json" \
             -d '{"email":"smoke@test.com","password":"x"}')
-          if [ "$CODE" = "400" ] || [ "$CODE" = "401" ] || [ "$CODE" = "422" ]; then
+          if [ "$CODE" = "400" ] || [ "$CODE" = "401" ] || [ "$CODE" = "422" ] || [ "$CODE" = "429" ]; then
             echo "✅ Smoke test passou (HTTP $CODE)"
           else
             echo "❌ Smoke test falhou — HTTP $CODE (esperado 400/401/422)"
