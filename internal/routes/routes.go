@@ -25,7 +25,7 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	secLog := secevents.New(db)
 
 	mux.HandleFunc("/", handler.ServeUI)
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	mux.Handle("/static/", http.StripPrefix("/static/", noCacheStatic(http.FileServer(http.Dir("static")))))
 	outputFS := http.FileServer(http.Dir(handler.OutputBaseDir()))
 	mux.Handle("/output/",
 		middleware.RevocationMiddleware(revoker)(
@@ -69,4 +69,11 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 			middleware.AuthMiddleware(jwtManager)(http.HandlerFunc(jobHandler.StreamEvents)),
 		),
 	)
+}
+
+func noCacheStatic(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		next.ServeHTTP(w, r)
+	})
 }
