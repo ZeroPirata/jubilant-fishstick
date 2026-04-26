@@ -17,6 +17,7 @@ services:
       cache:
         condition: service_healthy
     networks:
+      - app-network
       - db-network
       - cache-network
     mem_limit: 2g
@@ -80,6 +81,8 @@ services:
       - SETGID
 
 networks:
+  app-network:
+    driver: bridge
   db-network:
     driver: bridge
     internal: true
