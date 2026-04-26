@@ -12,6 +12,7 @@ import (
 	"hackton-treino/internal/services"
 	"hackton-treino/internal/sse"
 	"hackton-treino/internal/worker"
+	dbmigrations "hackton-treino/repository/migrations"
 	"log"
 	"net/http"
 	"os"
@@ -59,6 +60,10 @@ func run() error {
 		return fmt.Errorf("failed to get database pool: %w", err)
 	}
 	defer postgres.ClosePool(zap.L())
+
+	if err := postgres.RunMigrations(dbmigrations.FS, cfg, zap.L()); err != nil {
+		return fmt.Errorf("failed to run migrations: %w", err)
+	}
 
 	rds, err := cache.GetClient(cfg, zap.L())
 	if err != nil {

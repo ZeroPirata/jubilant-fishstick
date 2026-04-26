@@ -1,6 +1,6 @@
 version: "2"
 sql:
-  - schema: "repository/schema.sql"
+  - schema: "repository/migrations/"
     queries:
       - "repository/query/query.sql"
       - "repository/query/jobs.sql"

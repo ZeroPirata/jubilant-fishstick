@@ -352,10 +352,25 @@ function pdfBar(resumePath, coverPath, resumeId) {
   return `
     <div id="pdf-bar-${resumeId}" class="pdf-bar">
       <span>PDFs:</span>
-      ${resumePath ? `<a href="/${resumePath}" target="_blank" download>📄 Currículo</a>` : ''}
-      ${coverPath  ? `<a href="/${coverPath}"  target="_blank" download>📄 Cover Letter</a>` : ''}
+      ${resumePath ? `<button class="btn-pdf-download" onclick="downloadPdf('${resumePath}','curriculo.pdf')">📄 Currículo</button>` : ''}
+      ${coverPath  ? `<button class="btn-pdf-download" onclick="downloadPdf('${coverPath}','cover_letter.pdf')">📄 Cover Letter</button>` : ''}
     </div>
   `;
+}
+
+async function downloadPdf(path, filename) {
+  const token = getToken();
+  const res = await fetch('/' + path, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+  });
+  if (!res.ok) { alert('Erro ao baixar o PDF. Tente novamente.'); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function switchResumeTab(btn, targetId) {

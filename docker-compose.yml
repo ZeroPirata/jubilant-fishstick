@@ -28,6 +28,7 @@ services:
     cap_add:
       - SETUID
       - SETGID
+      - CHOWN
     restart: unless-stopped
 
   db:
