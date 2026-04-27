@@ -5,6 +5,7 @@ import (
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/repository"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -18,6 +19,7 @@ type Repository interface {
 	WorkerUpdateJob(ctx context.Context, args db.WorkerUpdateJobParams) *repository.RepositoryError
 	WorkerUpdateJobQuality(ctx context.Context, args db.WorkerUpdateJobQualityParams) *repository.RepositoryError
 	WorkerInsertGeneratedResume(ctx context.Context, args db.WorkerInsertGeneratedResumeParams) (string, *repository.RepositoryError)
+	WorkerRecoverStuckJobs(ctx context.Context, cutoff pgtype.Timestamptz) (int64, *repository.RepositoryError)
 }
 
 func New(conn *pgxpool.Pool) Repository {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hackton-treino/config"
 	"hackton-treino/database/cache"
@@ -18,6 +19,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -73,10 +75,9 @@ func run() error {
 
 	bus := sse.NewBus()
 
+	serverDone := make(chan error, 1)
 	go func() {
-		if err := startServer(*cfg, db, rds, bus); err != nil {
-			zap.L().Fatal("Erro fatal no servidor HTTP", zap.Error(err))
-		}
+		serverDone <- startServer(ctx, *cfg, db, rds, bus)
 	}()
 
 	llm := services.NewLLMService(cfg)
@@ -86,24 +87,29 @@ func run() error {
 
 	<-ctx.Done()
 	zap.L().Info("Encerrando aplicação graciosamente...")
+
+	// Aguarda o servidor HTTP drenar as conexões em andamento (timeout de 15s dentro de startServer).
+	if err := <-serverDone; err != nil {
+		zap.L().Error("Servidor HTTP encerrou com erro", zap.Error(err))
+	}
 	return nil
 }
 
-func startServer(cfg config.Config, db *pgxpool.Pool, rds *redis.Client, bus *sse.Bus) error {
-	var port string
-	mux := http.NewServeMux()
-
+func startServer(ctx context.Context, cfg config.Config, db *pgxpool.Pool, rds *redis.Client, bus *sse.Bus) error {
+	port := ":8080"
 	if cfg.Server.Port != "" {
 		port = ":" + cfg.Server.Port
-	} else {
-		port = ":8080"
 	}
 
+	mux := http.NewServeMux()
 	routes.Setup(mux, zap.L(), db, cfg, rds, bus)
-	handler := middleware.SecurityHeaders(
-		middleware.CORSMiddleware(cfg.Server.CORSAllowedOrigin)(
-			middleware.LoggingMiddleware(zap.L(),
-				middleware.BodyLimit(1<<20)(mux), // 1 MB
+
+	handler := middleware.MetricsMiddleware(
+		middleware.SecurityHeaders(
+			middleware.CORSMiddleware(cfg.Server.CORSAllowedOrigin)(
+				middleware.LoggingMiddleware(zap.L(),
+					middleware.BodyLimit(1<<20)(mux),
+				),
 			),
 		),
 	)
@@ -113,5 +119,18 @@ func startServer(cfg config.Config, db *pgxpool.Pool, rds *redis.Client, bus *ss
 		Addr:    port,
 		Handler: handler,
 	}
-	return server.ListenAndServe()
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			zap.L().Error("Erro no shutdown do servidor HTTP", zap.Error(err))
+		}
+	}()
+
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }

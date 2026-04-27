@@ -88,7 +88,8 @@ type CacheConfig struct {
 }
 
 type WorkerConfig struct {
-	MaxConcurrent int           `env:"WORKER_MAX_CONCURRENT" envDefault:"5"`
-	BatchSize     int           `env:"WORKER_BATCH_SIZE" envDefault:"20"`
-	Interval      time.Duration `env:"WORKER_INTERVAL" envDefault:"30s"`
+	MaxConcurrent   int           `env:"WORKER_MAX_CONCURRENT" envDefault:"5"`
+	BatchSize       int           `env:"WORKER_BATCH_SIZE" envDefault:"20"`
+	Interval        time.Duration `env:"WORKER_INTERVAL" envDefault:"30s"`
+	RecoveryTimeout time.Duration `env:"WORKER_RECOVERY_TIMEOUT" envDefault:"10m"`
 }

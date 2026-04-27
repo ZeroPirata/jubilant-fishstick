@@ -294,7 +294,10 @@ func (ai *AiService) sendRequest(ctx context.Context, payload []byte, isScrape b
 	}
 
 	const maxRetries = 3
-	var lastErr error
+	var (
+		lastErr      error
+		hitRateLimit bool
+	)
 	for attempt := range maxRetries {
 		if attempt > 0 {
 			select {
@@ -311,12 +314,22 @@ func (ai *AiService) sendRequest(ctx context.Context, payload []byte, isScrape b
 
 		resp, err := client.Do(req)
 		if err != nil {
-			return LLMResponse{}, fmt.Errorf("AiService: request failed: %w", err)
+			// Erro de rede (timeout, conexão recusada etc.): retry com backoff exponencial.
+			// Não sinaliza rate limit — o worker não deve pausar por falha de rede.
+			lastErr = fmt.Errorf("AiService: request failed: %w", err)
+			backoff := time.Duration(1<<uint(attempt)) * time.Second // 1s, 2s, 4s
+			select {
+			case <-ctx.Done():
+				return LLMResponse{}, ctx.Err()
+			case <-time.After(backoff):
+			}
+			continue
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests {
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
+			hitRateLimit = true
 			lastErr = fmt.Errorf("AiService: status 429: %s", string(body))
 			delay := parseRetryDelay(body)
 			select {
@@ -361,7 +374,12 @@ func (ai *AiService) sendRequest(ctx context.Context, payload []byte, isScrape b
 		return raw, nil
 	}
 
-	return LLMResponse{}, &ErrRateLimit{Msg: lastErr.Error()}
+	// Só sinaliza ErrRateLimit (→ pausa o worker) quando realmente houve 429.
+	// Erros de rede não devem travar o worker por 12h.
+	if hitRateLimit {
+		return LLMResponse{}, &ErrRateLimit{Msg: lastErr.Error()}
+	}
+	return LLMResponse{}, lastErr
 }
 
 func (ai *AiService) scrapSiteLLM(targetURL string) (string, error) {

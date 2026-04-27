@@ -59,8 +59,9 @@
   <nav>
     <button data-tab="vagas"      class="active">Vagas</button>
     <button data-tab="nova-vaga">Nova Vaga</button>
-    <button data-tab="curriculos">Currículos</button>
     <button data-tab="perfil">Perfil</button>
+    <button data-tab="metricas" class="admin-only hidden">Métricas</button>
+    <button data-tab="admin"   class="admin-only hidden">Painel Admin</button>
     <button data-tab="ajuda">Ajuda</button>
   </nav>
 
@@ -122,6 +123,155 @@
       </div>
     </section>
 
+    <!-- ─── MÉTRICAS ─── -->
+    <section id="tab-metricas" data-tab>
+      <div class="section-header">
+        <h2>Métricas do Sistema</h2>
+        <div class="toolbar" style="margin:0;align-items:center;gap:12px">
+          <span id="metrics-updated" style="color:var(--muted);font-size:12px"></span>
+          <button class="btn btn-ghost" onclick="loadMetrics()">↻ Atualizar</button>
+        </div>
+      </div>
+      <p id="metrics-error" style="color:var(--red);font-size:13px;margin-bottom:12px"></p>
+
+      <!-- Linha 1: 4 stat cards -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">Jobs Concluídos</div>
+          <div class="metric-val" id="m-jobs-completed" style="color:var(--green)">—</div>
+          <div class="metric-sub" id="m-jobs-total">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Jobs com Erro</div>
+          <div class="metric-val" id="m-jobs-error" style="color:var(--red)">—</div>
+          <div class="metric-sub">total processados</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Jobs Recuperados</div>
+          <div class="metric-val" id="m-jobs-recovered" style="color:var(--yellow)">—</div>
+          <div class="metric-sub">travados → pending</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Goroutines Ativas</div>
+          <div class="metric-val" id="m-goroutines-active" style="color:var(--accent)">—</div>
+          <div class="metric-sub">processando agora</div>
+        </div>
+      </div>
+
+      <!-- Linha 2: HTTP API + per-route breakdown lado a lado -->
+      <div class="metrics-http-row">
+        <div class="metric-card">
+          <div class="metric-card-title">HTTP API — Requisições</div>
+          <div class="metric-row">
+            <div>
+              <div class="metric-label">Total de requisições</div>
+              <div class="metric-val metric-val-md" id="m-http-total">—</div>
+            </div>
+            <div>
+              <div class="metric-label">Latência média</div>
+              <div class="metric-val metric-val-md" id="m-http-avg">—</div>
+            </div>
+            <div>
+              <div class="metric-label">Taxa de sucesso</div>
+              <div class="metric-val metric-val-md" id="m-http-success-rate" style="color:var(--green)">—</div>
+            </div>
+          </div>
+          <div class="metric-breakdown">
+            <span class="metric-chip chip-green">2xx <b id="m-http-2xx">0</b></span>
+            <span class="metric-chip chip-yellow">4xx <b id="m-http-4xx">0</b></span>
+            <span class="metric-chip chip-red">5xx <b id="m-http-5xx">0</b></span>
+          </div>
+        </div>
+
+        <div class="metric-card" id="m-routes-card" style="display:none">
+          <div class="metric-card-title">Requisições por Rota</div>
+          <div class="table-wrap" style="margin:0">
+            <table class="routes-table">
+              <thead>
+                <tr>
+                  <th>Método</th>
+                  <th>Rota</th>
+                  <th class="rt-num">Reqs</th>
+                  <th class="rt-num">Lat. média</th>
+                  <th class="rt-num">p95</th>
+                  <th class="rt-num">2xx</th>
+                  <th class="rt-num">4xx</th>
+                  <th class="rt-num">5xx</th>
+                </tr>
+              </thead>
+              <tbody id="m-routes-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Linha 3: LLM + Scraper -->
+      <div class="metrics-grid2">
+        <div class="metric-card">
+          <div class="metric-card-title">LLM — Geração de Currículo</div>
+          <div class="metric-row">
+            <div>
+              <div class="metric-label">Total de chamadas</div>
+              <div class="metric-val metric-val-md" id="m-llm-total">—</div>
+            </div>
+            <div>
+              <div class="metric-label">Duração média (ok)</div>
+              <div class="metric-val metric-val-md" id="m-llm-avg">—</div>
+            </div>
+          </div>
+          <div class="metric-breakdown">
+            <span class="metric-chip chip-green">ok <b id="m-llm-ok">0</b></span>
+            <span class="metric-chip chip-red">erro <b id="m-llm-err">0</b></span>
+            <span class="metric-chip chip-yellow">rate limit <b id="m-llm-rl">0</b></span>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-card-title">Scraper — Coleta de Vaga</div>
+          <div class="metric-row">
+            <div>
+              <div class="metric-label">Total de execuções</div>
+              <div class="metric-val metric-val-md" id="m-scraper-total">—</div>
+            </div>
+            <div>
+              <div class="metric-label">Duração média (ok)</div>
+              <div class="metric-val metric-val-md" id="m-scraper-avg">—</div>
+            </div>
+          </div>
+          <div class="metric-breakdown">
+            <span class="metric-chip chip-green">ok <b id="m-scraper-ok">0</b></span>
+            <span class="metric-chip chip-red">erro <b id="m-scraper-err">0</b></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Linha 4: Go runtime -->
+      <div class="metric-card metric-card-runtime">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="metric-card-title" style="margin-bottom:0">Go Runtime</div>
+          <button id="btn-force-gc" class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="triggerGC()">Forçar GC</button>
+        </div>
+        <div class="metrics-grid4">
+          <div>
+            <div class="metric-label">Goroutines totais</div>
+            <div class="metric-val metric-val-sm" id="m-go-goroutines">—</div>
+          </div>
+          <div>
+            <div class="metric-label">Heap em uso</div>
+            <div class="metric-val metric-val-sm" id="m-go-heap">—</div>
+          </div>
+          <div>
+            <div class="metric-label">Ciclos de GC</div>
+            <div class="metric-val metric-val-sm" id="m-go-gc">—</div>
+          </div>
+          <div>
+            <div class="metric-label">Threads OS</div>
+            <div class="metric-val metric-val-sm" id="m-go-threads">—</div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
     <!-- ─── NOVA VAGA ─── -->
     <section id="tab-nova-vaga" data-tab>
       <h2>Cadastrar Nova Vaga</h2>
@@ -147,10 +297,6 @@
           <div class="field">
             <label>Descrição (opcional)</label>
             <textarea id="new-job-desc" placeholder="Descrição da vaga..."></textarea>
-          </div>
-          <div class="field">
-            <label>Stack (opcional — separado por vírgula)</label>
-            <input type="text" id="new-job-stack" placeholder="Go, Docker, Kubernetes" />
           </div>
           <div class="field">
             <label>Idioma do currículo</label>
@@ -184,17 +330,6 @@
           <button id="btn-bulk-submit" class="btn btn-primary" onclick="submitBulkUrls()" disabled>Enviar 0 vagas</button>
         </div>
 
-      </div>
-    </section>
-
-    <!-- ─── CURRÍCULOS ─── -->
-    <section id="tab-curriculos" data-tab>
-      <div class="section-header">
-        <h2>Currículos Gerados</h2>
-        <button class="btn btn-ghost" onclick="loadResumesTab()">↻ Atualizar</button>
-      </div>
-      <div id="curriculos-container">
-        <p class="empty">Selecione a aba para carregar...</p>
       </div>
     </section>
 
@@ -435,6 +570,73 @@
         </div>
       </div>
 
+    </section>
+
+    <!-- ─── ADMIN ─── -->
+    <section id="tab-admin" data-tab>
+      <div class="section-header">
+        <h2>Painel Administrativo</h2>
+        <div class="sub-nav" style="margin:0">
+          <button class="active" data-admin="errors" onclick="switchAdminView('errors',this)">Log de Erros</button>
+          <button               data-admin="users"  onclick="switchAdminView('users',this)">Usuários</button>
+        </div>
+      </div>
+
+      <!-- Erros -->
+      <div id="admin-errors">
+        <div class="list-controls" style="margin-bottom:12px">
+          <select id="admin-error-filter" onchange="filterAdminErrors()" style="width:auto">
+            <option value="">Todos os tipos</option>
+            <option value="scraper_incompatible">Site incompatível</option>
+            <option value="scraper_error">Erro no scraper</option>
+            <option value="llm_error">Erro no LLM</option>
+            <option value="llm_rate_limit">Rate limit LLM</option>
+          </select>
+          <button class="btn btn-ghost" onclick="loadAdminErrors()">↻ Atualizar</button>
+          <span id="admin-errors-count" style="color:var(--muted);font-size:12px;margin-left:auto"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>URL</th>
+                <th>Mensagem</th>
+                <th>Job ID</th>
+                <th>Usuário</th>
+                <th>Quando</th>
+              </tr>
+            </thead>
+            <tbody id="admin-errors-body">
+              <tr><td colspan="6" class="empty">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="list-controls" style="margin-top:10px">
+          <div class="page-nav" style="margin-left:0">
+            <button class="btn-page" id="admin-err-prev" onclick="adminErrorsPrev()" disabled>‹</button>
+            <span class="page-info" id="admin-err-page">—</span>
+            <button class="btn-page" id="admin-err-next" onclick="adminErrorsNext()">›</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Usuários -->
+      <div id="admin-users" class="hidden">
+        <div class="list-controls" style="margin-bottom:12px">
+          <button class="btn btn-ghost" onclick="loadAdminUsers()">↻ Atualizar</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Email</th><th>Admin</th><th>Cadastrado em</th><th></th></tr>
+            </thead>
+            <tbody id="admin-users-body">
+              <tr><td colspan="4" class="empty">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <!-- ─── AJUDA ─── -->
@@ -744,5 +946,7 @@
 <script src="/static/js/app.js"></script>
 <script src="/static/js/jobs.js"></script>
 <script src="/static/js/profile.js"></script>
+<script src="/static/js/metrics.js"></script>
+<script src="/static/js/admin.js"></script>
 </body>
 </html>

@@ -1,5 +1,51 @@
 // ── Jobs + Resumes + PDF + Feedback ──
 
+// Cache de skills do usuário para o matching visual da stack
+let _userSkillsCache = null;
+
+async function getUserSkills() {
+  if (_userSkillsCache !== null) return _userSkillsCache;
+  try {
+    const res = await api.get('/users/me/skills?size=500&offset=0');
+    if (!res.ok) { _userSkillsCache = []; return _userSkillsCache; }
+    const { data: rows } = await apiList(res);
+    _userSkillsCache = rows.map(s => (s.skill_name || '').toLowerCase().trim()).filter(Boolean);
+  } catch (_) {
+    _userSkillsCache = [];
+  }
+  return _userSkillsCache;
+}
+
+function clearSkillsCache() { _userSkillsCache = null; }
+
+// Matching bidirecional com word-boundary:
+// "go"      bate em skill "go"         ✓   mas NÃO em "django" / "golang"  ✓
+// "aws"     bate em skill "aws sqs"    ✓   (item é prefixo da skill)
+// "aws sqs" bate em skill "sqs"        ✓   (skill é token do item)
+// "ec2"     bate em skill "aws ec2"    ✓   (item é token da skill)
+function techMatchFront(stackItem, skillName) {
+  const item  = stackItem.toLowerCase().trim();
+  const skill = skillName.toLowerCase().trim();
+  if (!item || !skill) return false;
+  if (item === skill) return true;
+
+  function hasWordBoundary(haystack, needle) {
+    try {
+      const esc = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`(?<![a-z0-9])${esc}(?![a-z0-9])`).test(haystack);
+    } catch (_) {
+      return haystack.includes(needle);
+    }
+  }
+
+  // Skill aparece como palavra dentro do item  (ex: skill="go",   item="node.js go sdk")
+  if (hasWordBoundary(item, skill)) return true;
+  // Item  aparece como palavra dentro da skill (ex: item="aws",   skill="aws sqs")
+  if (hasWordBoundary(skill, item)) return true;
+
+  return false;
+}
+
 const statusLabels = {
   pending:        'Pendente',
   processing:     'Processando',
@@ -122,7 +168,7 @@ function applyJobEvent(ev) {
 }
 
 // ── Quality details toggle ──
-function toggleQualityDetails(jobId) {
+async function toggleQualityDetails(jobId) {
   const existing = document.getElementById(`quality-row-${jobId}`);
   const btn = document.getElementById(`quality-btn-${jobId}`);
   if (existing) { existing.remove(); btn?.classList.remove('expanded'); return; }
@@ -134,12 +180,18 @@ function toggleQualityDetails(jobId) {
   const qualityCls       = quality || 'mid';
   const qualityLbl       = qualityLabelsMap[quality] || '—';
 
+  const userSkills = await getUserSkills();
+
   const stackSection = stack.length ? `
     <div style="margin-bottom:${reqs.length ? 10 : 0}px">
       <div class="quality-group-label" style="margin-bottom:4px">Stack tecnológico detectado</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">
-        ${stack.map(t => `<span class="miss-tag">${escHtml(t)}</span>`).join('')}
+        ${stack.map(t => {
+          const matched = userSkills.some(skill => techMatchFront(t, skill));
+          return `<span class="${matched ? 'match-tag' : 'miss-tag'}" title="${matched ? 'Você tem esta habilidade' : 'Não encontrado no seu perfil'}">${escHtml(t)}</span>`;
+        }).join('')}
       </div>
+      ${userSkills.length === 0 ? '<div style="font-size:11px;color:var(--muted);margin-top:6px">Cadastre habilidades no perfil para ver o matching.</div>' : ''}
     </div>` : '';
 
   const reqSection = reqs.length ? `
@@ -455,21 +507,21 @@ async function loadResumesTab() {
 
 // ── Nova Vaga ──
 async function createJob() {
-  const url = document.getElementById('new-job-url').value.trim();
-  if (!url) { toast('URL da vaga é obrigatória.', 'error'); return; }
+  const url         = document.getElementById('new-job-url').value.trim();
+  const companyName = document.getElementById('new-job-company').value.trim() || undefined;
+  const jobTitle    = document.getElementById('new-job-title').value.trim()   || undefined;
+  const description = document.getElementById('new-job-desc').value.trim()    || undefined;
+  const language    = document.getElementById('new-job-lang').value           || undefined;
 
-  const companyName  = document.getElementById('new-job-company').value.trim()   || undefined;
-  const jobTitle     = document.getElementById('new-job-title').value.trim()      || undefined;
-  const description  = document.getElementById('new-job-desc').value.trim()       || undefined;
-  const stackRaw     = document.getElementById('new-job-stack').value.trim();
-  const language     = document.getElementById('new-job-lang').value             || undefined;
+  if (!url) { toast('URL da vaga é obrigatória.', 'error'); return; }
+  if (description && !companyName) { toast('Preencha o nome da empresa ao informar a descrição.', 'error'); return; }
+  if (description && !jobTitle)    { toast('Preencha o título da vaga ao informar a descrição.', 'error'); return; }
 
   const body = { url };
-  if (companyName)     body.company_name = companyName;
-  if (jobTitle)        body.job_title    = jobTitle;
-  if (description)     body.description  = description;
-  if (language)        body.language     = language;
-  if (stackRaw)        body.stacks       = splitCsv(stackRaw);
+  if (companyName)  body.company_name = companyName;
+  if (jobTitle)     body.job_title    = jobTitle;
+  if (description)  body.description  = description;
+  if (language)     body.language     = language;
 
   try {
     const btn = document.getElementById('btn-create-job');
@@ -480,7 +532,7 @@ async function createJob() {
     if (res.status === 409) { toast('Esta URL já foi cadastrada.', 'error'); return; }
     if (!res.ok) { toast('Erro ao cadastrar vaga.', 'error'); return; }
 
-    ['new-job-url','new-job-company','new-job-title','new-job-desc','new-job-stack'].forEach(id => {
+    ['new-job-url','new-job-company','new-job-title','new-job-desc'].forEach(id => {
       document.getElementById(id).value = '';
     });
     toast('Vaga cadastrada! O worker irá processá-la em breve.');

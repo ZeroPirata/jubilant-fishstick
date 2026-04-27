@@ -28,6 +28,7 @@ const api = {
   get:    (path)       => apiFetch('GET',    path),
   post:   (path, body) => apiFetch('POST',   path, body),
   put:    (path, body) => apiFetch('PUT',    path, body),
+  patch:  (path, body) => apiFetch('PATCH',  path, body),
   delete: (path)       => apiFetch('DELETE', path),
 };
 

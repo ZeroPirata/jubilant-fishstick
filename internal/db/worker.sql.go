@@ -139,6 +139,22 @@ func (q *Queries) WorkerUpdateJobQuality(ctx context.Context, arg WorkerUpdateJo
 	return err
 }
 
+const workerRecoverStuckJobs = `-- name: WorkerRecoverStuckJobs :execrows
+UPDATE jobs
+SET
+    status     = 'pending',
+    updated_at = now()
+WHERE
+    status     = 'processing'
+    AND deleted_at IS NULL
+    AND updated_at < $1
+`
+
+func (q *Queries) WorkerRecoverStuckJobs(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, workerRecoverStuckJobs, cutoff)
+	return result.RowsAffected(), err
+}
+
 const workerUpdateJobStatus = `-- name: WorkerUpdateJobStatus :exec
 UPDATE jobs
 SET

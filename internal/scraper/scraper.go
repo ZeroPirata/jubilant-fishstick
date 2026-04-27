@@ -1,12 +1,15 @@
 package scraper
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"go.uber.org/zap"
 )
+
+var ErrUnsupportedDomain = errors.New("domínio não suportado")
 
 type Scraper struct {
 	Url    string
@@ -54,7 +57,7 @@ func (s *Scraper) Scrape() (BasicScraperResult, error) {
 
 	scraper, ok := scraps[hostname]
 	if !ok {
-		return BasicScraperResult{}, fmt.Errorf("domínio não suportado: %s", hostname)
+		return BasicScraperResult{}, fmt.Errorf("%w: %s", ErrUnsupportedDomain, hostname)
 	}
 
 	return scraper()

@@ -8,6 +8,7 @@ function showAuth() {
 function showApp() {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
+  checkAdminStatus();
   navigateTo('vagas');
   connectSSE();
 }
@@ -56,11 +57,13 @@ function navigateTo(id) {
   if (section) section.classList.add('active');
   if (btn)     btn.classList.add('active');
 
+  if (_activeTab === 'metricas') stopMetricsRefresh();
   _activeTab = id;
   if (id === 'vagas')    loadJobs();
-  if (id === 'curriculos') loadResumesTab();
   if (id === 'perfil')   loadProfile();
   if (id === 'filtros')  loadFilters();
+  if (id === 'metricas') startMetricsRefresh();
+  if (id === 'admin')    loadAdminPanel();
 }
 
 // ── Auth: login / register ──
@@ -118,6 +121,8 @@ async function doRegister() {
 function doLogout() {
   disconnectSSE();
   clearToken();
+  localStorage.removeItem('jp_is_admin');
+  if (typeof clearSkillsCache === 'function') clearSkillsCache();
   showAuth();
 }
 

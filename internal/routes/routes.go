@@ -2,17 +2,22 @@ package routes
 
 import (
 	"context"
+	"encoding/json"
 	"hackton-treino/config"
 	"hackton-treino/internal/handler"
 	"hackton-treino/internal/middleware"
+	adminRepo "hackton-treino/internal/repository/admin"
 	"hackton-treino/internal/repository/secevents"
 	"hackton-treino/internal/security"
 	"hackton-treino/internal/sse"
 	"net/http"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -24,7 +29,10 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	jwtManager := security.NewJwtManager(cfg.Jwt.Secret, cfg.Jwt.Expiration)
 	revoker := security.NewRevoker(rds)
 	secLog := secevents.New(db)
+	adminR := adminRepo.New(db)
+	adminH := handler.NewAdminHandler(logger, adminR)
 
+	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/", handler.ServeUI)
 	mux.Handle("/static/", http.StripPrefix("/static/", noCacheStatic(http.FileServer(http.Dir("static")))))
 	outputFS := http.FileServer(http.Dir(handler.OutputBaseDir()))
@@ -57,6 +65,32 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 
 	logoutHandler := handler.NewLogoutHandler(logger, revoker)
 	protectedMux.Handle("POST /auth/logout", http.HandlerFunc(logoutHandler.Logout))
+
+	// /me — retorna is_admin do usuário autenticado
+	protectedMux.HandleFunc("GET /me", adminH.Me)
+
+	// Rotas de administrador
+	adminMux := http.NewServeMux()
+	adminMux.HandleFunc("GET /errors",           adminH.ListErrorLogs)
+	adminMux.HandleFunc("GET /users",            adminH.ListUsers)
+	adminMux.HandleFunc("PATCH /users/{id}",     adminH.SetAdmin)
+	adminHandler := middleware.AdminMiddleware(adminR)(adminMux)
+	protectedMux.Handle("/admin/", http.StripPrefix("/admin", adminHandler))
+
+	protectedMux.HandleFunc("POST /debug/gc", func(w http.ResponseWriter, r *http.Request) {
+		var before runtime.MemStats
+		runtime.ReadMemStats(&before)
+		runtime.GC()
+		debug.FreeOSMemory()
+		var after runtime.MemStats
+		runtime.ReadMemStats(&after)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"heap_before": before.HeapAlloc,
+			"heap_after":  after.HeapAlloc,
+			"freed_bytes": int64(before.HeapAlloc) - int64(after.HeapAlloc),
+		})
+	})
 
 	protectedHandler := middleware.RevocationMiddleware(revoker)(middleware.AuthMiddleware(jwtManager)(protectedMux))
 	apiMux.Handle("/", protectedHandler)

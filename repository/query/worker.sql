@@ -51,3 +51,15 @@ WHERE id = @id;
 INSERT INTO generated_resumes(job_id, user_id, content_json)
 VALUES (@job_id, @user_id, @content_json)
 RETURNING id;
+
+
+-- name: WorkerRecoverStuckJobs :execrows
+-- Retorna jobs travados em 'processing' por mais de @cutoff para 'pending'.
+UPDATE jobs
+SET
+    status     = 'pending',
+    updated_at = now()
+WHERE
+    status     = 'processing'
+    AND deleted_at IS NULL
+    AND updated_at < @cutoff;

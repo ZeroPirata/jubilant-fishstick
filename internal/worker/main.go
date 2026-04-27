@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hackton-treino/config"
 	"hackton-treino/internal/db"
+	"hackton-treino/internal/metrics"
 	"hackton-treino/internal/repository/aliases"
 	"hackton-treino/internal/repository/feedbacks"
 	"hackton-treino/internal/repository/users"
@@ -15,7 +16,9 @@ import (
 	"time"
 
 	ucache "hackton-treino/internal/repository/cache"
+	adminRepo "hackton-treino/internal/repository/admin"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -32,6 +35,7 @@ type Worker struct {
 	Users         users.Repository
 	Feedbacks     feedbacks.Repository
 	Aliases       aliases.Repository
+	AdminRepo     adminRepo.Repository
 	aliases       map[string]string
 	promptPTBR    string
 	promptEN      string
@@ -39,9 +43,10 @@ type Worker struct {
 	ScraperAi     bool
 	Cache         ucache.Cache
 	Bus           *sse.Bus
-	maxConcurrent int
-	batchSize     int32
-	interval      time.Duration
+	maxConcurrent   int
+	batchSize       int32
+	interval        time.Duration
+	recoveryTimeout time.Duration
 }
 
 func NewWorker(logger *zap.Logger, conn *pgxpool.Pool, llm services.AiService, scraperAi bool, rds *redis.Client, bus *sse.Bus, cfg config.WorkerConfig) *Worker {
@@ -52,12 +57,14 @@ func NewWorker(logger *zap.Logger, conn *pgxpool.Pool, llm services.AiService, s
 		Users:         users.New(conn),
 		Feedbacks:     feedbacks.New(conn),
 		Aliases:       aliases.New(conn),
+		AdminRepo:     adminRepo.New(conn),
 		ScraperAi:     scraperAi,
 		Cache:         ucache.New(rds),
 		Bus:           bus,
-		maxConcurrent: cfg.MaxConcurrent,
-		batchSize:     int32(cfg.BatchSize),
-		interval:      cfg.Interval,
+		maxConcurrent:   cfg.MaxConcurrent,
+		batchSize:       int32(cfg.BatchSize),
+		interval:        cfg.Interval,
+		recoveryTimeout: cfg.RecoveryTimeout,
 	}
 }
 
@@ -66,6 +73,7 @@ func (w *Worker) failJob(ctx context.Context, job *db.Job) {
 	if w.Bus != nil {
 		w.Bus.Publish(job.UserID.String(), sse.JobEvent{ID: job.ID.String(), Status: string(db.JobStatusError)})
 	}
+	metrics.JobsProcessed.WithLabelValues("error").Inc()
 }
 
 func (w *Worker) completeJob(ctx context.Context, job *db.Job, quality db.JobQuality) {
@@ -82,6 +90,23 @@ func (w *Worker) completeJob(ctx context.Context, job *db.Job, quality db.JobQua
 			CompanyName: job.CompanyName.String,
 			JobTitle:    job.JobTitle.String,
 		})
+	}
+	metrics.JobsProcessed.WithLabelValues("completed").Inc()
+}
+
+func (w *Worker) recoverStuckJobs(ctx context.Context) {
+	if w.recoveryTimeout == 0 {
+		return
+	}
+	cutoff := pgtype.Timestamptz{Time: time.Now().Add(-w.recoveryTimeout), Valid: true}
+	n, err := w.Pipeline.WorkerRecoverStuckJobs(ctx, cutoff)
+	if err != nil {
+		w.Logger.Error("Erro ao recuperar jobs travados", zap.Error(err))
+		return
+	}
+	if n > 0 {
+		w.Logger.Warn("Jobs travados recuperados para pending", zap.Int64("count", n), zap.Duration("timeout", w.recoveryTimeout))
+		metrics.JobsProcessed.WithLabelValues("recovered").Add(float64(n))
 	}
 }
 
@@ -125,6 +150,7 @@ func (w *Worker) Start(ctx context.Context) {
 			if aliasMap, err := w.Aliases.QuerySelectAllStackAliases(ctx); err == nil && aliasMap != nil {
 				w.aliases = aliasMap
 			}
+			w.recoverStuckJobs(ctx)
 			w.processarPendentes(ctx)
 		}
 	}

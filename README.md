@@ -17,13 +17,14 @@ Usuário cadastra uma vaga (URL ou dados manuais)
               │
               ▼ (Worker a cada 30s, até 5 jobs simultâneos)
   ┌────────────────────────────────────────────┐
-  │  scraping_basic   → HTTP scraper           │  empresa, título, descrição bruta
-  │  scraping_nl      → LLM estrutura a vaga   │  stack[], requisitos[], descrição limpa
-  │  match perfil     → Redis cache + Postgres │  experiências, habilidades, projetos…
-  │  quality score    → algoritmo de matching  │  low / mid / high
-  │  buildUserPrompt  → JSON para o LLM        │  dados truncados e ordenados
-  │  LLM gera docs    → currículo + cover      │  tokens de sistema preservados
-  │  substituição     → dados reais do usuário │  {{CANDIDATO_NOME}} → "Gabriel"
+  │  recovery check  → jobs em 'processing'    │  travados há > RECOVERY_TIMEOUT → pending
+  │  scraping_basic  → HTTP scraper            │  empresa, título, descrição bruta
+  │  scraping_nl     → LLM estrutura a vaga    │  stack[], requisitos[], descrição limpa
+  │  match perfil    → Redis cache + Postgres  │  experiências, habilidades, projetos…
+  │  quality score   → algoritmo de matching   │  low / mid / high
+  │  buildUserPrompt → JSON para o LLM         │  dados truncados e ordenados
+  │  LLM gera docs   → currículo + cover       │  tokens de sistema preservados
+  │  substituição    → dados reais do usuário  │  {{CANDIDATO_NOME}} → "Gabriel"
   └────────────────────────────────────────────┘
               │
               ▼
@@ -64,6 +65,7 @@ graph TB
     API -- "gera PDF" --> PDF
     PDF -- "salva /output/" --> Disk[("Disco\n/output/{user_id}/...")]
     Browser -- "download autenticado" --> Disk
+    API -- "expõe /metrics" --> Prom["Prometheus\n(scrape + Grafana)"]
 ```
 
 ---
@@ -81,6 +83,7 @@ graph TB
 | Auth | JWT HS256 + Argon2id + Redis revocation list |
 | Real-time | Server-Sent Events (SSE) — bus in-memory por `user_id` |
 | Logging | Uber Zap |
+| Observabilidade | Prometheus client (metrics) — endpoint `/metrics` compatível com Grafana |
 | Testes | `go test` — handler, middleware, worker, security, services, util |
 | CI/CD | GitHub Actions (self-hosted) — test gate → deploy → healthcheck → smoke test |
 | Infra | Docker + Docker Compose |
@@ -108,6 +111,8 @@ sequenceDiagram
     participant SSE as SSE Bus
 
     Ticker->>Worker: tick (WORKER_INTERVAL, padrão 30s)
+    Worker->>DB: UPDATE jobs SET status='pending' WHERE status='processing' AND updated_at < now()-RECOVERY_TIMEOUT
+    Note over Worker,DB: recoverStuckJobs — recupera jobs travados por crash/timeout
     Worker->>Cache: IsRateLimited?
     alt rate limit ativo
         Worker-->>Ticker: aguarda próximo tick
@@ -261,6 +266,36 @@ Quando a LLM retorna HTTP 429, o worker:
 3. No próximo tick, verifica a flag antes de processar qualquer job
 
 Isso protege a fila de jobs de tentativas em loop e respeita a janela de rate limit da API.
+
+### 11. Recovery de jobs travados
+
+Se o processo cair no meio de um processamento (`status = processing`), o job fica bloqueado e nunca avança. Em cada tick, o worker executa:
+
+```sql
+UPDATE jobs SET status = 'pending', updated_at = now()
+WHERE status = 'processing'
+  AND deleted_at IS NULL
+  AND updated_at < now() - @cutoff
+```
+
+O `@cutoff` é `WORKER_RECOVERY_TIMEOUT` (padrão `10m`). Jobs travados há mais do que esse tempo voltam automaticamente para a fila. O contador `hackton_jobs_processed_total{status="recovered"}` do Prometheus registra cada recuperação.
+
+A recovery roda **antes** do `processarPendentes` — assim os jobs recuperados são elegíveis já no mesmo tick.
+
+### 12. Observabilidade — Prometheus
+
+O servidor expõe `GET /metrics` no formato de texto Prometheus. As métricas disponíveis:
+
+| Métrica | Tipo | Labels | O que mede |
+|---|---|---|---|
+| `hackton_jobs_processed_total` | Counter | `status` (`completed`, `error`, `recovered`) | Total de jobs finalizados por resultado |
+| `hackton_llm_duration_seconds` | Histogram | `status` (`ok`, `error`, `rate_limit`) | Latência das chamadas ao LLM principal (buckets: 1s–5m) |
+| `hackton_scraper_duration_seconds` | Histogram | `status` (`ok`, `error`) | Duração total do scraper por job — HTTP + NL (buckets: 500ms–1m) |
+| `hackton_worker_active_goroutines` | Gauge | — | Goroutines processando jobs no momento |
+
+Além das métricas da aplicação, o endpoint publica automaticamente as métricas padrão do Go runtime (GC, heap, goroutines do processo, etc.) via `promauto`.
+
+Para conectar o Grafana, configure um datasource Prometheus apontando para `http://<host>:8080/metrics`.
 
 ---
 
@@ -530,6 +565,14 @@ Todos os endpoints de listagem suportam paginação por cursor (`?offset=0&size=
 
 Filtros são keywords técnicas (`golang`, `grpc`, `kubernetes`) que o worker usa para calcular o score de compatibilidade de cada vaga com o perfil do usuário.
 
+### Observabilidade
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| GET | `/metrics` | Métricas Prometheus (jobs, LLM latency, scraper, goroutines) |
+
+O endpoint não requer autenticação — destinado a ser exposto apenas na rede interna ou via scrape do Prometheus.
+
 ---
 
 ## Pré-requisitos
@@ -587,9 +630,10 @@ SCRAPE_AI_KEY=sk-ant-...
 SCRAPE_AI_MODEL=claude-haiku-4-5-20251001
 
 # Worker
-WORKER_MAX_CONCURRENT=5   # goroutines simultâneas (gargalo real: rate limit da LLM)
-WORKER_BATCH_SIZE=20      # jobs buscados por tick
-WORKER_INTERVAL=30s       # intervalo entre verificações
+WORKER_MAX_CONCURRENT=5    # goroutines simultâneas (gargalo real: rate limit da LLM)
+WORKER_BATCH_SIZE=20       # jobs buscados por tick
+WORKER_INTERVAL=30s        # intervalo entre verificações
+WORKER_RECOVERY_TIMEOUT=10m  # jobs em 'processing' por mais de X voltam para 'pending'
 
 # Autenticação
 JWT_SECRET=troque-isso
@@ -652,6 +696,7 @@ O Dockerfile usa multi-stage build: compila o binário Go em `golang:alpine` e c
 │   ├── db/                  # Código gerado pelo sqlc (type-safe, não editar)
 │   ├── handler/             # Handlers HTTP + helpers genéricos (GenericList, GenericCreate…)
 │   ├── lockout/             # Rate limit de login por IP via Redis
+│   ├── metrics/             # Métricas Prometheus (promauto — registro automático)
 │   ├── middleware/          # Auth, CORS, logger, timeout, panic recovery, revocation
 │   ├── repository/          # Interfaces e implementações de acesso a dados
 │   │   ├── cache/           # Abstração Redis (GetTyped/SetTyped + tópicos)
@@ -659,7 +704,7 @@ O Dockerfile usa multi-stage build: compila o binário Go em `golang:alpine` e c
 │   │   ├── users/           # Repositório de perfil do usuário
 │   │   ├── feedbacks/       # Repositório de feedbacks e exemplos excelentes
 │   │   ├── aliases/         # Repositório de aliases de tecnologias
-│   │   ├── worker/          # Repositório exclusivo do worker (queries de pipeline)
+│   │   ├── worker/          # Repositório exclusivo do worker (pipeline + recovery)
 │   │   └── secevents/       # Log de eventos de segurança
 │   ├── routes/              # Registro de rotas e middlewares
 │   ├── scraper/             # Scrapers por plataforma (LinkedIn, Amazon, Jobright…)

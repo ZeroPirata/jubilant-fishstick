@@ -385,6 +385,7 @@ async function addSkill() {
       : await api.post('/users/me/skills', body);
     if (!res.ok) { toast('Erro ao salvar habilidade.', 'error'); return; }
     cancelEditSkill();
+    if (typeof clearSkillsCache === 'function') clearSkillsCache();
     toast(_editingSkId ? 'Habilidade atualizada!' : 'Habilidade adicionada!');
     loadSkills();
   } catch (e) { toast(e.message, 'error'); }
@@ -398,6 +399,7 @@ async function deleteSkill(id, btn) {
     if (!res.ok) { toast('Erro ao deletar.', 'error'); btn.disabled = false; return; }
     btn.closest('tr').remove();
     delete _skData[id];
+    if (typeof clearSkillsCache === 'function') clearSkillsCache();
     toast('Habilidade removida.');
   } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
 }

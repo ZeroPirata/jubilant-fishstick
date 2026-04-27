@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"hackton-treino/internal/db"
+	"hackton-treino/internal/metrics"
+	"hackton-treino/internal/repository/admin"
 	"hackton-treino/internal/scraper"
 	"hackton-treino/internal/services"
 	"hackton-treino/internal/sse"
@@ -39,9 +41,11 @@ func (w *Worker) processarPendentes(ctx context.Context) {
 	for _, vaga := range vagas {
 		wg.Add(1)
 		sem <- struct{}{}
+		metrics.WorkerGoroutines.Inc()
 		go func(v db.Job) {
 			defer wg.Done()
 			defer func() { <-sem }()
+			defer metrics.WorkerGoroutines.Dec()
 			w.processarJob(ctx, &v)
 		}(vaga)
 	}
@@ -93,7 +97,22 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		if w.handleIfRateLimit(ctx, job, jobID, sOut.err) {
 			return
 		}
-		w.Logger.Warn("Erro no scrape, marcando como error", zap.String("job_id", jobID), zap.Error(sOut.err))
+		errType := "scraper_error"
+		if errors.Is(sOut.err, scraper.ErrUnsupportedDomain) {
+			errType = "scraper_incompatible"
+		}
+		jobIDStr := jobID
+		userIDStr := userID
+		url := job.ExternalUrl
+		msg := sOut.err.Error()
+		w.AdminRepo.InsertErrorLog(ctx, admin.InsertErrorLogParams{
+			JobID:        &jobIDStr,
+			UserID:       &userIDStr,
+			ErrorType:    errType,
+			ErrorMessage: msg,
+			URL:          &url,
+		})
+		w.Logger.Warn("Erro no scrape, marcando como error", zap.String("job_id", jobID), zap.String("type", errType), zap.Error(sOut.err))
 		w.failJob(ctx, job)
 		return
 	}
@@ -146,11 +165,38 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		return
 	}
 
+	llmStart := time.Now()
 	llmResponse, errLLM := w.LLM.GenerateCurriculum(ctx, prompt, str)
+	llmStatus := "ok"
+	if errLLM != nil {
+		var errRL *services.ErrRateLimit
+		if errors.As(errLLM, &errRL) {
+			llmStatus = "rate_limit"
+		} else {
+			llmStatus = "error"
+		}
+	}
+	metrics.LLMDuration.WithLabelValues(llmStatus).Observe(time.Since(llmStart).Seconds())
 	if errLLM != nil {
 		if w.handleIfRateLimit(ctx, job, jobID, errLLM) {
 			return
 		}
+		llmErrType := "llm_error"
+		var errRL *services.ErrRateLimit
+		if errors.As(errLLM, &errRL) {
+			llmErrType = "llm_rate_limit"
+		}
+		jobIDStr := jobID
+		userIDStr := userID
+		url := job.ExternalUrl
+		msg := errLLM.Error()
+		w.AdminRepo.InsertErrorLog(ctx, admin.InsertErrorLogParams{
+			JobID:        &jobIDStr,
+			UserID:       &userIDStr,
+			ErrorType:    llmErrType,
+			ErrorMessage: msg,
+			URL:          &url,
+		})
 		w.Logger.Error("Erro ao chamar LLM", zap.String("job_id", jobID), zap.Error(errLLM))
 		w.failJob(ctx, job)
 		return
