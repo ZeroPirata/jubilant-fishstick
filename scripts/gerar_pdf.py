@@ -395,6 +395,7 @@ def _render_proj_buffer(html: list, lines: list[str]) -> None:
 def curriculo_para_html(texto: str) -> str:
     lines = texto.split("\n")
     html: list = []
+    pending_section: str | None = None
     i, n = 0, len(lines)
 
     # Skip leading blanks
@@ -545,8 +546,15 @@ def curriculo_para_html(texto: str) -> str:
     def flush_proj() -> None:
         nonlocal proj_buffer
         if proj_buffer:
+            emit_pending_section()
             _render_proj_buffer(html, proj_buffer)
             proj_buffer = []
+
+    def emit_pending_section() -> None:
+        nonlocal pending_section
+        if pending_section is not None:
+            html.append(f'<h2>{_esc(pending_section)}</h2>')
+            pending_section = None
 
     while i < n:
         stripped = lines[i].rstrip().strip()
@@ -577,11 +585,12 @@ def curriculo_para_html(texto: str) -> str:
             if normalized not in _ALL_SECTIONS:
                 normalized = _normalize_spaced_section(stripped) or normalized
             current_section = normalized
-            html.append(f'<h2>{_esc(normalized)}</h2>')
+            pending_section = normalized
             continue
 
         # Bullet
         if stripped.startswith('- ') or stripped.startswith('* ') or stripped.startswith('• '):
+            emit_pending_section()
             flush_exp()
             expect_date = False
             if not in_ul:
@@ -593,6 +602,7 @@ def curriculo_para_html(texto: str) -> str:
         # PROJECTS — buffer content lines; detect project boundaries by content
         if current_section in _PROJ_SECTIONS:
             close_ul()
+            emit_pending_section()
             is_url = _is_url(stripped)
             has_inline_link = bool(re.search(r'\|\s*https?://', stripped, re.IGNORECASE))
 
@@ -612,6 +622,7 @@ def curriculo_para_html(texto: str) -> str:
         # meta ("Emissor — Mês/Ano") contém em-dash e seria sequestrada pelo handler abaixo.
         if current_section in _CERT_SECTIONS:
             close_ul()
+            emit_pending_section()
             _HAS_YEAR = bool(re.search(r'\b(20\d\d|19\d\d)\b', stripped))
             _HAS_MONTH = bool(re.search(
                 r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec'
@@ -657,6 +668,7 @@ def curriculo_para_html(texto: str) -> str:
         # Em dash line (U+2014 —)
         if '\u2014' in stripped:
             close_ul()
+            emit_pending_section()
             left, _, right = stripped.partition('\u2014')
             left, right = left.strip(), right.strip()
 
@@ -680,6 +692,7 @@ def curriculo_para_html(texto: str) -> str:
         # Skill section lines
         if current_section in _SKILL_SECTIONS:
             close_ul()
+            emit_pending_section()
             if re.match(r'^[•\-\*]\s*$', stripped):
                 continue
             if _is_skill_line(stripped):
@@ -709,6 +722,7 @@ def curriculo_para_html(texto: str) -> str:
 
         # Default paragraph
         close_ul()
+        emit_pending_section()
         html.append(f'<p>{_inline(stripped)}</p>')
 
     close_ul()

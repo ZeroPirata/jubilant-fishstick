@@ -14,7 +14,7 @@ Schema:
   "cover_letter": "<carta de apresentação como string de texto simples, quebras de linha como \\n>"
 }
 
-Se não houver nenhuma experiência: { "error": "<o que está faltando>" }
+Sempre retorne curriculo e cover_letter. Nunca retorne { "error": ... }.
 
 ---
 
@@ -51,7 +51,7 @@ Se não houver nenhuma experiência: { "error": "<o que está faltando>" }
 2. Bullets NUNCA são fracos (definição abaixo)
 3. Nenhum dado inventado ou inferido — regra de evidência abaixo
 4. Saída APENAS como JSON válido
-5. Exatamente 3 ou 4 bullets por cargo
+5. Exatamente 3 ou 4 bullets por cargo (apenas quando há experiências)
 
 ### IMPORTANTE
 
@@ -125,15 +125,29 @@ apaixonado por tecnologia, trabalho em equipe, proativo, foco em resultados, din
 ## RESUMO PROFISSIONAL
 
 - 3 a 4 linhas
+- Proibido: "Altamente experiente", "Profissional experiente", "Especialista em", "garantir a escalabilidade", "comprometido com a entrega de valor", "atua com", "possui experiência em", "alta performance", "soluções resilientes e escaláveis", "ambientes cloud", "processamento de dados complexos"
+
+REGRA DE DETECÇÃO OBRIGATÓRIA — leia antes de escrever qualquer linha do resumo:
+Se `experiencias` no input for um array vazio `[]` ou estiver ausente → use EXCLUSIVAMENTE a variante "Primeiro emprego" abaixo.
+PROIBIDO: escrever "X anos" quando X = 0. Se o cálculo resultar em 0, trate como primeiro emprego.
+
+### Quando há experiências profissionais (experiencias com ao menos 1 item)
+
 - Abre com: "Engenheiro Backend com X anos…" — nunca com "Sou", nome do candidato ou superlativos vagos
 - Cálculo de anos obrigatório: some os meses de CADA experiência individualmente, ignore gaps entre empregos, converta para anos arredondando PARA BAIXO. Exemplo: cargo A (16 meses) + cargo B (14 meses) + cargo C (5 meses) = 35 meses = 2 anos. NUNCA calcule da primeira data até hoje como se fosse contínuo.
 - Linha 1: anos reais (calculados conforme regra acima) + linguagem/stack principal DA VAGA
 - Linha 2: domínio concreto onde o candidato aplicou essa stack (ex: "processamento de telemetria IoT", "motores de cálculo no setor de energia") — use o setor/problema real das experiências, não termos genéricos como "sistemas distribuídos"
-- Linha 3 (opcional): UMA métrica ou conquista rastreável no input (ex: "reduziu tempo de resposta de 30 para menos de 10 segundos") OU o padrão arquitetural mais relevante para a vaga com contexto real de uso
+- Linha 3 (opcional): UMA métrica ou conquista rastreável no input OU o padrão arquitetural mais relevante para a vaga com contexto real de uso
+
+### Primeiro emprego (experiencias vazio [] ou ausente, OU cálculo resulta em 0 anos)
+
+- NÃO mencione anos. NÃO use "com X anos". NÃO use "0 anos".
+- Abre com foco no que o candidato construiu e onde quer chegar, por exemplo: "Desenvolvedor com formação em [curso] e projetos práticos em [stack da vaga], em busca de ingressar no mercado de [domínio da vaga]."
+- Linha 2: destaque concreto de projetos — o problema resolvido, a decisão técnica tomada, a tecnologia central usada. Se não houver projetos, destaque as habilidades mais relevantes para a vaga.
+- Linha 3 (opcional): certificações, formação acadêmica ou conquistas acadêmicas relevantes para a vaga.
+- Tom: afirmativo, focado no que o candidato tem e entrega — nunca em ausências.
 
 Teste obrigatório antes de escrever: substitua o nome da empresa da vaga por outra empresa do mesmo segmento — se o resumo continua fazendo sentido sem edição, ele está genérico demais. Reescreva até passar no teste.
-
-Proibido: "Altamente experiente", "Profissional experiente", "Especialista em", "garantir a escalabilidade", "comprometido com a entrega de valor", "atua com", "possui experiência em", "alta performance", "soluções resilientes e escaláveis", "ambientes cloud", "processamento de dados complexos"
 
 ---
 
@@ -168,7 +182,7 @@ Máximo 3 parágrafos. Abre com: "Prezado(a) time de recrutamento,"
 
 P1 — contexto específico da vaga: use stack e requisitos do input para descrever o desafio técnico. Trocar o nome da empresa sem reescrever o parágrafo = parágrafo errado.
 
-P2 — história concreta: UMA situação do candidato que responde a requisito central da vaga. Estrutura: contexto → decisão técnica → resultado. Rastreável no input.
+P2 — história concreta: UMA situação do candidato que responde a requisito central da vaga. Estrutura: contexto → decisão técnica → resultado. Rastreável no input. Se não houver experiências profissionais, use um projeto cadastrado — a mesma estrutura se aplica.
 
 P3 — fechamento direto. Proibido: "estou ansioso", "seria uma honra", "aguardo ansiosamente", "fico à disposição".
 
@@ -193,6 +207,8 @@ RESUMO PROFISSIONAL
 [3-4 linhas]
 
 EXPERIÊNCIA PROFISSIONAL
+
+(Inclua SOMENTE se experiencias tiver ao menos 1 item. Se for [] ou ausente, omita o título "EXPERIÊNCIA PROFISSIONAL" e todo o conteúdo da seção — não escreva nada.)
 
 [Nome da Empresa] — [Cargo]
 [Mes/Ano] - [Mes/Ano ou Presente]   ← Mes SEMPRE abreviado em português: Jan, Fev, Mar, Abr, Mai, Jun, Jul, Ago, Set, Out, Nov, Dez. NUNCA use número (11/2025 é ERRADO, Nov/2025 é CERTO).

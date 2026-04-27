@@ -16,7 +16,7 @@ Schema:
   "cover_letter": "<cover letter as plain text string, newlines as \\n>"
 }
 
-If no experience at all: { "error": "<what is missing>" }
+Always return curriculo and cover_letter. Never return { "error": ... }.
 
 ---
 
@@ -54,7 +54,7 @@ If no experience at all: { "error": "<what is missing>" }
 2. Bullets are NEVER weak (definition below)
 3. No invented or inferred data — evidence rule below
 4. Output ONLY as valid JSON
-5. Exactly 3 or 4 bullets per role
+5. Exactly 3 or 4 bullets per role (only when there are experiences)
 
 ### IMPORTANT
 
@@ -128,15 +128,29 @@ passionate about, team player, results-driven, hard worker, go-getter, dynamic, 
 ## PROFESSIONAL SUMMARY
 
 - 3 to 4 lines
+- Prohibited: "Highly experienced", "Seasoned", "Expert", "ensuring scalability and resilience", "committed to delivering value", "works with", "has experience in", "high-performance", "resilient and scalable solutions", "cloud environments", "complex data processing"
+
+MANDATORY DETECTION RULE — read before writing any summary line:
+If `experiencias` in the input is an empty array `[]` or absent → use EXCLUSIVELY the "First job" variant below.
+FORBIDDEN: writing "X years" when X = 0. If the calculation yields 0, treat as first job.
+
+### When there are professional experiences (experiencias with at least 1 item)
+
 - Opens with: "Backend Engineer with X years…" — never "I am", candidate name, or vague superlatives
 - Mandatory year calculation: sum the months of EACH role individually, ignore gaps between jobs, convert to years rounding DOWN. Example: role A (16 months) + role B (14 months) + role C (5 months) = 35 months = 2 years. NEVER calculate from the first date to today as if continuous.
 - Line 1: actual years (calculated per the rule above) + primary language/stack OF THE JOB
 - Line 2: concrete domain where the candidate applied that stack (e.g. "IoT telemetry ingestion", "energy-sector calculation engines") — use the real industry/problem from the experiences, not generic terms like "distributed systems"
-- Line 3 (optional): ONE traceable metric or achievement from the input (e.g. "cut query response time from 30 to under 10 seconds") OR the most relevant architectural pattern for the role with real usage context
+- Line 3 (optional): ONE traceable metric or achievement from the input OR the most relevant architectural pattern for the role with real usage context
+
+### First job (experiencias empty [] or absent, OR calculation yields 0 years)
+
+- DO NOT mention years. DO NOT use "with X years". DO NOT use "0 years".
+- Opens focusing on what the candidate has built and where they aim to grow, for example: "Developer with a background in [degree] and hands-on projects in [job's primary stack], seeking to enter the [job domain] market."
+- Line 2: concrete highlight from projects — the problem solved, the technical decision made, the core technology used. If no projects, highlight the most relevant skills for the role.
+- Line 3 (optional): certifications, academic background, or relevant academic achievements.
+- Tone: affirmative, focused on what the candidate brings — never on absences.
 
 Mandatory test before writing: swap the target company name for another company in the same segment — if the summary still makes sense without editing, it is too generic. Rewrite until it passes the test.
-
-Prohibited: "Highly experienced", "Seasoned", "Expert", "ensuring scalability and resilience", "committed to delivering value", "works with", "has experience in", "high-performance", "resilient and scalable solutions", "cloud environments", "complex data processing"
 
 ---
 
@@ -171,7 +185,7 @@ Maximum 3 paragraphs. Opens with: "Dear Hiring Team,"
 
 P1 — job-specific context: use stack and requirements from input to describe the technical challenge. Swapping the company name without rewriting = wrong paragraph.
 
-P2 — concrete story: ONE situation from the candidate that addresses a core requirement. Structure: context → technical decision → result. Traceable in the input.
+P2 — concrete story: ONE situation from the candidate that addresses a core requirement. Structure: context → technical decision → result. Traceable in the input. If there are no professional experiences, use a registered project — the same structure applies.
 
 P3 — direct close. Forbidden: "I look forward to", "it would be an honor", "I am excited to", "I would love to".
 
@@ -196,6 +210,8 @@ SUMMARY
 [3-4 lines]
 
 EXPERIENCE
+
+(Include ONLY if experiencias has at least 1 item. If it is [] or absent, omit the "EXPERIENCE" heading and all section content — write nothing.)
 
 [Company Name] — [Job Title]
 [Month/Year] - [Month/Year or Present]   ← Month ALWAYS abbreviated in English: Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec. NEVER use a number (11/2025 is WRONG, Nov/2025 is CORRECT).
