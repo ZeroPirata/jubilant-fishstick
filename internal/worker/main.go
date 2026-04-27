@@ -6,7 +6,6 @@ import (
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/repository/aliases"
 	"hackton-treino/internal/repository/feedbacks"
-	"hackton-treino/internal/repository/filters"
 	"hackton-treino/internal/repository/users"
 	workerRepo "hackton-treino/internal/repository/worker"
 	"hackton-treino/internal/services"
@@ -30,7 +29,6 @@ type Worker struct {
 	Logger     *zap.Logger
 	Pipeline   workerRepo.Repository
 	Users      users.Repository
-	Filters    filters.Repository
 	Feedbacks  feedbacks.Repository
 	Aliases    aliases.Repository
 	aliases    map[string]string
@@ -48,7 +46,6 @@ func NewWorker(logger *zap.Logger, conn *pgxpool.Pool, llm services.AiService, s
 		LLM:       llm,
 		Pipeline:  workerRepo.New(conn),
 		Users:     users.New(conn),
-		Filters:   filters.New(conn),
 		Feedbacks: feedbacks.New(conn),
 		Aliases:   aliases.New(conn),
 		ScraperAi: scraperAi,

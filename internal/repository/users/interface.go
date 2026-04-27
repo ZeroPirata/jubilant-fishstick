@@ -26,12 +26,14 @@ type Repository interface {
 	// Experiences
 	QuerySelectAllExperiences(ctx context.Context, userID string) ([]db.UserExperience, *repository.RepositoryError)
 	QuerySelectExperiencesByTags(ctx context.Context, userID string, tags []string) ([]db.UserExperience, *repository.RepositoryError)
+	QueryListExperiences(ctx context.Context, args db.QueryListExperiencesParams) ([]db.QueryListExperiencesRow, *repository.RepositoryError)
 	QueryInsertExperience(ctx context.Context, args db.QueryInsertExperienceParams) (db.UserExperience, *repository.RepositoryError)
 	QueryUpdateExperience(ctx context.Context, args db.QueryUpdateExperienceParams) *repository.RepositoryError
 	QueryDeleteExperience(ctx context.Context, id, userID string) *repository.RepositoryError
 
 	// Academic
 	QuerySelectAllAcademicHistories(ctx context.Context, userID string) ([]db.UserAcademicHistory, *repository.RepositoryError)
+	QueryListAcademicHistories(ctx context.Context, args db.QueryListAcademicHistoriesParams) ([]db.QueryListAcademicHistoriesRow, *repository.RepositoryError)
 	QueryInsertAcademicHistory(ctx context.Context, args db.QueryInsertAcademicHistoryParams) (db.UserAcademicHistory, *repository.RepositoryError)
 	QueryUpdateAcademicHistory(ctx context.Context, args db.QueryUpdateAcademicHistoryParams) *repository.RepositoryError
 	QueryDeleteAcademicHistory(ctx context.Context, id, userID string) *repository.RepositoryError
@@ -39,6 +41,7 @@ type Repository interface {
 	// Skills
 	QuerySelectAllSkills(ctx context.Context, userID string) ([]db.UserSkill, *repository.RepositoryError)
 	QuerySelectSkillsByTags(ctx context.Context, userID string, tags []string) ([]db.UserSkill, *repository.RepositoryError)
+	QueryListSkills(ctx context.Context, args db.QueryListSkillsParams) ([]db.QueryListSkillsRow, *repository.RepositoryError)
 	QueryInsertSkill(ctx context.Context, args db.QueryInsertSkillParams) (db.UserSkill, *repository.RepositoryError)
 	QueryUpdateSkill(ctx context.Context, args db.QueryUpdateSkillParams) *repository.RepositoryError
 	QueryDeleteSkill(ctx context.Context, id, userID string) *repository.RepositoryError
@@ -46,12 +49,14 @@ type Repository interface {
 	// Projects
 	QuerySelectAllProjects(ctx context.Context, userID string) ([]db.UserProject, *repository.RepositoryError)
 	QuerySelectProjectsByTags(ctx context.Context, userID string, tags []string) ([]db.UserProject, *repository.RepositoryError)
+	QueryListProjects(ctx context.Context, args db.QueryListProjectsParams) ([]db.QueryListProjectsRow, *repository.RepositoryError)
 	QueryInsertProject(ctx context.Context, args db.QueryInsertProjectParams) (db.UserProject, *repository.RepositoryError)
 	QueryUpdateProject(ctx context.Context, args db.QueryUpdateProjectParams) *repository.RepositoryError
 	QueryDeleteProject(ctx context.Context, id, userID string) *repository.RepositoryError
 
 	// Certificates
 	QuerySelectAllCertificates(ctx context.Context, userID string) ([]db.UserCertificate, *repository.RepositoryError)
+	QueryListCertificates(ctx context.Context, args db.QueryListCertificatesParams) ([]db.QueryListCertificatesRow, *repository.RepositoryError)
 	QueryInsertCertificate(ctx context.Context, args db.QueryInsertCertificateParams) (db.UserCertificate, *repository.RepositoryError)
 	QueryUpdateCertificate(ctx context.Context, args db.QueryUpdateCertificateParams) *repository.RepositoryError
 	QueryDeleteCertificate(ctx context.Context, id, userID string) *repository.RepositoryError

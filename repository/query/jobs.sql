@@ -18,9 +18,11 @@ INNER JOIN user_accounts acc ON acc.id = j.user_id
 WHERE
     j.user_id = @user_id AND
     j.deleted_at IS NULL AND
-    acc.deleted_at IS NULL
+    acc.deleted_at IS NULL AND
+    (@status::TEXT IS NULL OR j.status = @status::job_status) AND
+    (@quality::TEXT IS NULL OR j.quality = @quality::job_quality)
 ORDER BY j.created_at DESC
-LIMIT @size OFFSET @cursor;  
+LIMIT @size OFFSET @cursor;
 
 
 -- name: QueryReprocessJob :exec

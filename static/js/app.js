@@ -12,6 +12,29 @@ function showApp() {
   connectSSE();
 }
 
+// ── Confirm dialog ──
+function confirmDialog(msg) {
+  return new Promise(resolve => {
+    document.getElementById('confirm-msg').textContent = msg;
+    const modal  = document.getElementById('confirm-modal');
+    const okBtn  = document.getElementById('confirm-ok');
+    const noBtn  = document.getElementById('confirm-no');
+    modal.classList.remove('hidden');
+
+    function cleanup(result) {
+      modal.classList.add('hidden');
+      okBtn.removeEventListener('click', onOk);
+      noBtn.removeEventListener('click', onNo);
+      resolve(result);
+    }
+    function onOk() { cleanup(true);  }
+    function onNo() { cleanup(false); }
+
+    okBtn.addEventListener('click', onOk);
+    noBtn.addEventListener('click', onNo);
+  });
+}
+
 // ── Toast ──
 let _toastTimer;
 function toast(msg, tipo = 'success') {

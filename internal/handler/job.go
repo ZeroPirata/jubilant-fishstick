@@ -147,36 +147,63 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *JobHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
-	GenericList(
-		func(userID pgtype.UUID, query PaginationParams) db.QuerySelectJobsForUserParams {
-			return db.QuerySelectJobsForUserParams{
-				UserID: userID,
-				Cursor: query.Cursor,
-				Size:   query.Size,
-			}
-		},
-		h.Jobs.QuerySelectJobsForUser,
-		func(j db.QuerySelectJobsForUserRow) Job {
-			return Job{
-				Base: Base{
-					ID:        j.ID.String(),
-					CreatedAt: j.CreatedAt.Time,
-					UpdatedAt: util.PgTimeToPtr(j.UpdatedAt.Time),
-					DeletedAt: util.PgTimeToPtr(j.DeletedAt.Time),
-				},
-				Url:          j.ExternalUrl,
-				CompanyName:  util.PgTextoToNullString(j.CompanyName.String),
-				JobTitle:     util.PgTextoToNullString(j.JobTitle.String),
-				Description:  util.PgTextoToNullString(j.Description.String),
-				Stacks:       j.TechStack,
-				Requirements: j.Requirements,
-				Language:     util.PgTextoToNullString(j.Language.String),
-				Status:       string(j.Status),
-				Quality:      util.PgTextoToNullString(string(j.Quality.JobQuality)),
-			}
-		},
-		func(j db.QuerySelectJobsForUserRow) int32 { return int32(j.TotalCount) },
-	)(w, r)
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, ErrNotAuthorized.Error())
+		return
+	}
+
+	cursor, size := getPaginationParams(r)
+
+	var status pgtype.Text
+	if s := r.URL.Query().Get("status"); s != "" {
+		status = pgtype.Text{String: s, Valid: true}
+	}
+
+	var quality pgtype.Text
+	if q := r.URL.Query().Get("quality"); q != "" {
+		quality = pgtype.Text{String: q, Valid: true}
+	}
+
+	rows, errR := h.Jobs.QuerySelectJobsForUser(r.Context(), db.QuerySelectJobsForUserParams{
+		UserID:  userID,
+		Cursor:  cursor,
+		Size:    size,
+		Status:  status,
+		Quality: quality,
+	})
+	if errR != nil {
+		writeRepositoryError(w, errR)
+		return
+	}
+
+	if len(rows) == 0 {
+		writeList(w, http.StatusOK, []Job{}, size, cursor, 0)
+		return
+	}
+
+	response := make([]Job, len(rows))
+	for i, j := range rows {
+		response[i] = Job{
+			Base: Base{
+				ID:        j.ID.String(),
+				CreatedAt: j.CreatedAt.Time,
+				UpdatedAt: util.PgTimeToPtr(j.UpdatedAt.Time),
+				DeletedAt: util.PgTimeToPtr(j.DeletedAt.Time),
+			},
+			Url:          j.ExternalUrl,
+			CompanyName:  util.PgTextoToNullString(j.CompanyName.String),
+			JobTitle:     util.PgTextoToNullString(j.JobTitle.String),
+			Description:  util.PgTextoToNullString(j.Description.String),
+			Stacks:       j.TechStack,
+			Requirements: j.Requirements,
+			Language:     util.PgTextoToNullString(j.Language.String),
+			Status:       string(j.Status),
+			Quality:      util.PgTextoToNullString(string(j.Quality.JobQuality)),
+		}
+	}
+
+	writeList(w, http.StatusOK, response, size, cursor, int32(rows[0].TotalCount))
 }
 
 func (h *JobHandler) DeleteJob(w http.ResponseWriter, r *http.Request) {

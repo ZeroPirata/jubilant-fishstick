@@ -53,6 +53,11 @@ func (r *usersRepository) QuerySelectAllExperiences(ctx context.Context, userID 
 	return rows, repository.HandleDatabaseError(err)
 }
 
+func (r *usersRepository) QueryListExperiences(ctx context.Context, args db.QueryListExperiencesParams) ([]db.QueryListExperiencesRow, *repository.RepositoryError) {
+	rows, err := r.Q.QueryListExperiences(ctx, args)
+	return rows, repository.HandleDatabaseError(err)
+}
+
 func (r *usersRepository) QuerySelectExperiencesByTags(ctx context.Context, userID string, tags []string) ([]db.UserExperience, *repository.RepositoryError) {
 	uid, appErr := util.ParseUUID(userID)
 	if appErr != nil {
@@ -92,6 +97,11 @@ func (r *usersRepository) QuerySelectAllAcademicHistories(ctx context.Context, u
 	return rows, repository.HandleDatabaseError(err)
 }
 
+func (r *usersRepository) QueryListAcademicHistories(ctx context.Context, args db.QueryListAcademicHistoriesParams) ([]db.QueryListAcademicHistoriesRow, *repository.RepositoryError) {
+	rows, err := r.Q.QueryListAcademicHistories(ctx, args)
+	return rows, repository.HandleDatabaseError(err)
+}
+
 func (r *usersRepository) QueryInsertAcademicHistory(ctx context.Context, args db.QueryInsertAcademicHistoryParams) (db.UserAcademicHistory, *repository.RepositoryError) {
 	row, err := r.Q.QueryInsertAcademicHistory(ctx, args)
 	return row, repository.HandleDatabaseError(err)
@@ -119,6 +129,11 @@ func (r *usersRepository) QuerySelectAllSkills(ctx context.Context, userID strin
 		return nil, appErr
 	}
 	rows, err := r.Q.QuerySelectAllSkills(ctx, uid)
+	return rows, repository.HandleDatabaseError(err)
+}
+
+func (r *usersRepository) QueryListSkills(ctx context.Context, args db.QueryListSkillsParams) ([]db.QueryListSkillsRow, *repository.RepositoryError) {
+	rows, err := r.Q.QueryListSkills(ctx, args)
 	return rows, repository.HandleDatabaseError(err)
 }
 
@@ -161,6 +176,11 @@ func (r *usersRepository) QuerySelectAllProjects(ctx context.Context, userID str
 	return rows, repository.HandleDatabaseError(err)
 }
 
+func (r *usersRepository) QueryListProjects(ctx context.Context, args db.QueryListProjectsParams) ([]db.QueryListProjectsRow, *repository.RepositoryError) {
+	rows, err := r.Q.QueryListProjects(ctx, args)
+	return rows, repository.HandleDatabaseError(err)
+}
+
 func (r *usersRepository) QuerySelectProjectsByTags(ctx context.Context, userID string, tags []string) ([]db.UserProject, *repository.RepositoryError) {
 	uid, appErr := util.ParseUUID(userID)
 	if appErr != nil {
@@ -197,6 +217,11 @@ func (r *usersRepository) QuerySelectAllCertificates(ctx context.Context, userID
 		return nil, appErr
 	}
 	rows, err := r.Q.QuerySelectAllCertificates(ctx, uid)
+	return rows, repository.HandleDatabaseError(err)
+}
+
+func (r *usersRepository) QueryListCertificates(ctx context.Context, args db.QueryListCertificatesParams) ([]db.QueryListCertificatesRow, *repository.RepositoryError) {
+	rows, err := r.Q.QueryListCertificates(ctx, args)
 	return rows, repository.HandleDatabaseError(err)
 }
 

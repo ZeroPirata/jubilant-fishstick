@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"hackton-treino/internal/db"
 	"time"
 
@@ -95,10 +94,9 @@ type upsertProfileReq struct {
 }
 
 type upsertLinksReq struct {
-	LinkedinUrl  *string         `json:"linkedin_url"`
-	GithubUrl    *string         `json:"github_url"`
-	PortfolioUrl *string         `json:"portfolio_url"`
-	OtherLinks   json.RawMessage `json:"other_links"`
+	LinkedinUrl  *string `json:"linkedin_url"`
+	GithubUrl    *string `json:"github_url"`
+	PortfolioUrl *string `json:"portfolio_url"`
 }
 
 type experienceReq struct {
@@ -145,16 +143,13 @@ type certificateReq struct {
 	Tags                []string `json:"tags"`
 }
 
-// profileResponse wraps QuerySelectProfileRow so OtherLinks serialises as
-// a real JSON value instead of the base64 string that Go's []byte produces.
 type profileResponse struct {
-	Email        string          `json:"email"`
-	FullName     pgtype.Text     `json:"full_name"`
-	Phone        pgtype.Text     `json:"phone"`
-	About        pgtype.Text     `json:"about"`
-	ContactEmail pgtype.Text     `json:"contact_email"`
-	LinkedinUrl  pgtype.Text     `json:"linkedin_url"`
-	GithubUrl    pgtype.Text     `json:"github_url"`
-	PortfolioUrl pgtype.Text     `json:"portfolio_url"`
-	OtherLinks   json.RawMessage `json:"other_links"`
+	Email        string      `json:"email"`
+	FullName     pgtype.Text `json:"full_name"`
+	Phone        pgtype.Text `json:"phone"`
+	About        pgtype.Text `json:"about"`
+	ContactEmail pgtype.Text `json:"contact_email"`
+	LinkedinUrl  pgtype.Text `json:"linkedin_url"`
+	GithubUrl    pgtype.Text `json:"github_url"`
+	PortfolioUrl pgtype.Text `json:"portfolio_url"`
 }

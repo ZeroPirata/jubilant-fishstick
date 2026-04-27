@@ -25,9 +25,9 @@ If no experience at all: { "error": "<what is missing>" }
 - vaga: { empresa, titulo, stack[], requisitos[], descricao }
 - experiencias: [{ empresa, cargo, data_inicio, data_fim, atual, stack[], conquistas[], descricao }]
   - Translate `cargo` to English (e.g. "Desenvolvedor Pleno II" → "Mid-Level Software Engineer II")
-- habilidades: [{ nome, nivel }]
-- projetos: [{ nome, descricao, link }]
-- formacoes: [{ instituicao, curso, data_inicio, data_fim }]
+- habilidades: [{ nome, nivel }] — omitted if empty
+- projetos: [{ nome, descricao, link }] — omitted if empty
+- formacoes: [{ instituicao, curso, data_inicio, data_fim }] — omitted if empty
 - certificacoes: [{ nome, emissor, emitido_em, link }] — omitted if empty
 - feedback: { exemplos_excelentes[], comentarios_anteriores[] } — omitted if empty
 
@@ -211,8 +211,13 @@ Databases: [ordered by relevance]
 Tools & Cloud: [ordered by relevance]
 Concepts & Architecture: [ordered by relevance]
 
+SKILLS
+
+(Include ONLY if habilidades is present in the input. Omit the entire section if absent.)
+
 PROJECTS
 
+(Include ONLY if projetos is present in the input. Omit the entire section if absent.)
 Select the 2 or 3 most relevant for this role. Never more than 3.
 
 Each project — 2 or 3 lines, blank line between projects:
@@ -229,6 +234,9 @@ Dynamic dashboards for product review analysis...
 URLs always lowercase (https://...). Tags and achievements integrated into description, not as extra lines.
 
 EDUCATION
+
+(Include ONLY if formacoes is present in the input. Omit the entire section if absent.)
+CRITICAL: NEVER use data from experiencias[] in this section. Company name and job title are work experience, not education. If formacoes is not in the input, the EDUCATION section must not exist in the resume — not even the heading.
 
 [Institution] — [Degree/Course]
 [Start Year] - [End Year]

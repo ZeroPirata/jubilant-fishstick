@@ -23,19 +23,45 @@ function qualityBadge(jobId, q) {
   return `<button class="badge badge-${q} badge-quality-btn" id="quality-btn-${jobId}" onclick="toggleQualityDetails('${jobId}')" title="Ver detalhes da compatibilidade">${label}<span class="quality-chevron">▾</span></button>`;
 }
 
-// ── Filters cache (fetched once per session) ──
-let _filtersCache = null;
+// ── Jobs pagination state ──
+const _jobsPg = { offset: 0, size: 20 };
 
-async function getFilters() {
-  if (_filtersCache) return _filtersCache;
-  try {
-    const res = await api.get('/filters?cursor=0&size=200');
-    const d = await apiData(res);
-    _filtersCache = Array.isArray(d) ? d.map(f => f.keyword.toLowerCase()) : [];
-  } catch (_) {
-    _filtersCache = [];
-  }
-  return _filtersCache;
+function renderJobsPagination(total, cursor, size) {
+  const from = total === 0 ? 0 : cursor + 1;
+  const to   = Math.min(cursor + size, total);
+  const info = document.getElementById('jobs-page-info');
+  const prev = document.getElementById('jobs-prev');
+  const next = document.getElementById('jobs-next');
+  if (info) info.textContent = total === 0 ? '—' : `${from}–${to} de ${total}`;
+  if (prev) prev.disabled = cursor === 0;
+  if (next) next.disabled = cursor + size >= total;
+}
+
+function jobsPrevPage() {
+  if (_jobsPg.offset === 0) return;
+  _jobsPg.offset = Math.max(0, _jobsPg.offset - _jobsPg.size);
+  loadJobs();
+}
+
+function jobsNextPage() {
+  _jobsPg.offset += _jobsPg.size;
+  loadJobs();
+}
+
+function changeJobsSize(val) {
+  _jobsPg.size   = parseInt(val, 10);
+  _jobsPg.offset = 0;
+  loadJobs();
+}
+
+function filterJobsByStatus() {
+  _jobsPg.offset = 0;
+  loadJobs();
+}
+
+function filterJobsByQuality() {
+  _jobsPg.offset = 0;
+  loadJobs();
 }
 
 // Cache job stack/requirements by ID (populated in loadJobs)
@@ -96,56 +122,23 @@ function applyJobEvent(ev) {
 }
 
 // ── Quality details toggle ──
-async function toggleQualityDetails(jobId) {
+function toggleQualityDetails(jobId) {
   const existing = document.getElementById(`quality-row-${jobId}`);
   const btn = document.getElementById(`quality-btn-${jobId}`);
   if (existing) { existing.remove(); btn?.classList.remove('expanded'); return; }
   btn?.classList.add('expanded');
 
-  const filters = await getFilters();
   const { stack = [], reqs = [], quality = null } = _jobMeta.get(jobId) || {};
 
-  if (!stack.length) {
-    const tr = document.createElement('tr');
-    tr.id = `quality-row-${jobId}`;
-    tr.className = 'quality-details-row';
-    tr.innerHTML = `<td colspan="8"><div class="quality-details-panel">
-      <span class="quality-summary" style="color:var(--yellow)">
-        Stack tecnológico não extraído — clique em <strong>Refazer</strong> para reprocessar com o novo modelo.
-      </span>
-      ${reqs.length ? `<div style="margin-top:8px">
-        <div class="quality-group-label" style="margin-bottom:4px">Requisitos detectados</div>
-        <div style="display:flex;flex-direction:column;gap:3px">
-          ${reqs.map(r => `<div class="quality-req" style="color:var(--muted)">${escHtml(r)}</div>`).join('')}
-        </div>
-      </div>` : ''}
-    </div></td>`;
-    document.getElementById(`job-row-${jobId}`)?.insertAdjacentElement('afterend', tr);
-    return;
-  }
-
-  // Score baseado apenas em Stack (denominador = tech items, não soft requirements).
-  const stackItems = stack.map(t => ({ label: t, matched: false }));
-  for (const item of stackItems) {
-    const norm = item.label.toLowerCase();
-    item.matched = filters.length > 0 && filters.some(f => norm.includes(f) || f.includes(norm));
-  }
-
-  const matchedStack = stackItems.filter(i =>  i.matched).map(i => i.label);
-  const missedStack  = stackItems.filter(i => !i.matched).map(i => i.label);
-  const total = stackItems.length;
-  const pct   = total ? Math.round(matchedStack.length / total * 100) : 0;
-
-  const scoreLabel = pct >= 70 ? 'Alta' : pct >= 30 ? 'Média' : 'Baixa';
-  const scoreCls   = pct >= 70 ? 'high' : pct >= 30 ? 'mid'  : 'low';
-  const noFilters  = !filters.length;
+  const qualityLabelsMap = { low: 'Baixa', mid: 'Média', high: 'Alta' };
+  const qualityCls       = quality || 'mid';
+  const qualityLbl       = qualityLabelsMap[quality] || '—';
 
   const stackSection = stack.length ? `
     <div style="margin-bottom:${reqs.length ? 10 : 0}px">
-      <div class="quality-group-label" style="margin-bottom:4px">Stack tecnológico</div>
+      <div class="quality-group-label" style="margin-bottom:4px">Stack tecnológico detectado</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">
-        ${matchedStack.map(t => `<span class="match-tag">${escHtml(t)}</span>`).join('')}
-        ${missedStack .map(t => `<span class="miss-tag">${escHtml(t)}</span>`).join('')}
+        ${stack.map(t => `<span class="miss-tag">${escHtml(t)}</span>`).join('')}
       </div>
     </div>` : '';
 
@@ -162,59 +155,45 @@ async function toggleQualityDetails(jobId) {
   tr.className = 'quality-details-row';
   tr.innerHTML = `<td colspan="8"><div class="quality-details-panel">
     <div class="quality-summary" style="margin-bottom:10px">
-      ${noFilters
-        ? '<span style="color:var(--yellow)">Configure filtros na aba Filtros para calcular compatibilidade</span>'
-        : `<strong>${matchedStack.length}</strong> de <strong>${total}</strong> techs cobertos pelos seus filtros
-           → <span class="badge badge-${scoreCls}" style="padding:1px 6px;font-size:10px">${scoreLabel}</span>
-           &nbsp;<span style="color:var(--muted);font-size:11px">(&lt;30% = Baixa · 30–69% = Média · ≥70% = Alta)</span>`
+      ${quality
+        ? `Compatibilidade calculada pelo sistema:
+           <span class="badge badge-${qualityCls}" style="padding:1px 6px;font-size:10px">${qualityLbl}</span>
+           &nbsp;<span style="color:var(--muted);font-size:11px">baseada nas suas habilidades cadastradas</span>`
+        : '<span style="color:var(--muted)">Qualidade ainda não calculada — aguarde o processamento.</span>'
       }
     </div>
     ${stackSection}
     ${reqSection}
-    ${!stackSection && !reqSection ? '<span class="quality-summary">Nenhum dado de stack extraído desta vaga.</span>' : ''}
+    ${!stackSection && !reqSection ? '<span style="color:var(--muted)">Nenhum dado de stack extraído desta vaga.</span>' : ''}
   </div></td>`;
 
   document.getElementById(`job-row-${jobId}`)?.insertAdjacentElement('afterend', tr);
 }
 
-// Espelha calcularQualidade do backend: usa apenas Stack como denominador.
-function computeQuality(stack, filters) {
-  if (!stack.length) return 'mid';
-  if (!filters.length) return 'mid';
-  const norm = s => s.toLowerCase();
-  let matched = 0;
-  for (const item of stack) {
-    const itemNorm = norm(item);
-    if (filters.some(f => itemNorm.includes(f) || f.includes(itemNorm))) matched++;
-  }
-  const pct = matched / stack.length;
-  return pct >= 0.70 ? 'high' : pct >= 0.30 ? 'mid' : 'low';
-}
-
 // ── VAGAS ──
 async function loadJobs() {
   const tbody = document.getElementById('jobs-body');
-  const statusFilter = document.getElementById('jobs-status-filter').value;
-  const qs = `?cursor=0&size=50${statusFilter ? '&status=' + statusFilter : ''}`;
+  const statusFilter  = document.getElementById('jobs-status-filter').value;
+  const qualityFilter = document.getElementById('jobs-quality-filter').value;
+  let qs = `?offset=${_jobsPg.offset}&size=${_jobsPg.size}`;
+  if (statusFilter)  qs += `&status=${statusFilter}`;
+  if (qualityFilter) qs += `&quality=${qualityFilter}`;
   tbody.innerHTML = `<tr><td colspan="8" class="empty">Carregando...</td></tr>`;
 
   try {
     const res = await api.get('/jobs' + qs);
     if (!res.ok) { tbody.innerHTML = `<tr><td colspan="8" class="empty">Erro ao carregar vagas.</td></tr>`; return; }
-    const { data: jobs } = await apiList(res);
+    const { data: jobs, meta } = await apiList(res);
+
+    renderJobsPagination(meta.total ?? 0, meta.cursor ?? _jobsPg.offset, meta.size ?? _jobsPg.size);
 
     if (!jobs.length) {
       tbody.innerHTML = `<tr><td colspan="8" class="empty">Nenhuma vaga encontrada.</td></tr>`;
       return;
     }
 
-    const filters = await getFilters();
-
     jobs.forEach(j => {
-      const stack = j.stacks || [];
-      const reqs  = j.requirements || [];
-      const liveQuality = computeQuality(stack, filters);
-      _jobMeta.set(j.id, { stack, reqs, quality: liveQuality });
+      _jobMeta.set(j.id, { stack: j.stacks || [], reqs: j.requirements || [], quality: j.quality });
     });
 
     tbody.innerHTML = jobs.map(j => {
@@ -251,7 +230,7 @@ async function loadJobs() {
 }
 
 async function deleteJob(id, btn) {
-  if (!confirm('Deletar esta vaga e seus currículos?')) return;
+  if (!await confirmDialog('Deletar esta vaga e todos os currículos gerados?')) return;
   btn.disabled = true;
   try {
     const res = await api.delete(`/jobs/${id}`);
@@ -366,15 +345,15 @@ async function downloadPdf(path, filename) {
       headers: token ? { 'Authorization': `Bearer ${token}` } : {}
     });
   } catch (e) {
-    alert('Erro de rede: ' + e.message);
+    toast('Erro de rede: ' + e.message, 'error');
     return;
   }
-  if (res.status === 401) { alert('ERRO 401: token ausente ou inválido'); return; }
-  if (res.status === 403) { alert('ERRO 403: acesso negado (dono errado?)'); return; }
-  if (res.status === 404) { alert('ERRO 404: arquivo não existe no servidor'); return; }
-  if (!res.ok)            { alert('ERRO HTTP ' + res.status); return; }
+  if (res.status === 401) { toast('Sessão expirada — faça login novamente.', 'error'); return; }
+  if (res.status === 403) { toast('Acesso negado ao arquivo.', 'error'); return; }
+  if (res.status === 404) { toast('Arquivo não encontrado no servidor.', 'error'); return; }
+  if (!res.ok)            { toast('Erro ao baixar o arquivo (HTTP ' + res.status + ').', 'error'); return; }
   const blob = await res.blob();
-  if (blob.size === 0)    { alert('ERRO: arquivo vazio (0 bytes)'); return; }
+  if (blob.size === 0)    { toast('O arquivo gerado está vazio — tente regenerar.', 'error'); return; }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -424,7 +403,7 @@ async function generatePDF(jobId, resumeId, btn) {
 }
 
 async function deleteResume(jobId, resumeId, btn) {
-  if (!confirm('Deletar este currículo?')) return;
+  if (!await confirmDialog('Deletar este currículo?')) return;
   btn.disabled = true;
   try {
     const res = await api.delete(`/jobs/${jobId}/resumes/${resumeId}`);
@@ -434,13 +413,13 @@ async function deleteResume(jobId, resumeId, btn) {
   } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
 }
 
-// ── Aba de currículos (vista global: itera jobs) ──
+// ── Aba de currículos (vista global: itera jobs completados) ──
 async function loadResumesTab() {
   const container = document.getElementById('curriculos-container');
   container.innerHTML = '<p class="empty">Carregando vagas...</p>';
 
   try {
-    const res = await api.get('/jobs?cursor=0&size=100');
+    const res = await api.get('/jobs?offset=0&size=200');
     const { data: jobs } = await apiList(res);
     const completed = jobs.filter(j => j.status === 'completed');
 

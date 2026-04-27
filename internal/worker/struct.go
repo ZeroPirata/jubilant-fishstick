@@ -52,9 +52,9 @@ type feedbackPrompt struct {
 type userPrompt struct {
 	Vaga          vagaPrompt           `json:"vaga"`
 	Experiencias  []experienciaPrompt  `json:"experiencias"`
-	Habilidades   []habilidadePrompt   `json:"habilidades"`
-	Projetos      []projetoPrompt      `json:"projetos"`
-	Formacoes     []formacaoPrompt     `json:"formacoes"`
+	Habilidades   []habilidadePrompt   `json:"habilidades,omitempty"`
+	Projetos      []projetoPrompt      `json:"projetos,omitempty"`
+	Formacoes     []formacaoPrompt     `json:"formacoes,omitempty"`
 	Certificacoes []certificacaoPrompt `json:"certificacoes,omitempty"`
 	Feedback      feedbackPrompt       `json:"feedback"`
 }

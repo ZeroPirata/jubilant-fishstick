@@ -1001,3 +1001,275 @@ func (q *Queries) QueryUpsertProfile(ctx context.Context, arg QueryUpsertProfile
 	)
 	return i, err
 }
+
+// ── Paginated list queries (manually written — sqlc cannot be re-run) ──
+
+const queryListExperiences = `
+SELECT id, user_id, company_name, job_role, description, is_current_job,
+       start_date, end_date, tech_stack, achievements, tags,
+       created_at, updated_at, deleted_at,
+       COUNT(*) OVER() AS total_count
+FROM user_experiences
+WHERE user_id = $1 AND deleted_at IS NULL
+  AND ($2::TEXT IS NULL OR (company_name ILIKE '%' || $2 || '%' OR job_role ILIKE '%' || $2 || '%'))
+ORDER BY start_date DESC
+LIMIT $4 OFFSET $3
+`
+
+type QueryListExperiencesParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	Search pgtype.Text `json:"search"`
+	Cursor int32       `json:"cursor"`
+	Size   int32       `json:"size"`
+}
+
+type QueryListExperiencesRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	CompanyName  string             `json:"company_name"`
+	JobRole      string             `json:"job_role"`
+	Description  pgtype.Text        `json:"description"`
+	IsCurrentJob bool               `json:"is_current_job"`
+	StartDate    pgtype.Date        `json:"start_date"`
+	EndDate      pgtype.Date        `json:"end_date"`
+	TechStack    []string           `json:"tech_stack"`
+	Achievements []string           `json:"achievements"`
+	Tags         []string           `json:"tags"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	TotalCount   int64              `json:"total_count"`
+}
+
+func (q *Queries) QueryListExperiences(ctx context.Context, arg QueryListExperiencesParams) ([]QueryListExperiencesRow, error) {
+	rows, err := q.db.Query(ctx, queryListExperiences, arg.UserID, arg.Search, arg.Cursor, arg.Size)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []QueryListExperiencesRow
+	for rows.Next() {
+		var i QueryListExperiencesRow
+		if err := rows.Scan(
+			&i.ID, &i.UserID, &i.CompanyName, &i.JobRole, &i.Description,
+			&i.IsCurrentJob, &i.StartDate, &i.EndDate, &i.TechStack, &i.Achievements,
+			&i.Tags, &i.CreatedAt, &i.UpdatedAt, &i.DeletedAt, &i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+const queryListAcademicHistories = `
+SELECT id, user_id, institution_name, course_name, start_date, end_date, description,
+       created_at, updated_at, deleted_at,
+       COUNT(*) OVER() AS total_count
+FROM user_academic_histories
+WHERE user_id = $1 AND deleted_at IS NULL
+  AND ($2::TEXT IS NULL OR (institution_name ILIKE '%' || $2 || '%' OR course_name ILIKE '%' || $2 || '%'))
+ORDER BY start_date DESC
+LIMIT $4 OFFSET $3
+`
+
+type QueryListAcademicHistoriesParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	Search pgtype.Text `json:"search"`
+	Cursor int32       `json:"cursor"`
+	Size   int32       `json:"size"`
+}
+
+type QueryListAcademicHistoriesRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	UserID          pgtype.UUID        `json:"user_id"`
+	InstitutionName string             `json:"institution_name"`
+	CourseName      string             `json:"course_name"`
+	StartDate       pgtype.Date        `json:"start_date"`
+	EndDate         pgtype.Date        `json:"end_date"`
+	Description     pgtype.Text        `json:"description"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
+	TotalCount      int64              `json:"total_count"`
+}
+
+func (q *Queries) QueryListAcademicHistories(ctx context.Context, arg QueryListAcademicHistoriesParams) ([]QueryListAcademicHistoriesRow, error) {
+	rows, err := q.db.Query(ctx, queryListAcademicHistories, arg.UserID, arg.Search, arg.Cursor, arg.Size)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []QueryListAcademicHistoriesRow
+	for rows.Next() {
+		var i QueryListAcademicHistoriesRow
+		if err := rows.Scan(
+			&i.ID, &i.UserID, &i.InstitutionName, &i.CourseName,
+			&i.StartDate, &i.EndDate, &i.Description,
+			&i.CreatedAt, &i.UpdatedAt, &i.DeletedAt, &i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+const queryListSkills = `
+SELECT id, user_id, skill_name, proficiency_level, tags,
+       created_at, updated_at, deleted_at,
+       COUNT(*) OVER() AS total_count
+FROM user_skills
+WHERE user_id = $1 AND deleted_at IS NULL
+  AND ($2::TEXT IS NULL OR skill_name ILIKE '%' || $2 || '%')
+ORDER BY skill_name
+LIMIT $4 OFFSET $3
+`
+
+type QueryListSkillsParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	Search pgtype.Text `json:"search"`
+	Cursor int32       `json:"cursor"`
+	Size   int32       `json:"size"`
+}
+
+type QueryListSkillsRow struct {
+	ID               pgtype.UUID        `json:"id"`
+	UserID           pgtype.UUID        `json:"user_id"`
+	SkillName        string             `json:"skill_name"`
+	ProficiencyLevel SkillLevel         `json:"proficiency_level"`
+	Tags             []string           `json:"tags"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+	TotalCount       int64              `json:"total_count"`
+}
+
+func (q *Queries) QueryListSkills(ctx context.Context, arg QueryListSkillsParams) ([]QueryListSkillsRow, error) {
+	rows, err := q.db.Query(ctx, queryListSkills, arg.UserID, arg.Search, arg.Cursor, arg.Size)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []QueryListSkillsRow
+	for rows.Next() {
+		var i QueryListSkillsRow
+		if err := rows.Scan(
+			&i.ID, &i.UserID, &i.SkillName, &i.ProficiencyLevel, &i.Tags,
+			&i.CreatedAt, &i.UpdatedAt, &i.DeletedAt, &i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+const queryListProjects = `
+SELECT id, user_id, project_name, description, project_url, tags,
+       start_date, end_date, is_academic,
+       created_at, updated_at, deleted_at,
+       COUNT(*) OVER() AS total_count
+FROM user_projects
+WHERE user_id = $1 AND deleted_at IS NULL
+  AND ($2::TEXT IS NULL OR project_name ILIKE '%' || $2 || '%')
+ORDER BY start_date DESC
+LIMIT $4 OFFSET $3
+`
+
+type QueryListProjectsParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	Search pgtype.Text `json:"search"`
+	Cursor int32       `json:"cursor"`
+	Size   int32       `json:"size"`
+}
+
+type QueryListProjectsRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	ProjectName string             `json:"project_name"`
+	Description string             `json:"description"`
+	ProjectUrl  pgtype.Text        `json:"project_url"`
+	Tags        []string           `json:"tags"`
+	StartDate   pgtype.Date        `json:"start_date"`
+	EndDate     pgtype.Date        `json:"end_date"`
+	IsAcademic  bool               `json:"is_academic"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+	TotalCount  int64              `json:"total_count"`
+}
+
+func (q *Queries) QueryListProjects(ctx context.Context, arg QueryListProjectsParams) ([]QueryListProjectsRow, error) {
+	rows, err := q.db.Query(ctx, queryListProjects, arg.UserID, arg.Search, arg.Cursor, arg.Size)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []QueryListProjectsRow
+	for rows.Next() {
+		var i QueryListProjectsRow
+		if err := rows.Scan(
+			&i.ID, &i.UserID, &i.ProjectName, &i.Description, &i.ProjectUrl, &i.Tags,
+			&i.StartDate, &i.EndDate, &i.IsAcademic,
+			&i.CreatedAt, &i.UpdatedAt, &i.DeletedAt, &i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+const queryListCertificates = `
+SELECT id, user_id, certificate_name, issuing_organization, issue_date, credential_url, tags,
+       created_at, updated_at, deleted_at,
+       COUNT(*) OVER() AS total_count
+FROM user_certificates
+WHERE user_id = $1 AND deleted_at IS NULL
+  AND ($2::TEXT IS NULL OR (certificate_name ILIKE '%' || $2 || '%' OR issuing_organization ILIKE '%' || $2 || '%'))
+ORDER BY issue_date DESC
+LIMIT $4 OFFSET $3
+`
+
+type QueryListCertificatesParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	Search pgtype.Text `json:"search"`
+	Cursor int32       `json:"cursor"`
+	Size   int32       `json:"size"`
+}
+
+type QueryListCertificatesRow struct {
+	ID                  pgtype.UUID        `json:"id"`
+	UserID              pgtype.UUID        `json:"user_id"`
+	CertificateName     string             `json:"certificate_name"`
+	IssuingOrganization string             `json:"issuing_organization"`
+	IssueDate           pgtype.Date        `json:"issue_date"`
+	CredentialUrl       pgtype.Text        `json:"credential_url"`
+	Tags                []string           `json:"tags"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
+	TotalCount          int64              `json:"total_count"`
+}
+
+func (q *Queries) QueryListCertificates(ctx context.Context, arg QueryListCertificatesParams) ([]QueryListCertificatesRow, error) {
+	rows, err := q.db.Query(ctx, queryListCertificates, arg.UserID, arg.Search, arg.Cursor, arg.Size)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []QueryListCertificatesRow
+	for rows.Next() {
+		var i QueryListCertificatesRow
+		if err := rows.Scan(
+			&i.ID, &i.UserID, &i.CertificateName, &i.IssuingOrganization,
+			&i.IssueDate, &i.CredentialUrl, &i.Tags,
+			&i.CreatedAt, &i.UpdatedAt, &i.DeletedAt, &i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}

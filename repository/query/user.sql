@@ -49,6 +49,17 @@ SELECT * FROM user_experiences
 WHERE user_id = @user_id AND deleted_at IS NULL
 ORDER BY start_date DESC;
 
+-- name: QueryListExperiences :many
+SELECT id, user_id, company_name, job_role, description, is_current_job,
+       start_date, end_date, tech_stack, achievements, tags,
+       created_at, updated_at, deleted_at,
+       COUNT(*) OVER() AS total_count
+FROM user_experiences
+WHERE user_id = @user_id AND deleted_at IS NULL
+  AND (@search::TEXT IS NULL OR (company_name ILIKE '%' || @search || '%' OR job_role ILIKE '%' || @search || '%'))
+ORDER BY start_date DESC
+LIMIT @size OFFSET @cursor;
+
 -- name: QuerySelectExperiencesByTags :many
 SELECT * FROM user_experiences
 WHERE user_id = @user_id AND tags && @tags::TEXT[] AND deleted_at IS NULL
@@ -88,6 +99,16 @@ SELECT * FROM user_academic_histories
 WHERE user_id = @user_id AND deleted_at IS NULL
 ORDER BY start_date DESC;
 
+-- name: QueryListAcademicHistories :many
+SELECT id, user_id, institution_name, course_name, start_date, end_date, description,
+       created_at, updated_at, deleted_at,
+       COUNT(*) OVER() AS total_count
+FROM user_academic_histories
+WHERE user_id = @user_id AND deleted_at IS NULL
+  AND (@search::TEXT IS NULL OR (institution_name ILIKE '%' || @search || '%' OR course_name ILIKE '%' || @search || '%'))
+ORDER BY start_date DESC
+LIMIT @size OFFSET @cursor;
+
 -- name: QueryInsertAcademicHistory :one
 INSERT INTO user_academic_histories(
     user_id, institution_name, course_name, start_date, end_date, description
@@ -116,6 +137,16 @@ SELECT * FROM user_skills
 WHERE user_id = @user_id AND deleted_at IS NULL
 ORDER BY skill_name;
 
+-- name: QueryListSkills :many
+SELECT id, user_id, skill_name, proficiency_level, tags,
+       created_at, updated_at, deleted_at,
+       COUNT(*) OVER() AS total_count
+FROM user_skills
+WHERE user_id = @user_id AND deleted_at IS NULL
+  AND (@search::TEXT IS NULL OR skill_name ILIKE '%' || @search || '%')
+ORDER BY skill_name
+LIMIT @size OFFSET @cursor;
+
 -- name: QuerySelectSkillsByTags :many
 SELECT * FROM user_skills
 WHERE user_id = @user_id AND tags && @tags::TEXT[] AND deleted_at IS NULL;
@@ -143,6 +174,17 @@ WHERE id = @id AND user_id = @user_id;
 SELECT * FROM user_projects
 WHERE user_id = @user_id AND deleted_at IS NULL
 ORDER BY start_date DESC;
+
+-- name: QueryListProjects :many
+SELECT id, user_id, project_name, description, project_url, tags,
+       start_date, end_date, is_academic,
+       created_at, updated_at, deleted_at,
+       COUNT(*) OVER() AS total_count
+FROM user_projects
+WHERE user_id = @user_id AND deleted_at IS NULL
+  AND (@search::TEXT IS NULL OR project_name ILIKE '%' || @search || '%')
+ORDER BY start_date DESC
+LIMIT @size OFFSET @cursor;
 
 -- name: QuerySelectProjectsByTags :many
 SELECT * FROM user_projects
@@ -179,6 +221,16 @@ WHERE id = @id AND user_id = @user_id;
 SELECT * FROM user_certificates
 WHERE user_id = @user_id AND deleted_at IS NULL
 ORDER BY issue_date DESC;
+
+-- name: QueryListCertificates :many
+SELECT id, user_id, certificate_name, issuing_organization, issue_date, credential_url, tags,
+       created_at, updated_at, deleted_at,
+       COUNT(*) OVER() AS total_count
+FROM user_certificates
+WHERE user_id = @user_id AND deleted_at IS NULL
+  AND (@search::TEXT IS NULL OR (certificate_name ILIKE '%' || @search || '%' OR issuing_organization ILIKE '%' || @search || '%'))
+ORDER BY issue_date DESC
+LIMIT @size OFFSET @cursor;
 
 -- name: QueryInsertCertificate :one
 INSERT INTO user_certificates(

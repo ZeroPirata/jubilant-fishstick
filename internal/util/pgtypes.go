@@ -14,7 +14,10 @@ func ParsePgDate(s string) pgtype.Date {
 	}
 	t, err := time.Parse("2006-01-02", s)
 	if err != nil {
-		return pgtype.Date{Valid: false}
+		t, err = time.Parse("2006-01", s)
+		if err != nil {
+			return pgtype.Date{Valid: false}
+		}
 	}
 	return pgtype.Date{Time: t, Valid: true}
 }

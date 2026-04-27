@@ -205,15 +205,19 @@ INNER JOIN user_accounts acc ON acc.id = j.user_id
 WHERE
     j.user_id = $1 AND
     j.deleted_at IS NULL AND
-    acc.deleted_at IS NULL
+    acc.deleted_at IS NULL AND
+    ($4::TEXT IS NULL OR j.status = $4::job_status) AND
+    ($5::TEXT IS NULL OR j.quality = $5::job_quality)
 ORDER BY j.created_at DESC
 LIMIT $3 OFFSET $2
 `
 
 type QuerySelectJobsForUserParams struct {
-	UserID pgtype.UUID `json:"user_id"`
-	Cursor int32       `json:"cursor"`
-	Size   int32       `json:"size"`
+	UserID  pgtype.UUID `json:"user_id"`
+	Cursor  int32       `json:"cursor"`
+	Size    int32       `json:"size"`
+	Status  pgtype.Text `json:"status"`
+	Quality pgtype.Text `json:"quality"`
 }
 
 type QuerySelectJobsForUserRow struct {
@@ -235,7 +239,7 @@ type QuerySelectJobsForUserRow struct {
 }
 
 func (q *Queries) QuerySelectJobsForUser(ctx context.Context, arg QuerySelectJobsForUserParams) ([]QuerySelectJobsForUserRow, error) {
-	rows, err := q.db.Query(ctx, querySelectJobsForUser, arg.UserID, arg.Cursor, arg.Size)
+	rows, err := q.db.Query(ctx, querySelectJobsForUser, arg.UserID, arg.Cursor, arg.Size, arg.Status, arg.Quality)
 	if err != nil {
 		return nil, err
 	}

@@ -59,11 +59,6 @@ func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	otherLinks := json.RawMessage(row.OtherLinks)
-	if len(otherLinks) == 0 {
-		otherLinks = json.RawMessage("null")
-	}
-
 	resp := profileResponse{
 		Email:        row.Email,
 		FullName:     row.FullName,
@@ -73,7 +68,6 @@ func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		LinkedinUrl:  row.LinkedinUrl,
 		GithubUrl:    row.GithubUrl,
 		PortfolioUrl: row.PortfolioUrl,
-		OtherLinks:   otherLinks,
 	}
 
 	_ = ucache.SetTyped(r.Context(), h.Cache, uid, ucache.TopicProfile, resp)
@@ -127,17 +121,12 @@ func (h *UserHandler) UpsertLinks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	otherLinks := []byte(req.OtherLinks)
-	if len(otherLinks) == 0 {
-		otherLinks = []byte("null")
-	}
-
 	row, errR := h.Users.QueryUpsertLinks(r.Context(), db.QueryUpsertLinksParams{
 		UserID:       userID,
 		LinkedinUrl:  util.ConvertToPgTextPtr(req.LinkedinUrl),
 		GithubUrl:    util.ConvertToPgTextPtr(req.GithubUrl),
 		PortfolioUrl: util.ConvertToPgTextPtr(req.PortfolioUrl),
-		OtherLinks:   otherLinks,
+		OtherLinks:   []byte("null"),
 	})
 	if errR != nil {
 		writeRepositoryError(w, errR)
@@ -152,29 +141,18 @@ func (h *UserHandler) UpsertLinks(w http.ResponseWriter, r *http.Request) {
 // Experiences
 
 func (h *UserHandler) ListExperiences(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserID(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, ErrNotAuthorized.Error())
-		return
-	}
-	uid := userID.String()
-
-	if cached, hit := ucache.GetTyped[[]db.UserExperience](r.Context(), h.Cache, uid, ucache.TopicExperiences); hit {
-		writeList(w, http.StatusOK, cached, 0, 0, 0)
-		return
-	}
-
-	rows, errR := h.Users.QuerySelectAllExperiences(r.Context(), uid)
-	if errR != nil {
-		writeRepositoryError(w, errR)
-		return
-	}
-
-	if rows == nil {
-		rows = []db.UserExperience{}
-	}
-	_ = ucache.SetTyped(r.Context(), h.Cache, uid, ucache.TopicExperiences, rows)
-	writeList(w, http.StatusOK, rows, 0, 0, 0)
+	GenericList(
+		func(userID pgtype.UUID, q PaginationParams) db.QueryListExperiencesParams {
+			search := pgtype.Text{}
+			if q.Search != nil {
+				search = pgtype.Text{String: *q.Search, Valid: true}
+			}
+			return db.QueryListExperiencesParams{UserID: userID, Search: search, Cursor: q.Cursor, Size: q.Size}
+		},
+		h.Users.QueryListExperiences,
+		func(r db.QueryListExperiencesRow) db.QueryListExperiencesRow { return r },
+		func(r db.QueryListExperiencesRow) int32 { return int32(r.TotalCount) },
+	)(w, r)
 }
 
 func (h *UserHandler) InsertExperience(w http.ResponseWriter, r *http.Request) {
@@ -249,29 +227,18 @@ func (h *UserHandler) DeleteExperience(w http.ResponseWriter, r *http.Request) {
 // Academic
 
 func (h *UserHandler) ListAcademic(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserID(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, ErrNotAuthorized.Error())
-		return
-	}
-	uid := userID.String()
-
-	if cached, hit := ucache.GetTyped[[]db.UserAcademicHistory](r.Context(), h.Cache, uid, ucache.TopicAcademic); hit {
-		writeList(w, http.StatusOK, cached, 0, 0, 0)
-		return
-	}
-
-	rows, errR := h.Users.QuerySelectAllAcademicHistories(r.Context(), uid)
-	if errR != nil {
-		writeRepositoryError(w, errR)
-		return
-	}
-
-	if rows == nil {
-		rows = []db.UserAcademicHistory{}
-	}
-	_ = ucache.SetTyped(r.Context(), h.Cache, uid, ucache.TopicAcademic, rows)
-	writeList(w, http.StatusOK, rows, 0, 0, 0)
+	GenericList(
+		func(userID pgtype.UUID, q PaginationParams) db.QueryListAcademicHistoriesParams {
+			search := pgtype.Text{}
+			if q.Search != nil {
+				search = pgtype.Text{String: *q.Search, Valid: true}
+			}
+			return db.QueryListAcademicHistoriesParams{UserID: userID, Search: search, Cursor: q.Cursor, Size: q.Size}
+		},
+		h.Users.QueryListAcademicHistories,
+		func(r db.QueryListAcademicHistoriesRow) db.QueryListAcademicHistoriesRow { return r },
+		func(r db.QueryListAcademicHistoriesRow) int32 { return int32(r.TotalCount) },
+	)(w, r)
 }
 
 func (h *UserHandler) InsertAcademic(w http.ResponseWriter, r *http.Request) {
@@ -338,29 +305,18 @@ func (h *UserHandler) DeleteAcademic(w http.ResponseWriter, r *http.Request) {
 // Skills
 
 func (h *UserHandler) ListSkills(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserID(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, ErrNotAuthorized.Error())
-		return
-	}
-	uid := userID.String()
-
-	if cached, hit := ucache.GetTyped[[]db.UserSkill](r.Context(), h.Cache, uid, ucache.TopicSkills); hit {
-		writeList(w, http.StatusOK, cached, 0, 0, 0)
-		return
-	}
-
-	rows, errR := h.Users.QuerySelectAllSkills(r.Context(), uid)
-	if errR != nil {
-		writeRepositoryError(w, errR)
-		return
-	}
-
-	if rows == nil {
-		rows = []db.UserSkill{}
-	}
-	_ = ucache.SetTyped(r.Context(), h.Cache, uid, ucache.TopicSkills, rows)
-	writeList(w, http.StatusOK, rows, 0, 0, 0)
+	GenericList(
+		func(userID pgtype.UUID, q PaginationParams) db.QueryListSkillsParams {
+			search := pgtype.Text{}
+			if q.Search != nil {
+				search = pgtype.Text{String: *q.Search, Valid: true}
+			}
+			return db.QueryListSkillsParams{UserID: userID, Search: search, Cursor: q.Cursor, Size: q.Size}
+		},
+		h.Users.QueryListSkills,
+		func(r db.QueryListSkillsRow) db.QueryListSkillsRow { return r },
+		func(r db.QueryListSkillsRow) int32 { return int32(r.TotalCount) },
+	)(w, r)
 }
 
 func (h *UserHandler) InsertSkill(w http.ResponseWriter, r *http.Request) {
@@ -423,29 +379,18 @@ func (h *UserHandler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
 // Projects
 
 func (h *UserHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserID(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, ErrNotAuthorized.Error())
-		return
-	}
-	uid := userID.String()
-
-	if cached, hit := ucache.GetTyped[[]db.UserProject](r.Context(), h.Cache, uid, ucache.TopicProjects); hit {
-		writeList(w, http.StatusOK, cached, 0, 0, 0)
-		return
-	}
-
-	rows, errR := h.Users.QuerySelectAllProjects(r.Context(), uid)
-	if errR != nil {
-		writeRepositoryError(w, errR)
-		return
-	}
-
-	if rows == nil {
-		rows = []db.UserProject{}
-	}
-	_ = ucache.SetTyped(r.Context(), h.Cache, uid, ucache.TopicProjects, rows)
-	writeList(w, http.StatusOK, rows, 0, 0, 0)
+	GenericList(
+		func(userID pgtype.UUID, q PaginationParams) db.QueryListProjectsParams {
+			search := pgtype.Text{}
+			if q.Search != nil {
+				search = pgtype.Text{String: *q.Search, Valid: true}
+			}
+			return db.QueryListProjectsParams{UserID: userID, Search: search, Cursor: q.Cursor, Size: q.Size}
+		},
+		h.Users.QueryListProjects,
+		func(r db.QueryListProjectsRow) db.QueryListProjectsRow { return r },
+		func(r db.QueryListProjectsRow) int32 { return int32(r.TotalCount) },
+	)(w, r)
 }
 
 func (h *UserHandler) InsertProject(w http.ResponseWriter, r *http.Request) {
@@ -516,29 +461,18 @@ func (h *UserHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 // Certificates
 
 func (h *UserHandler) ListCertificates(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserID(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, ErrNotAuthorized.Error())
-		return
-	}
-	uid := userID.String()
-
-	if cached, hit := ucache.GetTyped[[]db.UserCertificate](r.Context(), h.Cache, uid, ucache.TopicCertificates); hit {
-		writeList(w, http.StatusOK, cached, 0, 0, 0)
-		return
-	}
-
-	rows, errR := h.Users.QuerySelectAllCertificates(r.Context(), uid)
-	if errR != nil {
-		writeRepositoryError(w, errR)
-		return
-	}
-
-	if rows == nil {
-		rows = []db.UserCertificate{}
-	}
-	_ = ucache.SetTyped(r.Context(), h.Cache, uid, ucache.TopicCertificates, rows)
-	writeList(w, http.StatusOK, rows, 0, 0, 0)
+	GenericList(
+		func(userID pgtype.UUID, q PaginationParams) db.QueryListCertificatesParams {
+			search := pgtype.Text{}
+			if q.Search != nil {
+				search = pgtype.Text{String: *q.Search, Valid: true}
+			}
+			return db.QueryListCertificatesParams{UserID: userID, Search: search, Cursor: q.Cursor, Size: q.Size}
+		},
+		h.Users.QueryListCertificates,
+		func(r db.QueryListCertificatesRow) db.QueryListCertificatesRow { return r },
+		func(r db.QueryListCertificatesRow) int32 { return int32(r.TotalCount) },
+	)(w, r)
 }
 
 func (h *UserHandler) InsertCertificate(w http.ResponseWriter, r *http.Request) {

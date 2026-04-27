@@ -22,9 +22,9 @@ Se não houver nenhuma experiência: { "error": "<o que está faltando>" }
 
 - vaga: { empresa, titulo, stack[], requisitos[], descricao }
 - experiencias: [{ empresa, cargo, data_inicio, data_fim, atual, stack[], conquistas[], descricao }]
-- habilidades: [{ nome, nivel }]
-- projetos: [{ nome, descricao, link }]
-- formacoes: [{ instituicao, curso, data_inicio, data_fim }]
+- habilidades: [{ nome, nivel }] — omitido se vazio
+- projetos: [{ nome, descricao, link }] — omitido se vazio
+- formacoes: [{ instituicao, curso, data_inicio, data_fim }] — omitido se vazio
 - certificacoes: [{ nome, emissor, emitido_em, link }] — omitido se vazio
 - feedback: { exemplos_excelentes[], comentarios_anteriores[] } — omitido se vazio
 
@@ -208,8 +208,13 @@ Banco de Dados: [ordenado por relevância]
 Ferramentas & Cloud: [ordenado por relevância]
 Conceitos & Arquitetura: [ordenado por relevância]
 
+HABILIDADES TÉCNICAS
+
+(Inclua SOMENTE se habilidades estiver presente no input. Omita a seção inteira se ausente.)
+
 PROJETOS
 
+(Inclua SOMENTE se projetos estiver presente no input. Omita a seção inteira se ausente.)
 Selecione os 2 ou 3 mais relevantes para a vaga. Nunca mais que 3.
 
 Cada projeto — 2 ou 3 linhas, linha em branco entre projetos:
@@ -226,6 +231,9 @@ Dashboards dinâmicos para análise de avaliações...
 URLs sempre em minúsculas (https://...). Tags e conquistas integradas na descrição, não como linhas extras.
 
 FORMAÇÃO ACADÊMICA
+
+(Inclua SOMENTE se formacoes estiver presente no input. Omita a seção inteira se ausente.)
+CRÍTICO: NUNCA use dados de experiencias[] nesta seção. Empresa e cargo são experiência profissional, não formação acadêmica. Se formacoes não estiver no input, a seção FORMAÇÃO ACADÊMICA não deve existir no currículo — nem o título.
 
 [Instituição] — [Curso]
 [Ano Início] - [Ano Fim]

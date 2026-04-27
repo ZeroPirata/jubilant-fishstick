@@ -61,7 +61,7 @@
     <button data-tab="nova-vaga">Nova Vaga</button>
     <button data-tab="curriculos">Currículos</button>
     <button data-tab="perfil">Perfil</button>
-    <button data-tab="filtros">Filtros</button>
+    <button data-tab="ajuda">Ajuda</button>
   </nav>
 
   <main>
@@ -71,7 +71,7 @@
       <div class="section-header">
         <h2>Vagas Cadastradas</h2>
         <div class="toolbar" style="margin:0">
-          <select id="jobs-status-filter" onchange="loadJobs()">
+          <select id="jobs-status-filter" onchange="filterJobsByStatus()">
             <option value="">Todos os status</option>
             <option value="pending">Pendente</option>
             <option value="processing">Processando</option>
@@ -80,7 +80,25 @@
             <option value="completed">Concluído</option>
             <option value="error">Erro</option>
           </select>
+          <select id="jobs-quality-filter" onchange="filterJobsByQuality()">
+            <option value="">Todas qualidades</option>
+            <option value="high">Alta</option>
+            <option value="mid">Média</option>
+            <option value="low">Baixa</option>
+          </select>
           <button class="btn btn-ghost" onclick="loadJobs()">↻ Atualizar</button>
+        </div>
+      </div>
+      <div class="list-controls" style="margin-top:10px">
+        <div class="page-nav" style="margin-left:0">
+          <select id="jobs-size" onchange="changeJobsSize(this.value)">
+            <option value="10">10/pág</option>
+            <option value="20" selected>20/pág</option>
+            <option value="50">50/pág</option>
+          </select>
+          <button class="btn-page" id="jobs-prev" onclick="jobsPrevPage()" disabled>‹</button>
+          <span class="page-info" id="jobs-page-info">—</span>
+          <button class="btn-page" id="jobs-next" onclick="jobsNextPage()">›</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -213,26 +231,7 @@
           <div class="field"><label>GitHub</label><input type="url" id="link-github" placeholder="https://github.com/..." /></div>
           <div class="field"><label>Portfolio</label><input type="url" id="link-portfolio" placeholder="https://seusite.dev" /></div>
 
-          <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
-          <p style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--text)">Outros Links</p>
-          <div id="other-links-list"></div>
-          <div class="field-row" style="margin-top:8px">
-            <div class="field">
-              <label>Nome</label>
-              <input type="text" id="other-link-label" placeholder="Ex: Blog, Portfólio..." />
-            </div>
-            <div class="field">
-              <label>URL</label>
-              <input type="url" id="other-link-url" placeholder="https://..." />
-            </div>
-            <div class="field" style="max-width:130px">
-              <label>Linguagem</label>
-              <input type="text" id="other-link-language" placeholder="Ex: Go, TS..." />
-            </div>
-            <button class="btn btn-ghost" style="align-self:flex-end;margin-bottom:2px" onclick="addOtherLink()">+ Link</button>
-          </div>
-
-          <button class="btn btn-primary" style="margin-top:16px" onclick="saveLinks()">Salvar Tudo</button>
+          <button class="btn btn-primary" style="margin-top:16px" onclick="saveLinks()">Salvar</button>
         </div>
       </div>
 
@@ -246,24 +245,37 @@
           </div>
           <div class="field"><label>Descrição</label><textarea id="exp-descricao"></textarea></div>
           <div class="field-row">
-            <div class="field"><label>Início (AAAA-MM-DD) *</label><input type="text" id="exp-inicio" placeholder="2023-01-15" /></div>
-            <div class="field"><label>Fim (AAAA-MM-DD)</label><input type="text" id="exp-fim" placeholder="deixe vazio se atual" /></div>
+            <div class="field"><label>Início *</label><input type="month" id="exp-inicio" /></div>
+            <div class="field"><label>Fim</label><input type="month" id="exp-fim" /></div>
           </div>
           <div class="field-check">
             <input type="checkbox" id="exp-atual" />
             <label for="exp-atual">Emprego atual</label>
           </div>
-          <div class="field"><label>Stack (vírgula)</label><input type="text" id="exp-stack" placeholder="Go, Docker" /></div>
-          <div class="field"><label>Conquistas (vírgula)</label><input type="text" id="exp-conquistas" placeholder="Reduziu latência em 40%" /></div>
-          <div class="field"><label>Tags (vírgula)</label><input type="text" id="exp-tags" placeholder="backend, cloud" /></div>
+          <div class="field"><label>Habilidades técnicas (vírgula) <span class="tip" data-tooltip="Tecnologias usadas nesta experiência. Separadas por vírgula. Ex: Go, Docker, PostgreSQL">ⓘ</span></label><input type="text" id="exp-stack" placeholder="Go, Docker" /></div>
+          <div class="field"><label>Conquistas (vírgula) <span class="tip" data-tooltip="Resultados quantificáveis. Separados por vírgula. Ex: Reduziu latência em 40%, aumentou cobertura de testes para 80%">ⓘ</span></label><input type="text" id="exp-conquistas" placeholder="Reduziu latência em 40%" /></div>
+          <div class="field"><label>Tags (vírgula) <span class="tip" data-tooltip="Palavras-chave que descrevem esta experiência. Usadas pela IA para selecionar o conteúdo certo por vaga. Ex: backend, cloud, api">ⓘ</span></label><input type="text" id="exp-tags" placeholder="backend, cloud" /></div>
           <div style="display:flex;gap:10px;align-items:center">
             <button id="exp-submit-btn" class="btn btn-primary" onclick="addExperience()">Adicionar</button>
             <button id="exp-cancel" class="btn btn-ghost hidden" onclick="cancelEditExperience()">Cancelar</button>
           </div>
         </div>
+        <div class="list-controls">
+          <input type="text" id="exp-search" class="list-search" placeholder="Buscar empresa ou cargo..." oninput="debounceSearch('exp',this.value)" />
+          <div class="page-nav">
+            <select id="exp-size" onchange="changePageSize('exp',this.value)">
+              <option value="10">10/pág</option>
+              <option value="20" selected>20/pág</option>
+              <option value="50">50/pág</option>
+            </select>
+            <button class="btn-page" id="exp-prev" onclick="prevPage('exp')" disabled>‹</button>
+            <span class="page-info" id="exp-page-info">—</span>
+            <button class="btn-page" id="exp-next" onclick="nextPage('exp')">›</button>
+          </div>
+        </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Empresa</th><th>Cargo</th><th>Período</th><th>Stack</th><th>Tags</th><th></th></tr></thead>
+            <thead><tr><th>Empresa</th><th>Cargo</th><th>Período</th><th>Habilidades</th><th>Tags</th><th></th></tr></thead>
             <tbody id="exp-body"><tr><td colspan="7" class="empty">Carregando...</td></tr></tbody>
           </table>
         </div>
@@ -276,19 +288,31 @@
           <div class="field"><label>Instituição *</label><input type="text" id="ac-instituicao" placeholder="Universidade de São Paulo" /></div>
           <div class="field"><label>Curso *</label><input type="text" id="ac-curso" placeholder="Ciência da Computação" /></div>
           <div class="field-row">
-            <div class="field"><label>Início (AAAA-MM-DD) *</label><input type="text" id="ac-inicio" placeholder="2019-02-01" /></div>
-            <div class="field"><label>Fim (AAAA-MM-DD)</label><input type="text" id="ac-fim" placeholder="2023-12-01" /></div>
+            <div class="field"><label>Início *</label><input type="month" id="ac-inicio" /></div>
+            <div class="field"><label>Fim</label><input type="month" id="ac-fim" /></div>
           </div>
-          <div class="field"><label>Descrição</label><textarea id="ac-desc" placeholder="Detalhes adicionais..."></textarea></div>
           <div style="display:flex;gap:10px;align-items:center">
             <button id="ac-submit-btn" class="btn btn-primary" onclick="addAcademic()">Adicionar</button>
             <button id="ac-cancel" class="btn btn-ghost hidden" onclick="cancelEditAcademic()">Cancelar</button>
           </div>
         </div>
+        <div class="list-controls">
+          <input type="text" id="ac-search" class="list-search" placeholder="Buscar instituição ou curso..." oninput="debounceSearch('ac',this.value)" />
+          <div class="page-nav">
+            <select id="ac-size" onchange="changePageSize('ac',this.value)">
+              <option value="10">10/pág</option>
+              <option value="20" selected>20/pág</option>
+              <option value="50">50/pág</option>
+            </select>
+            <button class="btn-page" id="ac-prev" onclick="prevPage('ac')" disabled>‹</button>
+            <span class="page-info" id="ac-page-info">—</span>
+            <button class="btn-page" id="ac-next" onclick="nextPage('ac')">›</button>
+          </div>
+        </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Instituição</th><th>Curso</th><th>Período</th><th>Descrição</th><th></th></tr></thead>
-            <tbody id="academic-body"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
+            <thead><tr><th>Instituição</th><th>Curso</th><th>Período</th><th></th></tr></thead>
+            <tbody id="academic-body"><tr><td colspan="4" class="empty">Carregando...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -299,7 +323,7 @@
           <h2 style="margin-bottom:14px">Nova Habilidade</h2>
           <div class="field"><label>Nome *</label><input type="text" id="sk-nome" /></div>
           <div class="field">
-            <label>Nível *</label>
+            <label>Nível * <span class="tip" data-tooltip="Básico: familiaridade inicial. Intermediário: uso regular. Avançado: uso profissional sólido. Expert: domínio profundo, referência na área">ⓘ</span></label>
             <select id="sk-nivel">
               <option value="basic">Básico</option>
               <option value="intermediate">Intermediário</option>
@@ -307,10 +331,23 @@
               <option value="expert">Expert</option>
             </select>
           </div>
-          <div class="field"><label>Tags (vírgula)</label><input type="text" id="sk-tags" placeholder="backend, linguagem" /></div>
+          <div class="field"><label>Tags (vírgula) <span class="tip" data-tooltip="Categorias para agrupar esta habilidade. Ex: backend, linguagem, cloud, framework">ⓘ</span></label><input type="text" id="sk-tags" placeholder="backend, linguagem" /></div>
           <div style="display:flex;gap:10px;align-items:center">
             <button id="sk-submit-btn" class="btn btn-primary" onclick="addSkill()">Adicionar</button>
             <button id="sk-cancel" class="btn btn-ghost hidden" onclick="cancelEditSkill()">Cancelar</button>
+          </div>
+        </div>
+        <div class="list-controls" style="max-width:560px">
+          <input type="text" id="sk-search" class="list-search" placeholder="Buscar habilidade..." oninput="debounceSearch('sk',this.value)" />
+          <div class="page-nav">
+            <select id="sk-size" onchange="changePageSize('sk',this.value)">
+              <option value="10">10/pág</option>
+              <option value="20" selected>20/pág</option>
+              <option value="50">50/pág</option>
+            </select>
+            <button class="btn-page" id="sk-prev" onclick="prevPage('sk')" disabled>‹</button>
+            <span class="page-info" id="sk-page-info">—</span>
+            <button class="btn-page" id="sk-next" onclick="nextPage('sk')">›</button>
           </div>
         </div>
         <div class="table-wrap" style="max-width:560px">
@@ -328,10 +365,10 @@
           <div class="field"><label>Nome *</label><input type="text" id="proj-nome" /></div>
           <div class="field"><label>Descrição *</label><textarea id="proj-desc"></textarea></div>
           <div class="field"><label>Link</label><input type="url" id="proj-link" placeholder="https://github.com/..." /></div>
-          <div class="field"><label>Tags (vírgula)</label><input type="text" id="proj-tags" /></div>
+          <div class="field"><label>Tags (vírgula) <span class="tip" data-tooltip="Palavras-chave do projeto. Ex: backend, api, open-source, CLI">ⓘ</span></label><input type="text" id="proj-tags" /></div>
           <div class="field-row">
-            <div class="field"><label>Início (AAAA-MM-DD) *</label><input type="text" id="proj-inicio" placeholder="2023-01-01" /></div>
-            <div class="field"><label>Fim (AAAA-MM-DD)</label><input type="text" id="proj-fim" /></div>
+            <div class="field"><label>Início *</label><input type="month" id="proj-inicio" /></div>
+            <div class="field"><label>Fim</label><input type="month" id="proj-fim" /></div>
           </div>
           <div class="field-check">
             <input type="checkbox" id="proj-academico" />
@@ -340,6 +377,19 @@
           <div style="display:flex;gap:10px;align-items:center">
             <button id="proj-submit-btn" class="btn btn-primary" onclick="addProject()">Adicionar</button>
             <button id="proj-cancel" class="btn btn-ghost hidden" onclick="cancelEditProject()">Cancelar</button>
+          </div>
+        </div>
+        <div class="list-controls">
+          <input type="text" id="proj-search" class="list-search" placeholder="Buscar projeto..." oninput="debounceSearch('proj',this.value)" />
+          <div class="page-nav">
+            <select id="proj-size" onchange="changePageSize('proj',this.value)">
+              <option value="10">10/pág</option>
+              <option value="20" selected>20/pág</option>
+              <option value="50">50/pág</option>
+            </select>
+            <button class="btn-page" id="proj-prev" onclick="prevPage('proj')" disabled>‹</button>
+            <span class="page-info" id="proj-page-info">—</span>
+            <button class="btn-page" id="proj-next" onclick="nextPage('proj')">›</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -356,12 +406,25 @@
           <h2 style="margin-bottom:14px">Novo Certificado</h2>
           <div class="field"><label>Nome *</label><input type="text" id="cert-nome" placeholder="AWS Solutions Architect" /></div>
           <div class="field"><label>Emissor *</label><input type="text" id="cert-emissor" placeholder="Amazon Web Services" /></div>
-          <div class="field"><label>Data de emissão (AAAA-MM-DD) *</label><input type="text" id="cert-data" placeholder="2024-06-15" /></div>
+          <div class="field"><label>Data de emissão *</label><input type="month" id="cert-data" /></div>
           <div class="field"><label>URL de verificação</label><input type="url" id="cert-link" placeholder="https://..." /></div>
-          <div class="field"><label>Tags (vírgula)</label><input type="text" id="cert-tags" placeholder="cloud, aws" /></div>
+          <div class="field"><label>Tags (vírgula) <span class="tip" data-tooltip="Área do certificado. Ex: cloud, aws, devops, segurança">ⓘ</span></label><input type="text" id="cert-tags" placeholder="cloud, aws" /></div>
           <div style="display:flex;gap:10px;align-items:center">
             <button id="cert-submit-btn" class="btn btn-primary" onclick="addCertificate()">Adicionar</button>
             <button id="cert-cancel" class="btn btn-ghost hidden" onclick="cancelEditCertificate()">Cancelar</button>
+          </div>
+        </div>
+        <div class="list-controls">
+          <input type="text" id="cert-search" class="list-search" placeholder="Buscar certificado ou emissor..." oninput="debounceSearch('cert',this.value)" />
+          <div class="page-nav">
+            <select id="cert-size" onchange="changePageSize('cert',this.value)">
+              <option value="10">10/pág</option>
+              <option value="20" selected>20/pág</option>
+              <option value="50">50/pág</option>
+            </select>
+            <button class="btn-page" id="cert-prev" onclick="prevPage('cert')" disabled>‹</button>
+            <span class="page-info" id="cert-page-info">—</span>
+            <button class="btn-page" id="cert-next" onclick="nextPage('cert')">›</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -374,24 +437,260 @@
 
     </section>
 
-    <!-- ─── FILTROS ─── -->
-    <section id="tab-filtros" data-tab>
-      <h2>Filtros de Keywords</h2>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:20px">
-        Palavras-chave que serão excluídas automaticamente do matching de vagas.
-      </p>
-      <div class="form-card" style="max-width:420px;margin-bottom:20px">
-        <div class="field">
-          <label>Keyword *</label>
-          <input type="text" id="filter-keyword" placeholder="Ex: react, mobile, .NET" />
+    <!-- ─── AJUDA ─── -->
+    <section id="tab-ajuda" data-tab>
+      <div class="info-page">
+        <h2 style="margin-bottom:20px">Informações & Guia de Uso</h2>
+
+        <!-- Como funciona -->
+        <div class="info-section">
+          <div class="info-section-title">Como o sistema funciona</div>
+          <div class="pipeline">
+            <div class="pipeline-step">
+              <div class="pipe-num">1</div>
+              <div class="pipe-text">Cadastre uma vaga<small>URL do LinkedIn, Jobright, etc.</small></div>
+            </div>
+            <div class="pipeline-step">
+              <div class="pipe-num">2</div>
+              <div class="pipe-text">Scraping automático<small>Extrai empresa, título, requisitos e descrição da vaga</small></div>
+            </div>
+            <div class="pipeline-step">
+              <div class="pipe-num">3</div>
+              <div class="pipe-text">Análise de qualidade<small>Compara requisitos da vaga com seu perfil e calcula um score de fit</small></div>
+            </div>
+            <div class="pipeline-step">
+              <div class="pipe-num">4</div>
+              <div class="pipe-text">IA gera o currículo<small>Seleciona e adapta seus dados para a vaga específica</small></div>
+            </div>
+            <div class="pipeline-step">
+              <div class="pipe-num">5</div>
+              <div class="pipe-text">PDF gerado<small>Currículo e carta de apresentação prontos para baixar</small></div>
+            </div>
+          </div>
+          <div class="info-note">
+            <strong>Importante:</strong> a IA não inventa informações. Ela seleciona, reorganiza e adapta o que você cadastrou no perfil. Quanto mais completo o perfil, melhor o resultado.
+          </div>
         </div>
-        <button class="btn btn-primary" onclick="addFilter()">Adicionar</button>
-      </div>
-      <div class="table-wrap" style="max-width:420px">
-        <table>
-          <thead><tr><th>Keyword</th><th></th></tr></thead>
-          <tbody id="filters-body"><tr><td colspan="2" class="empty">Carregando...</td></tr></tbody>
-        </table>
+
+        <!-- Info Básica -->
+        <div class="info-section">
+          <div class="info-section-title">Perfil — Info Básica</div>
+          <div class="info-fields">
+            <div class="info-field">
+              <div class="info-field-name">Nome completo <span class="req">*</span></div>
+              <div class="info-field-desc">Aparece em destaque no topo do currículo gerado.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Email de registro</div>
+              <div class="info-field-desc">Somente leitura. Usado para login — não aparece diretamente no currículo.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Email de contato</div>
+              <div class="info-field-desc">O email que aparece no cabeçalho do currículo. Se deixado em branco, usa o email de registro. Útil se você quiser usar um e-mail profissional diferente do de login.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Telefone</div>
+              <div class="info-field-desc">Aparece no cabeçalho do currículo ao lado do email. Formato livre.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Resumo / About</div>
+              <div class="info-field-desc">Parágrafo de apresentação profissional. A IA usa como base para o "Summary" ou "Resumo Profissional" no topo do currículo, podendo adaptar o tom de acordo com a vaga.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Links -->
+        <div class="info-section">
+          <div class="info-section-title">Perfil — Links</div>
+          <div class="info-fields">
+            <div class="info-field">
+              <div class="info-field-name">LinkedIn / GitHub / Portfolio</div>
+              <div class="info-field-desc">Aparecem no cabeçalho do currículo com rótulos amigáveis (ex: "LinkedIn", "GitHub"). O PDF os transforma em links clicáveis.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Outros links</div>
+              <div class="info-field-desc">Links adicionais com nome personalizado e URL. O campo <strong>Linguagem</strong> é opcional — serve para indicar o idioma do conteúdo do link (ex: um blog em inglês). Todos aparecem no cabeçalho do currículo.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Experiências -->
+        <div class="info-section">
+          <div class="info-section-title">Perfil — Experiências</div>
+          <div class="info-fields">
+            <div class="info-field">
+              <div class="info-field-name">Empresa / Cargo <span class="req">*</span></div>
+              <div class="info-field-desc">Título principal de cada entrada na seção de experiências do currículo.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Início / Fim <span class="req">*</span></div>
+              <div class="info-field-desc">Período da experiência no formato <code>AAAA-MM</code>. Se "Emprego atual" estiver marcado, "Fim" é ignorado e aparece <strong>Present</strong> ou <strong>Atual</strong> no currículo dependendo do idioma.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Descrição</div>
+              <div class="info-field-desc">Contexto geral do que você fazia nesta função. Ajuda a IA a entender o escopo do cargo, especialmente quando as conquistas não cobrem tudo.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Habilidades técnicas</div>
+              <div class="info-field-desc">Tecnologias que você usou <strong>especificamente nesta experiência</strong>. A IA usa isso para escrever bullet points precisos e contextualizados. Ex: <code>Go, gRPC, Redis, PostgreSQL</code>. Diferente da aba Habilidades (catálogo global) — aqui é o que você <em>usou neste cargo</em>.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Conquistas</div>
+              <div class="info-field-desc">Resultados quantificáveis que você alcançou. São transformados em bullet points de impacto no currículo. <strong>Quanto mais específico, melhor.</strong> Ex: <code>Reduziu latência do serviço de 800ms para 120ms</code>, <code>Liderou migração que cortou custo de infraestrutura em 35%</code>.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Tags</div>
+              <div class="info-field-desc">Palavras-chave que classificam esta experiência. A IA usa para decidir <strong>se inclui esta experiência</strong> no currículo de uma vaga específica. Ex: <code>backend, cloud, api, microsserviços</code>. Quanto mais descritivo, mais precisa a seleção por vaga.</div>
+            </div>
+          </div>
+          <div class="info-note">
+            <strong>Sobre Habilidades técnicas vs aba Habilidades:</strong> a aba Habilidades é seu catálogo global (Go: Avançado). O campo nesta seção indica <em>onde</em> você usou cada tecnologia. A IA usa as duas informações de formas diferentes — a aba para matching e a seção de skills do currículo; o campo de experiência para os bullet points de cada cargo.
+          </div>
+        </div>
+
+        <!-- Formação -->
+        <div class="info-section">
+          <div class="info-section-title">Perfil — Formação Acadêmica</div>
+          <div class="info-fields">
+            <div class="info-field">
+              <div class="info-field-name">Instituição / Curso <span class="req">*</span></div>
+              <div class="info-field-desc">Nome da universidade/escola e o curso. Ambos aparecem na seção de educação do currículo.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Início / Fim <span class="req">*</span></div>
+              <div class="info-field-desc">Período do curso no formato <code>AAAA-MM</code>. Se o curso ainda estiver em andamento, deixe "Fim" em branco.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Habilidades -->
+        <div class="info-section">
+          <div class="info-section-title">Perfil — Habilidades</div>
+          <div class="info-fields">
+            <div class="info-field">
+              <div class="info-field-name">Nome <span class="req">*</span></div>
+              <div class="info-field-desc">Nome da tecnologia, linguagem, ferramenta ou competência. Ex: <code>Go</code>, <code>Kubernetes</code>, <code>System Design</code>.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Nível <span class="req">*</span></div>
+              <div class="info-field-desc">
+                <table class="levels-table">
+                  <tr><td>Básico</td><td>Familiaridade inicial — já usou, consegue trabalhar com ajuda</td></tr>
+                  <tr><td>Intermediário</td><td>Uso regular — consegue trabalhar de forma independente na maioria das situações</td></tr>
+                  <tr><td>Avançado</td><td>Uso profissional sólido — resolve problemas complexos sem apoio externo</td></tr>
+                  <tr><td>Expert</td><td>Domínio profundo — referência na área, consegue ensinar e tomar decisões arquiteturais</td></tr>
+                </table>
+              </div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Tags</div>
+              <div class="info-field-desc">Categorias para agrupar habilidades no currículo gerado. Ex: <code>linguagem</code>, <code>framework</code>, <code>cloud</code>, <code>banco de dados</code>, <code>devops</code>. A IA pode usar isso para organizar a seção de habilidades de forma mais legível.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Projetos -->
+        <div class="info-section">
+          <div class="info-section-title">Perfil — Projetos</div>
+          <div class="info-fields">
+            <div class="info-field">
+              <div class="info-field-name">Nome / Descrição <span class="req">*</span></div>
+              <div class="info-field-desc">Nome e descrição do projeto. A descrição aparece no currículo — seja claro sobre o que o projeto faz e qual problema resolve.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Link</div>
+              <div class="info-field-desc">URL do repositório, demo ou documentação. Aparece ao lado do nome do projeto no currículo.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Início / Fim <span class="req">*</span></div>
+              <div class="info-field-desc">Período de desenvolvimento no formato <code>AAAA-MM</code>. Usado pela IA para priorizar projetos mais recentes.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Tags</div>
+              <div class="info-field-desc">Palavras-chave do projeto. A IA usa para decidir se o projeto é relevante para a vaga em questão. Ex: <code>backend</code>, <code>api</code>, <code>cli</code>, <code>open-source</code>.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Projeto acadêmico</div>
+              <div class="info-field-desc">Marque se o projeto foi desenvolvido durante a graduação. Isso fornece contexto extra para a IA ao apresentá-lo no currículo.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Certificados -->
+        <div class="info-section">
+          <div class="info-section-title">Perfil — Certificados</div>
+          <div class="info-fields">
+            <div class="info-field">
+              <div class="info-field-name">Nome / Emissor <span class="req">*</span></div>
+              <div class="info-field-desc">Nome do certificado e a organização que emitiu. Ambos aparecem na seção de certificações do currículo.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Data de emissão <span class="req">*</span></div>
+              <div class="info-field-desc">Mês e ano em que o certificado foi emitido, no formato <code>AAAA-MM</code>. Aparece ao lado do nome no currículo.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">URL de verificação</div>
+              <div class="info-field-desc">Link para validar o certificado (ex: Credly, AWS Certification, Coursera). O PDF transforma em link clicável no nome do certificado.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Tags</div>
+              <div class="info-field-desc">Área do certificado. Ex: <code>cloud</code>, <code>aws</code>, <code>devops</code>, <code>segurança</code>. Ajuda a IA a decidir quais certificados incluir por tipo de vaga.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Score de qualidade e Idiomas -->
+        <div class="info-section">
+          <div class="info-section-title">Score de Qualidade & Idiomas</div>
+          <div class="info-fields">
+            <div class="info-field">
+              <div class="info-field-name">Score de qualidade</div>
+              <div class="info-field-desc">
+                Calculado automaticamente comparando o stack da vaga com as suas <strong>Habilidades</strong> cadastradas no perfil. Quanto mais do que a vaga pede você tiver em habilidades, maior o score.
+                <div class="quality-row" style="margin-top:8px">
+                  <div class="qr-item"><span class="badge badge-low">low</span> Menos de 30% do stack da vaga cobre suas habilidades</div>
+                  <div class="qr-item"><span class="badge badge-mid">mid</span> Entre 30% e 70% — match parcial</div>
+                  <div class="qr-item"><span class="badge badge-high">high</span> 70% ou mais — bom fit</div>
+                </div>
+                <div style="margin-top:8px">O score não impede a geração do currículo — é uma indicação para você priorizar quais vagas candidatar. Mantenha suas habilidades atualizadas para scores mais precisos.</div>
+              </div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Idioma do currículo</div>
+              <div class="info-field-desc"><strong>PT-BR</strong> — currículo em Português com seções em português ("Experiência Profissional", "Habilidades Técnicas", etc.). Use para vagas de empresas brasileiras.<br><br><strong>EN</strong> — currículo em Inglês ("Experience", "Skills", etc.). Use para vagas internacionais ou empresas onde o padrão é inglês. O idioma é definido por vaga — você pode ter currículos nos dois idiomas para a mesma empresa.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feedback -->
+        <div class="info-section">
+          <div class="info-section-title">Avaliação dos Currículos Gerados</div>
+          <div class="info-fields">
+            <div class="info-field">
+              <div class="info-field-name">Para que serve</div>
+              <div class="info-field-desc">Ao avaliar um currículo gerado, você alimenta o sistema com exemplos de qualidade. A IA usa avaliações <strong>Excelente</strong> como referência para currículos futuros do mesmo usuário — ajuda a manter o tom, o estilo e o nível de detalhe que funcionaram bem.</div>
+            </div>
+            <div class="info-field">
+              <div class="info-field-name">Fraco / Regular</div>
+              <div class="info-field-desc">Use para registrar o que não funcionou. O campo de comentário é importante aqui — descreva o que estava errado (ex: "muito genérico", "omitiu a conquista mais importante", "tom muito formal"). Isso é considerado em gerações futuras.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dicas -->
+        <div class="info-section" style="border-left-color:var(--green)">
+          <div class="info-section-title" style="color:var(--green)">Dicas para melhores resultados</div>
+          <ul class="tip-list">
+            <li><strong>Perfil completo antes de cadastrar vagas.</strong> A IA só pode usar o que está no seu perfil. Preencha pelo menos experiências, habilidades e projetos antes de começar a cadastrar vagas.</li>
+            <li><strong>Conquistas com números fazem diferença.</strong> "Reduziu latência em 40%" é infinitamente mais útil que "Melhorou a performance". O currículo gerado vai refletir essa especificidade.</li>
+            <li><strong>Tags consistentes melhoram o matching.</strong> Use os mesmos termos nas tags das experiências e nas habilidades. Ex: se a habilidade é <code>docker</code>, não use <code>Docker</code> na tag — a comparação é case-insensitive mas ortografia importa.</li>
+            <li><strong>Não cadastre conquistas demais.</strong> O sistema limita a 4 conquistas por experiência enviadas para a IA. Coloque as mais impactantes — a IA vai escolher as mais relevantes para cada vaga.</li>
+            <li><strong>O email de contato no currículo.</strong> Verifique se está configurado em Info Básica. É o email que aparece no PDF e que a empresa vai usar para entrar em contato.</li>
+            <li><strong>Use o feedback.</strong> Avaliar os currículos como "Excelente" quando estiverem bons treina o sistema para manter aquele padrão nas próximas gerações.</li>
+            <li><strong>Scraping pode falhar em certas vagas.</strong> Plataformas com login obrigatório ou proteção anti-bot (ex: LinkedIn com cookies de sessão) podem não ser extraídas automaticamente. Nesse caso, preencha empresa, título e descrição manualmente ao cadastrar.</li>
+          </ul>
+        </div>
+
       </div>
     </section>
 
@@ -425,12 +724,25 @@
   </div>
 </div>
 
+<!-- ─── Confirm Modal ─── -->
+<div id="confirm-modal" class="hidden" style="
+  position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;
+  align-items:center;justify-content:center;z-index:1001;
+">
+  <div class="form-card" style="max-width:340px;width:100%;margin:16px">
+    <p id="confirm-msg" style="font-size:14px;line-height:1.6;margin-bottom:20px;color:var(--text)"></p>
+    <div style="display:flex;gap:10px">
+      <button id="confirm-ok" class="btn btn-danger">Confirmar</button>
+      <button id="confirm-no" class="btn btn-ghost">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast hidden"></div>
 
 <script src="/static/js/api.js"></script>
 <script src="/static/js/app.js"></script>
 <script src="/static/js/jobs.js"></script>
 <script src="/static/js/profile.js"></script>
-<script src="/static/js/filters.js"></script>
 </body>
 </html>

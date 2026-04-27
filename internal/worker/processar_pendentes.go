@@ -66,7 +66,7 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		w.Bus.Publish(userID, sse.JobEvent{ID: jobID, Status: string(db.JobStatusProcessing)})
 	}
 
-	// Run scraper, match, and filters concurrently — all are independent at this stage.
+	// Run scraper and match concurrently — both are independent at this stage.
 	type scraperOut struct {
 		result *scraper.ResultScraper
 		err    error
@@ -75,14 +75,9 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		matches services.MatchResult
 		err     error
 	}
-	type filtersOut struct {
-		filtros []string
-		err     error
-	}
 
 	scraperCh := make(chan scraperOut, 1)
 	matchCh := make(chan matchOut, 1)
-	filtersCh := make(chan filtersOut, 1)
 
 	go func() {
 		r, err := w.doScraper(ctx, job)
@@ -92,18 +87,9 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		m, err := w.matchComBancoPessoal(ctx, job)
 		matchCh <- matchOut{m, err}
 	}()
-	go func() {
-		f, repoErr := w.Filters.QuerySelectFiltersForUser(ctx, userID)
-		var err error
-		if repoErr != nil {
-			err = repoErr
-		}
-		filtersCh <- filtersOut{f, err}
-	}()
 
 	sOut := <-scraperCh
 	mOut := <-matchCh
-	fOut := <-filtersCh
 
 	if sOut.err != nil {
 		if w.handleIfRateLimit(ctx, job, jobID, sOut.err) {
@@ -133,17 +119,17 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 	job.CompanyName = util.ConvertToPgText(result.Company)
 	job.JobTitle = util.ConvertToPgText(result.Title)
 
-	if fOut.err != nil {
-		w.Logger.Error("Erro ao buscar filtros do usuário", zap.String("job_id", jobID), zap.Error(fOut.err))
-	}
-
-	quality := calcularQualidade(result, fOut.filtros, w.aliases)
-
 	if mOut.err != nil {
 		w.Logger.Error("Erro ao fazer match com banco pessoal", zap.String("job_id", jobID), zap.Error(mOut.err))
 		w.failJob(ctx, job)
 		return
 	}
+
+	skillNames := make([]string, len(mOut.matches.Habilidades))
+	for i, s := range mOut.matches.Habilidades {
+		skillNames[i] = s.SkillName
+	}
+	quality := calcularQualidade(result, skillNames, w.aliases)
 
 	str, errJ := w.buildUserPrompt(job, &mOut.matches)
 	if errJ != nil {
@@ -186,24 +172,10 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		w.Logger.Warn("Erro ao buscar perfil do usuário, usando placeholders", zap.String("job_id", jobID), zap.Error(errProfile))
 	}
 
-	var webLinks []string
-	if profile.PortfolioUrl.Valid && profile.PortfolioUrl.String != "" {
-		webLinks = append(webLinks, profile.PortfolioUrl.String)
+	portfolioStr := ""
+	if profile.PortfolioUrl.Valid {
+		portfolioStr = profile.PortfolioUrl.String
 	}
-	if len(profile.OtherLinks) > 0 {
-		var otherLinks []struct {
-			Label string `json:"label"`
-			URL   string `json:"url"`
-		}
-		if err := json.Unmarshal(profile.OtherLinks, &otherLinks); err == nil {
-			for _, l := range otherLinks {
-				if l.URL != "" {
-					webLinks = append(webLinks, l.URL)
-				}
-			}
-		}
-	}
-	portfolioStr := strings.Join(webLinks, " | ")
 
 	replacer := strings.NewReplacer(
 		"{{CANDIDATO_NOME}}", profile.FullName.String,
