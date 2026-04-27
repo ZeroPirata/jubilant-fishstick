@@ -25,8 +25,7 @@ func (w *Worker) processarPendentes(ctx context.Context) {
 		return
 	}
 
-	const batchSize int32 = 20
-	vagas, err := w.Pipeline.WorkerSelectPendingJobs(ctx, batchSize)
+	vagas, err := w.Pipeline.WorkerSelectPendingJobs(ctx, w.batchSize)
 	if err != nil {
 		w.Logger.Error("Erro ao buscar vagas pendentes", zap.Error(err))
 		return
@@ -34,8 +33,7 @@ func (w *Worker) processarPendentes(ctx context.Context) {
 
 	w.Logger.Info("Quantidade de vagas pendentes", zap.Int("quantity", len(vagas)))
 
-	const maxConcurrent = 5
-	sem := make(chan struct{}, maxConcurrent)
+	sem := make(chan struct{}, w.maxConcurrent)
 	var wg sync.WaitGroup
 
 	for _, vaga := range vagas {

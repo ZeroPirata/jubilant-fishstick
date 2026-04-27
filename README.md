@@ -95,7 +95,7 @@ O usuário envia uma URL (ex: LinkedIn, Amazon Jobs, Jobright) ou preenche os da
 
 Se a URL já foi cadastrada pelo mesmo usuário, o banco retorna `UNIQUE constraint` e a API responde `409 Conflict`.
 
-### 2. Worker — ciclo de 30 segundos
+### 2. Worker — ciclo configurável
 
 ```mermaid
 sequenceDiagram
@@ -107,13 +107,13 @@ sequenceDiagram
     participant LLM
     participant SSE as SSE Bus
 
-    Ticker->>Worker: tick
+    Ticker->>Worker: tick (WORKER_INTERVAL, padrão 30s)
     Worker->>Cache: IsRateLimited?
     alt rate limit ativo
         Worker-->>Ticker: aguarda próximo tick
     end
-    Worker->>DB: SELECT jobs WHERE status='pending' LIMIT 20
-    loop até 5 goroutines simultâneas
+    Worker->>DB: SELECT jobs WHERE status='pending' LIMIT {WORKER_BATCH_SIZE}
+    loop até {WORKER_MAX_CONCURRENT} goroutines simultâneas
         Worker->>DB: UPDATE status = 'processing'
         Worker->>SSE: Publish {id, status: processing}
         par scraper e match em paralelo
@@ -585,6 +585,11 @@ SCRAPE_AI_ACTIVATE=false
 SCRAPE_AI_PROVIDER=claude
 SCRAPE_AI_KEY=sk-ant-...
 SCRAPE_AI_MODEL=claude-haiku-4-5-20251001
+
+# Worker
+WORKER_MAX_CONCURRENT=5   # goroutines simultâneas (gargalo real: rate limit da LLM)
+WORKER_BATCH_SIZE=20      # jobs buscados por tick
+WORKER_INTERVAL=30s       # intervalo entre verificações
 
 # Autenticação
 JWT_SECRET=troque-isso

@@ -8,6 +8,7 @@ type Config struct {
 	Cache    CacheConfig
 	Project  ProjectConfig
 	Ai       AiConfig
+	Worker   WorkerConfig
 	ScrapeAi ScrapeAiConfig
 	Hash     HashConfig
 	Jwt      JwtConfig
@@ -84,4 +85,10 @@ type CacheConfig struct {
 	Addr     string `env:"REDIS_ADDR,required"`
 	Password string `env:"REDIS_PASSWORD"`
 	DB       int    `env:"REDIS_DB" envDefault:"0"`
+}
+
+type WorkerConfig struct {
+	MaxConcurrent int           `env:"WORKER_MAX_CONCURRENT" envDefault:"5"`
+	BatchSize     int           `env:"WORKER_BATCH_SIZE" envDefault:"20"`
+	Interval      time.Duration `env:"WORKER_INTERVAL" envDefault:"30s"`
 }

@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"hackton-treino/config"
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/repository/aliases"
 	"hackton-treino/internal/repository/feedbacks"
@@ -26,31 +27,37 @@ const (
 )
 
 type Worker struct {
-	Logger     *zap.Logger
-	Pipeline   workerRepo.Repository
-	Users      users.Repository
-	Feedbacks  feedbacks.Repository
-	Aliases    aliases.Repository
-	aliases    map[string]string
-	promptPTBR string
-	promptEN   string
-	LLM        services.AiService
-	ScraperAi  bool
-	Cache      ucache.Cache
-	Bus        *sse.Bus
+	Logger        *zap.Logger
+	Pipeline      workerRepo.Repository
+	Users         users.Repository
+	Feedbacks     feedbacks.Repository
+	Aliases       aliases.Repository
+	aliases       map[string]string
+	promptPTBR    string
+	promptEN      string
+	LLM           services.AiService
+	ScraperAi     bool
+	Cache         ucache.Cache
+	Bus           *sse.Bus
+	maxConcurrent int
+	batchSize     int32
+	interval      time.Duration
 }
 
-func NewWorker(logger *zap.Logger, conn *pgxpool.Pool, llm services.AiService, scraperAi bool, rds *redis.Client, bus *sse.Bus) *Worker {
+func NewWorker(logger *zap.Logger, conn *pgxpool.Pool, llm services.AiService, scraperAi bool, rds *redis.Client, bus *sse.Bus, cfg config.WorkerConfig) *Worker {
 	return &Worker{
-		Logger:    logger,
-		LLM:       llm,
-		Pipeline:  workerRepo.New(conn),
-		Users:     users.New(conn),
-		Feedbacks: feedbacks.New(conn),
-		Aliases:   aliases.New(conn),
-		ScraperAi: scraperAi,
-		Cache:     ucache.New(rds),
-		Bus:       bus,
+		Logger:        logger,
+		LLM:           llm,
+		Pipeline:      workerRepo.New(conn),
+		Users:         users.New(conn),
+		Feedbacks:     feedbacks.New(conn),
+		Aliases:       aliases.New(conn),
+		ScraperAi:     scraperAi,
+		Cache:         ucache.New(rds),
+		Bus:           bus,
+		maxConcurrent: cfg.MaxConcurrent,
+		batchSize:     int32(cfg.BatchSize),
+		interval:      cfg.Interval,
 	}
 }
 
@@ -89,7 +96,7 @@ func (w *Worker) loadPrompt(path string) (string, error) {
 func (w *Worker) Start(ctx context.Context) {
 	w.Logger.Info("Worker started")
 
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
 	if aliasMap, err := w.Aliases.QuerySelectAllStackAliases(ctx); err == nil && aliasMap != nil {

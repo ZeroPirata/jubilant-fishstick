@@ -81,7 +81,7 @@ func run() error {
 
 	llm := services.NewLLMService(cfg)
 	go func() {
-		worker.NewWorker(zap.L(), db, *llm, cfg.ScrapeAi.Activate, rds, bus).Start(ctx)
+		worker.NewWorker(zap.L(), db, *llm, cfg.ScrapeAi.Activate, rds, bus, cfg.Worker).Start(ctx)
 	}()
 
 	<-ctx.Done()
