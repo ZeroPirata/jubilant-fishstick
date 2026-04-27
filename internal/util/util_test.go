@@ -98,9 +98,11 @@ func TestParsePgDate(t *testing.T) {
 			wantValid: false,
 		},
 		{
-			label:     "data parcial → invalid",
+			label:     "data parcial YYYY-MM → valid (formato do input[type=month])",
 			input:     "2024-06",
-			wantValid: false,
+			wantValid: true,
+			wantYear:  2024,
+			wantMonth: time.June,
 		},
 		{
 			label:     "primeiro dia do ano",
