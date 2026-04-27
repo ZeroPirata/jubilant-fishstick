@@ -1,5 +1,8 @@
 # Job Pipeline
 
+[![Deploy](https://github.com/ZeroPirata/jubilant-fishstick/actions/workflows/deploy.yml/badge.svg)](https://github.com/ZeroPirata/jubilant-fishstick/actions/workflows/deploy.yml)
+
+
 Plataforma end-to-end para geração automatizada de currículos e cartas de apresentação personalizados por IA. O sistema automatiza todo o ciclo de candidatura: coleta dados da vaga, analisa compatibilidade com o perfil do candidato, gera documentos via LLM e entrega PDFs prontos para envio — sem intervenção manual.
 
 ---
