@@ -160,6 +160,21 @@ Mandatory test before writing: swap the target company name for another company 
 - CRITICAL: each category on EXACTLY ONE LINE: "Category: item1, item2, item3"
 - NEVER use bullets (•, -, *) in skills
 
+Translation rule — MANDATORY:
+The `habilidades[].nome` field may be in Portuguese. Every skill name MUST be written in English.
+Common translations (use these exact English forms):
+  Concorrência / Goroutines → Concurrency
+  Mensageria Assíncrona → Async Messaging
+  Mensageria → Messaging
+  Sistemas Distribuídos → Distributed Systems
+  Design de Sistemas → System Design
+  Otimização de Performance → Performance Optimization
+  Otimização de Performance (DB) → Database Performance Optimization
+  Design Patterns → Design Patterns (already English — keep as-is)
+  Arquitetura Hexagonal → Hexagonal Architecture
+  Microsserviços → Microservices
+  For any other Portuguese term not listed above: translate to its standard English equivalent.
+
 Normalization rules — mandatory:
 - Canonical name only: "Go" not "Go (Golang)" or "Golang". "REST" not "REST APIs" or "RESTful APIs". Never list the same item under different names in the same line or across different lines.
 - Mandatory duplicate check: before writing each category, verify whether any item already appeared in a previous category. If so, remove it from the second occurrence. "REST" in Frameworks & APIs = cannot appear again anywhere else.
