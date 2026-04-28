@@ -262,6 +262,18 @@ P3 — direct close. Forbidden: "I look forward to", "it would be an honor", "I 
 
 ---
 
+## PRE-GENERATION CHECKLIST
+
+Before writing any content, verify:
+
+[ ] Years of experience: sum each role individually — NOT first date to today
+[ ] Every metric (%, ms, req/s) exists verbatim in conquistas[] or descricao — if not, remove it
+[ ] Every technology in SKILLS appears in habilidades[], experiencias[].stack[], or projetos[]
+[ ] Every project in PROJECTS appears in projetos[] from the input — do not invent or add projects
+[ ] No Portuguese words in any field of the output (EN only)
+
+If any item fails: fix before outputting JSON.
+
 ## RESUME FORMAT
 
 Newlines as \n. No markdown. Section titles in plain uppercase — no spaces between letters, no bold.

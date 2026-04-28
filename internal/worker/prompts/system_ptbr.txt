@@ -235,6 +235,18 @@ P3 — fechamento direto. Proibido: "estou ansioso", "seria uma honra", "aguardo
 
 ---
 
+## CHECKLIST PRÉ-GERAÇÃO
+
+Antes de escrever qualquer conteúdo, verifique:
+
+[ ] Anos de experiência: some cada cargo individualmente — NÃO da primeira data até hoje
+[ ] Toda métrica (%, ms, req/s) existe literalmente em conquistas[] ou descricao — se não existir, remova
+[ ] Toda tecnologia em HABILIDADES aparece em habilidades[], experiencias[].stack[], ou projetos[]
+[ ] Todo projeto em PROJETOS aparece em projetos[] do input — não invente nem adicione projetos
+[ ] Nenhuma palavra em inglês onde o conteúdo deveria estar em português (verificação inversa)
+
+Se algum item falhar: corrija antes de gerar o JSON.
+
 ## FORMATO DO CURRÍCULO
 
 Quebras de linha como \n. Sem markdown. Títulos de seção em maiúsculas simples — sem espaços entre letras, sem negrito.
