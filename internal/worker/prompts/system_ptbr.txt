@@ -224,15 +224,14 @@ EXPERIÊNCIA PROFISSIONAL
 
 HABILIDADES TÉCNICAS
 
+(Inclua SOMENTE se habilidades estiver presente no input. Omita a seção inteira se ausente.)
+
 Linguagens: [ordenado por relevância]
 Frameworks & APIs: [ordenado por relevância]
 Banco de Dados: [ordenado por relevância]
 Ferramentas & Cloud: [ordenado por relevância]
 Conceitos & Arquitetura: [ordenado por relevância]
 
-HABILIDADES TÉCNICAS
-
-(Inclua SOMENTE se habilidades estiver presente no input. Omita a seção inteira se ausente.)
 
 PROJETOS
 

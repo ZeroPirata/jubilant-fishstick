@@ -242,15 +242,13 @@ EXPERIENCE
 
 SKILLS
 
+(Include ONLY if habilidades is present in the input. Omit the entire section if absent.)
+
 Languages: [ordered by relevance]
 Frameworks & APIs: [ordered by relevance]
 Databases: [ordered by relevance]
 Tools & Cloud: [ordered by relevance]
 Concepts & Architecture: [ordered by relevance]
-
-SKILLS
-
-(Include ONLY if habilidades is present in the input. Omit the entire section if absent.)
 
 PROJECTS
 
