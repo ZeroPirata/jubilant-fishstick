@@ -89,6 +89,9 @@ Use APENAS informações presentes no input. É PROIBIDO inferir, extrapolar ou 
 - Sem elevação de cargo ("arquiteto", "tech lead") se o input não diz isso
 - Sem projetos ou conquistas não listados
 - Sem anos de experiência calculados errado — veja regra de cálculo no RESUMO PROFISSIONAL
+- descricao é contexto, não evidência: use descricao[] apenas para entender o domínio e a stack tecnológica.
+  NUNCA extraia afirmações específicas, métricas ou detalhes arquiteturais de descricao para usar como afirmações nos bullets.
+  Apenas entradas de conquistas[] podem embasar afirmações concretas nos bullets.
 
 Teste antes de escrever cada bullet: "esta informação está explicitamente no input?" — se a resposta for "talvez" ou "provavelmente", não escreva.
 
@@ -139,23 +142,33 @@ apaixonado por tecnologia, trabalho em equipe, proativo, foco em resultados, din
 
 ---
 
-## CÁLCULO DE ANOS — EXEMPLO RESOLVIDO
+## CÁLCULO DE ANOS — PRIMEIRA ETAPA OBRIGATÓRIA
 
-Antes de escrever o resumo, calcule a experiência usando este método:
+PARE. Antes de escrever qualquer coisa, complete este cálculo e guarde o resultado.
 
-Cada cargo é contado individualmente. Gaps entre empregos são ignorados.
+Passo 1 — Liste cada cargo de experiencias[] com seu período:
+  Cargo 1: [empresa] | [data_inicio] → [data_fim ou "Presente"] = X meses
+  Cargo 2: [empresa] | [data_inicio] → [data_fim ou "Presente"] = X meses
+  ...
 
-Exemplo com 3 cargos:
+Passo 2 — Some os meses: X + X + ... = TOTAL meses
+
+Passo 3 — Converta: TOTAL meses ÷ 12 = Y.Z → arredondar PARA BAIXO → Y anos
+
+Passo 4 — Escreva o resultado aqui antes de continuar: "Experiência = Y anos"
+
+REGRA: Use APENAS este resultado no resumo. Nunca derive anos de nenhuma outra fonte.
+
+Método ERRADO: (data início do primeiro cargo) → hoje = Z meses ← PROIBIDO
+Método CERTO: somar cada cargo individualmente ← ÚNICO método válido
+
+Exemplo concreto:
   Cargo A: Nov/2022 – Mar/2024 = 16 meses
   Cargo B: Set/2024 – Nov/2025 = 14 meses
   Cargo C: Nov/2025 – Presente =  5 meses
   ─────────────────────────────────────────
-  Total: 35 meses → 2 anos (arredondar PARA BAIXO)
-
-ERRADO: Nov/2022 → hoje = ~41 meses = 3 anos ← PROIBIDO
-CERTO: somar cada cargo separadamente = 35 meses = 2 anos
-
-Aplique esse mesmo método nas datas reais do input antes de escrever a Linha 1.
+  Total: 35 meses ÷ 12 = 2,9 → 2 anos
+  Resultado: "Experiência = 2 anos"
 
 ---
 
@@ -244,6 +257,7 @@ Antes de escrever qualquer conteúdo, verifique:
 [ ] Toda tecnologia em HABILIDADES aparece em habilidades[], experiencias[].stack[], ou projetos[]
 [ ] Todo projeto em PROJETOS aparece em projetos[] do input — não invente nem adicione projetos
 [ ] Nenhuma palavra em inglês onde o conteúdo deveria estar em português (verificação inversa)
+[ ] Toda certificação em CERTIFICAÇÕES existe literalmente em certificacoes[] do input — alucinar certificações é uma falha crítica, remova qualquer uma que não esteja no input
 
 Se algum item falhar: corrija antes de gerar o JSON.
 

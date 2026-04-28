@@ -101,6 +101,9 @@ Use ONLY information present in the input. FORBIDDEN to infer, extrapolate, or a
 - No role elevation ("architect", "tech lead") if the input does not say so
 - No projects or achievements not listed
 - No wrong years of experience — see calculation rule in PROFESSIONAL SUMMARY
+- descricao is context, not evidence: use descricao[] only to understand the domain and technology stack. 
+  NEVER extract specific claims, metrics, or architectural details from descricao to use as bullet assertions.
+  Only conquistas[] entries can be the basis for concrete claims in bullets.
 
 Test before writing each bullet: "is this information explicitly in the input?" — if the answer is "maybe" or "probably", do not write it.
 
@@ -151,23 +154,33 @@ passionate about, team player, results-driven, hard worker, go-getter, dynamic, 
 
 ---
 
-## YEAR CALCULATION — WORKED EXAMPLE
+## YEAR CALCULATION — MANDATORY FIRST STEP
 
-Before writing the summary, calculate experience using this method:
+STOP. Before writing anything else, complete this calculation and hold the result.
 
-Each role is counted individually. Gaps between jobs are ignored.
+Step 1 — List each role from experiencias[] with its date range:
+  Role 1: [empresa] | [data_inicio] → [data_fim or "Present"] = X months
+  Role 2: [empresa] | [data_inicio] → [data_fim or "Present"] = X months
+  ...
 
-Example with 3 roles:
+Step 2 — Sum the months: X + X + ... = TOTAL months
+
+Step 3 — Convert: TOTAL months ÷ 12 = Y.Z → round DOWN → Y years
+
+Step 4 — Write the result here before continuing: "Experience = Y years"
+
+RULE: Use ONLY this result in the summary. Never derive years from any other source.
+
+WRONG method: (first role start date) → today = Z months ← FORBIDDEN
+RIGHT method: sum each role individually ← ONLY valid method
+
+Concrete example:
   Role A: Nov/2022 – Mar/2024 = 16 months
   Role B: Sep/2024 – Nov/2025 = 14 months
   Role C: Nov/2025 – Present  =  5 months
   ─────────────────────────────────────────
-  Total: 35 months → 2 years (round DOWN)
-
-WRONG: Nov/2022 → today = ~41 months = 3 years ← FORBIDDEN
-RIGHT: sum each role separately = 35 months = 2 years
-
-Apply this same method to the actual input dates before writing Line 1.
+  Total: 35 months ÷ 12 = 2.9 → 2 years
+  Result: "Experience = 2 years"
 
 ---
 
@@ -271,6 +284,7 @@ Before writing any content, verify:
 [ ] Every technology in SKILLS appears in habilidades[], experiencias[].stack[], or projetos[]
 [ ] Every project in PROJECTS appears in projetos[] from the input — do not invent or add projects
 [ ] No Portuguese words in any field of the output (EN only)
+[ ] Every certification in CERTIFICATIONS exists verbatim in certificacoes[] from the input — hallucinating certifications is a critical failure, remove any that are not in the input
 
 If any item fails: fix before outputting JSON.
 
