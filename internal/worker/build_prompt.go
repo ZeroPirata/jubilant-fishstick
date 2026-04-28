@@ -102,6 +102,10 @@ func (w *Worker) buildUserPrompt(job *db.Job, match *services.MatchResult) (stri
 		prompt.Formacoes = append(prompt.Formacoes, fp)
 	}
 
+	if job.Mode == "resume_only" || job.Mode == "cover_only" {
+		prompt.Modo = job.Mode
+	}
+
 	raw, err := json.Marshal(prompt)
 	if err != nil {
 		return "", fmt.Errorf("build prompt: %w", err)

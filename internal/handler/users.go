@@ -143,9 +143,9 @@ func (h *UserHandler) UpsertLinks(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) ListExperiences(w http.ResponseWriter, r *http.Request) {
 	GenericList(
 		func(userID pgtype.UUID, q PaginationParams) db.QueryListExperiencesParams {
-			search := pgtype.Text{}
+			search := ""
 			if q.Search != nil {
-				search = pgtype.Text{String: *q.Search, Valid: true}
+				search = *q.Search
 			}
 			return db.QueryListExperiencesParams{UserID: userID, Search: search, Cursor: q.Cursor, Size: q.Size}
 		},
@@ -229,9 +229,9 @@ func (h *UserHandler) DeleteExperience(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) ListAcademic(w http.ResponseWriter, r *http.Request) {
 	GenericList(
 		func(userID pgtype.UUID, q PaginationParams) db.QueryListAcademicHistoriesParams {
-			search := pgtype.Text{}
+			search := ""
 			if q.Search != nil {
-				search = pgtype.Text{String: *q.Search, Valid: true}
+				search = *q.Search
 			}
 			return db.QueryListAcademicHistoriesParams{UserID: userID, Search: search, Cursor: q.Cursor, Size: q.Size}
 		},
@@ -307,9 +307,9 @@ func (h *UserHandler) DeleteAcademic(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) ListSkills(w http.ResponseWriter, r *http.Request) {
 	GenericList(
 		func(userID pgtype.UUID, q PaginationParams) db.QueryListSkillsParams {
-			search := pgtype.Text{}
+			search := ""
 			if q.Search != nil {
-				search = pgtype.Text{String: *q.Search, Valid: true}
+				search = *q.Search
 			}
 			return db.QueryListSkillsParams{UserID: userID, Search: search, Cursor: q.Cursor, Size: q.Size}
 		},
@@ -381,9 +381,9 @@ func (h *UserHandler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	GenericList(
 		func(userID pgtype.UUID, q PaginationParams) db.QueryListProjectsParams {
-			search := pgtype.Text{}
+			search := ""
 			if q.Search != nil {
-				search = pgtype.Text{String: *q.Search, Valid: true}
+				search = *q.Search
 			}
 			return db.QueryListProjectsParams{UserID: userID, Search: search, Cursor: q.Cursor, Size: q.Size}
 		},
@@ -463,9 +463,9 @@ func (h *UserHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) ListCertificates(w http.ResponseWriter, r *http.Request) {
 	GenericList(
 		func(userID pgtype.UUID, q PaginationParams) db.QueryListCertificatesParams {
-			search := pgtype.Text{}
+			search := ""
 			if q.Search != nil {
-				search = pgtype.Text{String: *q.Search, Valid: true}
+				search = *q.Search
 			}
 			return db.QueryListCertificatesParams{UserID: userID, Search: search, Cursor: q.Cursor, Size: q.Size}
 		},

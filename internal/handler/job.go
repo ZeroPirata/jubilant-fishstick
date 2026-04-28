@@ -10,6 +10,7 @@ import (
 	"hackton-treino/internal/repository/feedbacks"
 	"hackton-treino/internal/repository/jobs"
 	"hackton-treino/internal/repository/secevents"
+	"hackton-treino/internal/repository/users"
 	"hackton-treino/internal/sse"
 	"hackton-treino/internal/util"
 	"net/http"
@@ -25,6 +26,7 @@ type JobHandler struct {
 	*BaseHandler
 	Jobs      jobs.Repository
 	Feedbacks feedbacks.Repository
+	Users     users.Repository
 	PDF       *PDFService
 	Bus       *sse.Bus
 	SecLog    secevents.Repository
@@ -35,6 +37,7 @@ func NewJobHandler(logger *zap.Logger, conn *pgxpool.Pool, pdf *PDFService, bus 
 		BaseHandler: NewBaseHandler(logger),
 		Jobs:        jobs.New(conn),
 		Feedbacks:   feedbacks.New(conn),
+		Users:       users.New(conn),
 		PDF:         pdf,
 		Bus:         bus,
 		SecLog:      secLog,
@@ -105,6 +108,11 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	mode := req.Mode
+	if mode == "" {
+		mode = "full"
+	}
+
 	hasExtraData := req.CompanyName != nil ||
 		req.JobTitle != nil ||
 		req.Description != nil ||
@@ -124,6 +132,7 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 			TechStack:    util.ConvertToPgTextArray(req.Stacks),
 			Requirements: util.ConvertToPgTextArray(req.Requirements),
 			Language:     util.ConvertToPgTextPtr(req.Language),
+			Mode:         mode,
 		}
 		jobId, errR = h.Jobs.QueryInsertFullJob(r.Context(), jobFull)
 		if errR != nil {
@@ -135,6 +144,7 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 		jobWithUrl := db.QueryInsertUrlJobParams{
 			ExternalUrl: req.Url,
 			UserID:      userId,
+			Mode:        mode,
 		}
 		jobId, errR = h.Jobs.QueryInsertUrlJob(r.Context(), jobWithUrl)
 		if errR != nil {
@@ -143,7 +153,8 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{"id": jobId})
+	warnings := checkProfileWeakness(r.Context(), h.Users, userId.String())
+	writeJSON(w, http.StatusCreated, map[string]any{"id": jobId, "warnings": warnings})
 }
 
 func (h *JobHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
@@ -155,22 +166,12 @@ func (h *JobHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 
 	cursor, size := getPaginationParams(r)
 
-	var status pgtype.Text
-	if s := r.URL.Query().Get("status"); s != "" {
-		status = pgtype.Text{String: s, Valid: true}
-	}
-
-	var quality pgtype.Text
-	if q := r.URL.Query().Get("quality"); q != "" {
-		quality = pgtype.Text{String: q, Valid: true}
-	}
-
 	rows, errR := h.Jobs.QuerySelectJobsForUser(r.Context(), db.QuerySelectJobsForUserParams{
 		UserID:  userID,
 		Cursor:  cursor,
 		Size:    size,
-		Status:  status,
-		Quality: quality,
+		Status:  r.URL.Query().Get("status"),
+		Quality: r.URL.Query().Get("quality"),
 	})
 	if errR != nil {
 		writeRepositoryError(w, errR)
@@ -432,9 +433,15 @@ func (h *JobHandler) RetryJobProcessing(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	var body struct {
+		Mode string `json:"mode"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
 	errR = h.Jobs.QueryReprocessJob(r.Context(), db.QueryReprocessJobParams{
 		ID:     pgJobId,
 		UserID: userId,
+		Mode:   body.Mode,
 	})
 
 	if errR != nil {

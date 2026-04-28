@@ -1,13 +1,13 @@
 -- name: QueryInsertUrlJob :one
-INSERT INTO jobs(external_url, user_id)
-VALUES (@external_url, @user_id) RETURNING id;
+INSERT INTO jobs(external_url, user_id, mode)
+VALUES (@external_url, @user_id, @mode) RETURNING id;
 
 -- name: QueryInsertFullJob :one
 INSERT INTO jobs(external_url, user_id, company_name, job_title, description,
-    tech_stack, requirements, language)
+    tech_stack, requirements, language, mode)
 VALUES (
     @external_url, @user_id, @company_name, @job_title, @description,
-    @tech_stack, @requirements, @language
+    @tech_stack, @requirements, @language, @mode
 ) RETURNING id;
 
 
@@ -19,8 +19,8 @@ WHERE
     j.user_id = @user_id AND
     j.deleted_at IS NULL AND
     acc.deleted_at IS NULL AND
-    (@status::TEXT IS NULL OR j.status = @status::job_status) AND
-    (@quality::TEXT IS NULL OR j.quality = @quality::job_quality)
+    (NULLIF(@status::TEXT, '') IS NULL OR j.status = @status::job_status) AND
+    (NULLIF(@quality::TEXT, '') IS NULL OR j.quality = @quality::job_quality)
 ORDER BY j.created_at DESC
 LIMIT @size OFFSET @cursor;
 
@@ -29,6 +29,7 @@ LIMIT @size OFFSET @cursor;
 UPDATE jobs
 SET
     status     = 'pending',
+    mode       = COALESCE(NULLIF(@mode, ''), jobs.mode),
     updated_at = now()
 WHERE id = @id AND user_id = @user_id;
 

@@ -61,10 +61,10 @@ func (q *Queries) QueryFindJobByUrl(ctx context.Context, arg QueryFindJobByUrlPa
 
 const queryInsertFullJob = `-- name: QueryInsertFullJob :one
 INSERT INTO jobs(external_url, user_id, company_name, job_title, description,
-    tech_stack, requirements, language)
+    tech_stack, requirements, language, mode)
 VALUES (
     $1, $2, $3, $4, $5,
-    $6, $7, $8
+    $6, $7, $8, $9
 ) RETURNING id
 `
 
@@ -77,6 +77,7 @@ type QueryInsertFullJobParams struct {
 	TechStack    []string    `json:"tech_stack"`
 	Requirements []string    `json:"requirements"`
 	Language     pgtype.Text `json:"language"`
+	Mode         string      `json:"mode"`
 }
 
 func (q *Queries) QueryInsertFullJob(ctx context.Context, arg QueryInsertFullJobParams) (pgtype.UUID, error) {
@@ -89,6 +90,7 @@ func (q *Queries) QueryInsertFullJob(ctx context.Context, arg QueryInsertFullJob
 		arg.TechStack,
 		arg.Requirements,
 		arg.Language,
+		arg.Mode,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)
@@ -96,17 +98,18 @@ func (q *Queries) QueryInsertFullJob(ctx context.Context, arg QueryInsertFullJob
 }
 
 const queryInsertUrlJob = `-- name: QueryInsertUrlJob :one
-INSERT INTO jobs(external_url, user_id)
-VALUES ($1, $2) RETURNING id
+INSERT INTO jobs(external_url, user_id, mode)
+VALUES ($1, $2, $3) RETURNING id
 `
 
 type QueryInsertUrlJobParams struct {
 	ExternalUrl string      `json:"external_url"`
 	UserID      pgtype.UUID `json:"user_id"`
+	Mode        string      `json:"mode"`
 }
 
 func (q *Queries) QueryInsertUrlJob(ctx context.Context, arg QueryInsertUrlJobParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, queryInsertUrlJob, arg.ExternalUrl, arg.UserID)
+	row := q.db.QueryRow(ctx, queryInsertUrlJob, arg.ExternalUrl, arg.UserID, arg.Mode)
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -184,6 +187,7 @@ const queryReprocessJob = `-- name: QueryReprocessJob :exec
 UPDATE jobs
 SET
     status     = 'pending',
+    mode       = COALESCE(NULLIF($3, ''), jobs.mode),
     updated_at = now()
 WHERE id = $1 AND user_id = $2
 `
@@ -191,33 +195,34 @@ WHERE id = $1 AND user_id = $2
 type QueryReprocessJobParams struct {
 	ID     pgtype.UUID `json:"id"`
 	UserID pgtype.UUID `json:"user_id"`
+	Mode   string      `json:"mode"`
 }
 
 func (q *Queries) QueryReprocessJob(ctx context.Context, arg QueryReprocessJobParams) error {
-	_, err := q.db.Exec(ctx, queryReprocessJob, arg.ID, arg.UserID)
+	_, err := q.db.Exec(ctx, queryReprocessJob, arg.ID, arg.UserID, arg.Mode)
 	return err
 }
 
 const querySelectJobsForUser = `-- name: QuerySelectJobsForUser :many
-SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.created_at, j.updated_at, j.deleted_at, COUNT(*) OVER() AS total_count
+SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, COUNT(*) OVER() AS total_count
 FROM jobs j
 INNER JOIN user_accounts acc ON acc.id = j.user_id
 WHERE
     j.user_id = $1 AND
     j.deleted_at IS NULL AND
     acc.deleted_at IS NULL AND
-    ($4::TEXT IS NULL OR j.status = $4::job_status) AND
-    ($5::TEXT IS NULL OR j.quality = $5::job_quality)
+    (NULLIF($2::TEXT, '') IS NULL OR j.status = $2::job_status) AND
+    (NULLIF($3::TEXT, '') IS NULL OR j.quality = $3::job_quality)
 ORDER BY j.created_at DESC
-LIMIT $3 OFFSET $2
+LIMIT $5 OFFSET $4
 `
 
 type QuerySelectJobsForUserParams struct {
 	UserID  pgtype.UUID `json:"user_id"`
+	Status  string      `json:"status"`
+	Quality string      `json:"quality"`
 	Cursor  int32       `json:"cursor"`
 	Size    int32       `json:"size"`
-	Status  pgtype.Text `json:"status"`
-	Quality pgtype.Text `json:"quality"`
 }
 
 type QuerySelectJobsForUserRow struct {
@@ -232,6 +237,7 @@ type QuerySelectJobsForUserRow struct {
 	Status       JobStatus          `json:"status"`
 	Quality      NullJobQuality     `json:"quality"`
 	Language     pgtype.Text        `json:"language"`
+	Mode         string             `json:"mode"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
@@ -239,7 +245,13 @@ type QuerySelectJobsForUserRow struct {
 }
 
 func (q *Queries) QuerySelectJobsForUser(ctx context.Context, arg QuerySelectJobsForUserParams) ([]QuerySelectJobsForUserRow, error) {
-	rows, err := q.db.Query(ctx, querySelectJobsForUser, arg.UserID, arg.Cursor, arg.Size, arg.Status, arg.Quality)
+	rows, err := q.db.Query(ctx, querySelectJobsForUser,
+		arg.UserID,
+		arg.Status,
+		arg.Quality,
+		arg.Cursor,
+		arg.Size,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -259,6 +271,7 @@ func (q *Queries) QuerySelectJobsForUser(ctx context.Context, arg QuerySelectJob
 			&i.Status,
 			&i.Quality,
 			&i.Language,
+			&i.Mode,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -289,13 +302,13 @@ type QuerySelectResumeJobParams struct {
 }
 
 type QuerySelectResumeJobRow struct {
-	ID              pgtype.UUID    `json:"id"`
-	ContentJson     []byte         `json:"content_json"`
-	ResumePdfPath   pgtype.Text    `json:"resume_pdf_path"`
-	CoverLetterPath pgtype.Text    `json:"cover_letter_path"`
-	CompanyName     pgtype.Text    `json:"company_name"`
-	JobTitle        pgtype.Text    `json:"job_title"`
-	Language        pgtype.Text    `json:"language"`
+	ID              pgtype.UUID `json:"id"`
+	ContentJson     []byte      `json:"content_json"`
+	ResumePdfPath   pgtype.Text `json:"resume_pdf_path"`
+	CoverLetterPath pgtype.Text `json:"cover_letter_path"`
+	CompanyName     pgtype.Text `json:"company_name"`
+	JobTitle        pgtype.Text `json:"job_title"`
+	Language        pgtype.Text `json:"language"`
 	Quality         NullJobQuality `json:"quality"`
 }
 

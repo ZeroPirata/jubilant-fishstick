@@ -33,6 +33,7 @@ type Job struct {
 	Language     *string  `json:"language,omitempty"`
 	Quality      *string  `json:"quality,omitempty"`
 	Status       string   `json:"status,omitempty"`
+	Mode         string   `json:"mode,omitempty"` // "full" | "resume_only" | "cover_only"
 }
 
 // Resume

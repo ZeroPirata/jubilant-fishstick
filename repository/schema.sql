@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     status          job_status NOT NULL DEFAULT 'pending',
     quality         job_quality,
     language        TEXT DEFAULT 'pt-br',
+    mode            TEXT NOT NULL DEFAULT 'full',
     created_at      TIMESTAMPTZ DEFAULT now(),
     updated_at      TIMESTAMPTZ,
     deleted_at      TIMESTAMPTZ,

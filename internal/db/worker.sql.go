@@ -30,10 +30,30 @@ func (q *Queries) WorkerInsertGeneratedResume(ctx context.Context, arg WorkerIns
 	return id, err
 }
 
+const workerRecoverStuckJobs = `-- name: WorkerRecoverStuckJobs :execrows
+UPDATE jobs
+SET
+    status     = 'pending',
+    updated_at = now()
+WHERE
+    status     = 'processing'
+    AND deleted_at IS NULL
+    AND updated_at < $1
+`
+
+// Retorna jobs travados em 'processing' por mais de @cutoff para 'pending'.
+func (q *Queries) WorkerRecoverStuckJobs(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, workerRecoverStuckJobs, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const workerSelectPendingJobs = `-- name: WorkerSelectPendingJobs :many
 
 
-SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.created_at, j.updated_at, j.deleted_at
+SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at
 FROM jobs j
 INNER JOIN user_accounts acc ON acc.id = j.user_id
 WHERE
@@ -71,6 +91,7 @@ func (q *Queries) WorkerSelectPendingJobs(ctx context.Context, maxCount int32) (
 			&i.Status,
 			&i.Quality,
 			&i.Language,
+			&i.Mode,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -131,28 +152,12 @@ WHERE id = $2
 
 type WorkerUpdateJobQualityParams struct {
 	Quality NullJobQuality `json:"quality"`
-	ID      pgtype.UUID    `json:"id"`
+	ID      pgtype.UUID `json:"id"`
 }
 
 func (q *Queries) WorkerUpdateJobQuality(ctx context.Context, arg WorkerUpdateJobQualityParams) error {
 	_, err := q.db.Exec(ctx, workerUpdateJobQuality, arg.Quality, arg.ID)
 	return err
-}
-
-const workerRecoverStuckJobs = `-- name: WorkerRecoverStuckJobs :execrows
-UPDATE jobs
-SET
-    status     = 'pending',
-    updated_at = now()
-WHERE
-    status     = 'processing'
-    AND deleted_at IS NULL
-    AND updated_at < $1
-`
-
-func (q *Queries) WorkerRecoverStuckJobs(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
-	result, err := q.db.Exec(ctx, workerRecoverStuckJobs, cutoff)
-	return result.RowsAffected(), err
 }
 
 const workerUpdateJobStatus = `-- name: WorkerUpdateJobStatus :exec
@@ -164,7 +169,7 @@ WHERE id = $2
 `
 
 type WorkerUpdateJobStatusParams struct {
-	Status JobStatus   `json:"status"`
+	Status JobStatus `json:"status"`
 	ID     pgtype.UUID `json:"id"`
 }
 

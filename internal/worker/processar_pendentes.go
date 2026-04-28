@@ -142,11 +142,8 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		return
 	}
 
-	skillNames := make([]string, len(mOut.matches.Habilidades))
-	for i, s := range mOut.matches.Habilidades {
-		skillNames[i] = s.SkillName
-	}
-	quality := calcularQualidade(result, skillNames, w.aliases)
+	quality := calcularQualidade(result, mOut.matches.Habilidades, w.aliases)
+	gap := analisarGap(result.Stack, mOut.matches.Habilidades, w.aliases)
 
 	str, errJ := w.buildUserPrompt(job, &mOut.matches)
 	if errJ != nil {
@@ -243,12 +240,21 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		return rePlaceholder.ReplaceAllString(replacer.Replace(s), "")
 	}
 
+	curriculo := cleanUp(llmResponse.Curriculo)
+	coverLetter := cleanUp(llmResponse.CoverLetter)
+	switch job.Mode {
+	case "resume_only":
+		coverLetter = ""
+	case "cover_only":
+		curriculo = ""
+	}
+
 	conteudo := struct {
 		Curriculo   string `json:"curriculo"`
 		CoverLetter string `json:"cover_letter"`
 	}{
-		Curriculo:   cleanUp(llmResponse.Curriculo),
-		CoverLetter: cleanUp(llmResponse.CoverLetter),
+		Curriculo:   curriculo,
+		CoverLetter: coverLetter,
 	}
 
 	conteudoJSON, errJSON := json.Marshal(conteudo)
@@ -269,7 +275,7 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		return
 	}
 
-	w.completeJob(ctx, job, quality)
+	w.completeJob(ctx, job, quality, gap)
 
 	w.Logger.Info("Vaga processada com sucesso", zap.String("url", job.ExternalUrl), zap.String("job_id", jobID))
 }

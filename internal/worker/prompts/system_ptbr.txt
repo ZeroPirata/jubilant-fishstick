@@ -16,6 +16,10 @@ Schema:
 
 Sempre retorne curriculo e cover_letter. Nunca retorne { "error": ... }.
 
+Se o campo `modo` no input for `resume_only`: gere apenas o campo `curriculo`. Defina `cover_letter` como string vazia "".
+Se o campo `modo` no input for `cover_only`: gere apenas o campo `cover_letter`. Defina `curriculo` como string vazia "".
+Se `modo` estiver ausente ou for qualquer outro valor: gere ambos normalmente.
+
 ---
 
 ## DADOS DE ENTRADA
@@ -142,7 +146,9 @@ PROIBIDO: escrever "X anos" quando X = 0. Se o cálculo resultar em 0, trate com
 ### Primeiro emprego (experiencias vazio [] ou ausente, OU cálculo resulta em 0 anos)
 
 - NÃO mencione anos. NÃO use "com X anos". NÃO use "0 anos".
-- Abre com foco no que o candidato construiu e onde quer chegar, por exemplo: "Desenvolvedor com formação em [curso] e projetos práticos em [stack da vaga], em busca de ingressar no mercado de [domínio da vaga]."
+- CRÍTICO — VERIFICAÇÃO OBRIGATÓRIA: antes de escrever a Linha 1, verifique SE `formacoes` existe no input E tem ao menos 1 item.
+- SE formacoes EXISTE e tem dados: use "Desenvolvedor com formação em [curso] e projetos práticos em [stack da vaga], em busca de ingressar no mercado de [domínio da vaga]."
+- SE formacoes NÃO EXISTE no input OU é array vazio []: use "Desenvolvedor com projetos práticos em [stack da vaga], em busca de ingressar no mercado de [domínio da vaga]." — NUNCA escreva "formação em [curso]" quando não há dados de formação.
 - Linha 2: destaque concreto de projetos — o problema resolvido, a decisão técnica tomada, a tecnologia central usada. Se não houver projetos, destaque as habilidades mais relevantes para a vaga.
 - Linha 3 (opcional): certificações, formação acadêmica ou conquistas acadêmicas relevantes para a vaga.
 - Tom: afirmativo, focado no que o candidato tem e entrega — nunca em ausências.

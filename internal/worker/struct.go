@@ -57,4 +57,5 @@ type userPrompt struct {
 	Formacoes     []formacaoPrompt     `json:"formacoes,omitempty"`
 	Certificacoes []certificacaoPrompt `json:"certificacoes,omitempty"`
 	Feedback      feedbackPrompt       `json:"feedback"`
+	Modo          string               `json:"modo,omitempty"` // "resume_only" | "cover_only" — ausente = full
 }

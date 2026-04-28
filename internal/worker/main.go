@@ -76,7 +76,7 @@ func (w *Worker) failJob(ctx context.Context, job *db.Job) {
 	metrics.JobsProcessed.WithLabelValues("error").Inc()
 }
 
-func (w *Worker) completeJob(ctx context.Context, job *db.Job, quality db.JobQuality) {
+func (w *Worker) completeJob(ctx context.Context, job *db.Job, quality db.JobQuality, gap sse.GapAnalysis) {
 	_ = w.Pipeline.WorkerUpdateJobQuality(ctx, db.WorkerUpdateJobQualityParams{
 		Quality: db.NullJobQuality{JobQuality: quality, Valid: true},
 		ID:      job.ID,
@@ -89,6 +89,7 @@ func (w *Worker) completeJob(ctx context.Context, job *db.Job, quality db.JobQua
 			Quality:     string(quality),
 			CompanyName: job.CompanyName.String,
 			JobTitle:    job.JobTitle.String,
+			Gap:         &gap,
 		})
 	}
 	metrics.JobsProcessed.WithLabelValues("completed").Inc()

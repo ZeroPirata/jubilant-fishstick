@@ -108,18 +108,29 @@ REGRA DE RÓTULOS GENÉRICOS:
 "Boas Práticas" ou "Best Practices" como rótulo isolado → omita.
 Se vier seguido de itens nomeados, extraia cada item: "boas práticas como SOLID, clean code" → ["SOLID", "Clean Code"]
 
-Stack inclui (somente se explicitamente citados): linguagens, frameworks, bancos, cloud, ferramentas, domínios técnicos, metodologias e boas práticas nomeadas.
+REGRA DE CONCEITOS ARQUITETURAIS — NÃO vão para Stack:
+Termos como "microservices", "distributed systems", "high availability", "scalability", "APIs" isolado,
+"databases" isolado, "cloud" isolado, "database optimization", "system design" são conceitos, não tecnologias.
+Omita-os completamente — não vão nem para Stack nem para Requirements.
+Se o texto menciona um sistema específico por nome (Kafka, PostgreSQL, AWS, Docker), extraia o nome. Do contrário, ignore.
+
+Stack inclui SOMENTE tecnologias concretas e nomeadas: linguagens de programação, frameworks, bibliotecas, bancos de dados,
+plataformas cloud (serviços específicos como "AWS S3", "GCP", "Azure"), ferramentas de CI/CD, observabilidade e contêineres,
+protocolos com nome próprio (gRPC, GraphQL, REST, WebSocket), tecnologias de mensageria específicas (Kafka, RabbitMQ, NATS).
+
 Requirements inclui APENAS: anos de experiência, idiomas, formação acadêmica.
 
 IDIOMA: extraia os termos como aparecem no texto. Não traduza nem normalize — a normalização é feita pelo sistema depois.
 
 EXEMPLO PT-BR:
-Input: "Dev Backend. 3 anos com Golang e Postgres. Conhecimento em mensageria e AWS. Inglês fluente."
-Output: {"Description":"Desenvolvedor Backend com foco em mensageria e nuvem.","Stack":["Golang","PostgreSQL","Mensageria","AWS"],"Requirements":["3 anos de experiência","Inglês fluente"]}
+Input: "Dev Backend. 3 anos com Golang e Postgres. Experiência com mensageria e microsserviços. AWS. Inglês fluente."
+Output: {"Description":"Desenvolvedor Backend com foco em nuvem.","Stack":["Golang","PostgreSQL","AWS"],"Requirements":["3 anos de experiência","Inglês fluente"]}
+Nota: "mensageria" e "microsserviços" são conceitos — omitidos. Nenhum sistema de mensageria específico foi citado.
 
 EXEMPLO EN:
-Input: "Experience with RESTful/gRPC APIs, PostgreSQL, Docker. Kafka, RabbitMQ, or NATS is a plus."
-Output: {"Description":"Backend engineer with API and messaging experience.","Stack":["REST","gRPC","PostgreSQL","Docker","Kafka","RabbitMQ","NATS"],"Requirements":[]}`
+Input: "Experience with RESTful/gRPC APIs, PostgreSQL, Docker. Kafka, RabbitMQ, or NATS is a plus. Distributed systems knowledge required."
+Output: {"Description":"Backend engineer with API and messaging experience.","Stack":["REST","gRPC","PostgreSQL","Docker","Kafka","RabbitMQ","NATS"],"Requirements":[]}
+Nota: "Distributed systems knowledge" é conceito — omitido.`
 
 		userMsg := "Analise o seguinte texto de vaga:\n\n" + input.Description
 

@@ -9,7 +9,12 @@ async function getUserSkills() {
     const res = await api.get('/users/me/skills?size=500&offset=0');
     if (!res.ok) { _userSkillsCache = []; return _userSkillsCache; }
     const { data: rows } = await apiList(res);
-    _userSkillsCache = rows.map(s => (s.skill_name || '').toLowerCase().trim()).filter(Boolean);
+    // Inclui skill_name + todas as tags para matching mais preciso
+    _userSkillsCache = rows.flatMap(s => {
+      const name = (s.skill_name || '').toLowerCase().trim();
+      const tags = (s.tags || []).map(t => (t || '').toLowerCase().trim()).filter(Boolean);
+      return name ? [name, ...tags] : tags;
+    }).filter(Boolean);
   } catch (_) {
     _userSkillsCache = [];
   }
@@ -142,11 +147,15 @@ function applyJobEvent(ev) {
   const row = document.getElementById(`job-row-${ev.id}`);
   if (!row) { loadJobs(); return; }
 
-  // Quality (atualiza meta antes do badge para que badge() leia correto)
-  if (ev.quality) {
+  // Quality + gap (atualiza meta antes do badge para que badge() leia correto)
+  if (ev.quality || ev.gap) {
     const meta = _jobMeta.get(ev.id) || {};
-    _jobMeta.set(ev.id, { ...meta, quality: ev.quality });
-    row.cells[4].innerHTML = qualityBadge(ev.id, ev.quality);
+    _jobMeta.set(ev.id, {
+      ...meta,
+      ...(ev.quality ? { quality: ev.quality } : {}),
+      ...(ev.gap     ? { gap: ev.gap }         : {}),
+    });
+    if (ev.quality) row.cells[4].innerHTML = qualityBadge(ev.id, ev.quality);
   }
 
   // Status (usa quality já atualizado acima)
@@ -174,7 +183,7 @@ async function toggleQualityDetails(jobId) {
   if (existing) { existing.remove(); btn?.classList.remove('expanded'); return; }
   btn?.classList.add('expanded');
 
-  const { stack = [], reqs = [], quality = null } = _jobMeta.get(jobId) || {};
+  const { stack = [], reqs = [], quality = null, gap = null } = _jobMeta.get(jobId) || {};
 
   const qualityLabelsMap = { low: 'Baixa', mid: 'Média', high: 'Alta' };
   const qualityCls       = quality || 'mid';
@@ -182,8 +191,10 @@ async function toggleQualityDetails(jobId) {
 
   const userSkills = await getUserSkills();
 
+  console.log(stack, reqs, quality, gap)
+
   const stackSection = stack.length ? `
-    <div style="margin-bottom:${reqs.length ? 10 : 0}px">
+    <div style="margin-bottom:10px">
       <div class="quality-group-label" style="margin-bottom:4px">Stack tecnológico detectado</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">
         ${stack.map(t => {
@@ -195,12 +206,37 @@ async function toggleQualityDetails(jobId) {
     </div>` : '';
 
   const reqSection = reqs.length ? `
-    <div>
+    <div style="margin-bottom:10px">
       <div class="quality-group-label" style="margin-bottom:4px">Requisitos (não contam no score)</div>
       <div style="display:flex;flex-direction:column;gap:3px">
         ${reqs.map(r => `<div class="quality-req" style="color:var(--muted)">${escHtml(r)}</div>`).join('')}
       </div>
     </div>` : '';
+
+  const hasGap = gap !== null;
+  const coverPct  = hasGap ? gap.coverage_pct ?? 0 : null;
+  const missing   = hasGap ? (gap.missing_skills || []) : [];
+  const gapSection = hasGap ? `
+    <div style="padding-top:10px;border-top:1px solid var(--border)">
+      <div class="quality-group-label" style="margin-bottom:6px">Análise de gap de habilidades</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="font-size:12px;color:var(--muted)">Cobertura do stack:</div>
+        <div style="background:var(--border);border-radius:4px;height:8px;flex:1;overflow:hidden">
+          <div style="background:${coverPct >= 70 ? 'var(--green)' : coverPct >= 30 ? 'var(--yellow)' : 'var(--red)'};height:100%;width:${coverPct}%;transition:width .4s"></div>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:var(--text);min-width:32px;text-align:right">${coverPct}%</div>
+      </div>
+      ${missing.length ? `
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Habilidades em falta no seu perfil:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">
+          ${missing.map(s => `<span class="miss-tag" title="Você não tem esta habilidade cadastrada">${escHtml(s)}</span>`).join('')}
+        </div>` : `<div style="font-size:12px;color:var(--green)">Nenhuma habilidade faltando — ótima cobertura!</div>`
+      }
+    </div>` : '';
+
+  const hasStack = stack.length > 0;
+  const hasReqs = reqs.length > 0;
+  const hasAnyData = hasStack || hasReqs || hasGap;
 
   const tr = document.createElement('tr');
   tr.id = `quality-row-${jobId}`;
@@ -216,7 +252,8 @@ async function toggleQualityDetails(jobId) {
     </div>
     ${stackSection}
     ${reqSection}
-    ${!stackSection && !reqSection ? '<span style="color:var(--muted)">Nenhum dado de stack extraído desta vaga.</span>' : ''}
+    ${gapSection}
+    ${!hasAnyData ? '<span style="color:var(--muted)">Nenhum dado de stack extraído desta vaga.</span>' : ''}
   </div></td>`;
 
   document.getElementById(`job-row-${jobId}`)?.insertAdjacentElement('afterend', tr);
@@ -294,14 +331,31 @@ async function deleteJob(id, btn) {
   } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
 }
 
-async function retryJob(id, btn) {
-  btn.disabled = true;
+function retryJob(id, btn) {
+  const div = btn.closest('div');
+  const hasResumes = !!div.querySelector('.btn-expand');
+  div.innerHTML = `
+    ${hasResumes ? `<button class="btn-expand btn-sm" onclick="toggleResumes('${id}', this)">Currículos</button>` : ''}
+    <span style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--muted);white-space:nowrap">Gerar:</span>
+      <button class="btn btn-ghost btn-sm" onclick="doRetryWithMode('${id}','full',this)">Tudo</button>
+      <button class="btn btn-ghost btn-sm" onclick="doRetryWithMode('${id}','resume_only',this)">Currículo</button>
+      <button class="btn btn-ghost btn-sm" onclick="doRetryWithMode('${id}','cover_only',this)">Cover</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--muted)" onclick="loadJobs()" title="Cancelar">✕</button>
+    </span>
+    <button class="btn-delete" onclick="deleteJob('${id}', this)">✕</button>
+  `;
+}
+
+async function doRetryWithMode(id, mode, btn) {
+  const div = btn.closest('div');
+  div.querySelectorAll('button').forEach(b => b.disabled = true);
   try {
-    const res = await api.put(`/jobs/${id}/retry`);
-    if (!res.ok) { toast('Erro ao reprocessar.', 'error'); btn.disabled = false; return; }
+    const res = await api.put(`/jobs/${id}/retry`, { mode });
+    if (!res.ok) { toast('Erro ao reprocessar.', 'error'); loadJobs(); return; }
     toast('Vaga enviada para reprocessamento.');
     loadJobs();
-  } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
+  } catch (e) { toast(e.message, 'error'); loadJobs(); }
 }
 
 // ── Toggle resumes panel per job row ──
@@ -512,12 +566,13 @@ async function createJob() {
   const jobTitle    = document.getElementById('new-job-title').value.trim()   || undefined;
   const description = document.getElementById('new-job-desc').value.trim()    || undefined;
   const language    = document.getElementById('new-job-lang').value           || undefined;
+  const mode        = document.getElementById('new-job-mode').value           || 'full';
 
   if (!url) { toast('URL da vaga é obrigatória.', 'error'); return; }
   if (description && !companyName) { toast('Preencha o nome da empresa ao informar a descrição.', 'error'); return; }
   if (description && !jobTitle)    { toast('Preencha o título da vaga ao informar a descrição.', 'error'); return; }
 
-  const body = { url };
+  const body = { url, mode };
   if (companyName)  body.company_name = companyName;
   if (jobTitle)     body.job_title    = jobTitle;
   if (description)  body.description  = description;
@@ -532,11 +587,23 @@ async function createJob() {
     if (res.status === 409) { toast('Esta URL já foi cadastrada.', 'error'); return; }
     if (!res.ok) { toast('Erro ao cadastrar vaga.', 'error'); return; }
 
+    const data = await res.json();
+    const warnings = data.warnings || [];
+
     ['new-job-url','new-job-company','new-job-title','new-job-desc'].forEach(id => {
       document.getElementById(id).value = '';
     });
-    toast('Vaga cadastrada! O worker irá processá-la em breve.');
-    navigateTo('vagas');
+
+    if (warnings.length > 0) {
+      const list = document.getElementById('profile-warnings-list');
+      list.innerHTML = warnings.map(w => `<li>${escHtml(w)}</li>`).join('');
+      document.getElementById('profile-warnings-banner').classList.remove('hidden');
+      toast('Vaga cadastrada! Confira os avisos sobre o perfil.');
+    } else {
+      document.getElementById('profile-warnings-banner').classList.add('hidden');
+      toast('Vaga cadastrada! O worker irá processá-la em breve.');
+      navigateTo('vagas');
+    }
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -590,7 +657,9 @@ function escHtml(str) {
 }
 
 // ── Lote de Links ──
-const _bulkUrls = []; // { url: string, language: string }[]
+const _bulkUrls = []; // { url: string, language: string, mode: string }[]
+
+const _bulkModeLabels = { full: 'Tudo', resume_only: 'Currículo', cover_only: 'Cover' };
 
 function _bulkRefresh() {
   const list  = document.getElementById('bulk-url-list');
@@ -603,7 +672,8 @@ function _bulkRefresh() {
 
   list.innerHTML = _bulkUrls.map((item, i) => `
     <div style="display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 10px">
-      <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--border);color:var(--muted);white-space:nowrap;flex-shrink:0">${escHtml(item.language.toUpperCase())}</span>
+      <span style="font-size:11px;padding:2px 6px;border-radius:4px;background:var(--border);color:var(--muted);white-space:nowrap;flex-shrink:0">${escHtml(item.language.toUpperCase())}</span>
+      <span style="font-size:11px;padding:2px 6px;border-radius:4px;background:var(--border);color:var(--muted);white-space:nowrap;flex-shrink:0">${escHtml(_bulkModeLabels[item.mode] || item.mode)}</span>
       <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${escHtml(item.url)}">${escHtml(item.url)}</span>
       <button onclick="removeBulkUrl(${i})" style="flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--muted);font-size:15px;line-height:1;padding:0 2px" title="Remover">✕</button>
     </div>
@@ -613,11 +683,12 @@ function _bulkRefresh() {
 function addBulkUrl() {
   const input    = document.getElementById('bulk-url-input');
   const language = document.getElementById('bulk-lang').value;
+  const mode     = document.getElementById('bulk-mode').value || 'full';
   const url      = input.value.trim();
   if (!url) return;
   if (!url.startsWith('http')) { toast('URL inválida.', 'error'); return; }
   if (_bulkUrls.some(item => item.url === url)) { toast('URL já adicionada.', 'error'); return; }
-  _bulkUrls.push({ url, language });
+  _bulkUrls.push({ url, language, mode });
   input.value = '';
   input.focus();
   _bulkRefresh();
@@ -636,7 +707,7 @@ async function submitBulkUrls() {
   btn.textContent = 'Enviando...';
 
   const results = await Promise.allSettled(
-    _bulkUrls.map(({ url, language }) => api.post('/jobs', { url, language }))
+    _bulkUrls.map(({ url, language, mode }) => api.post('/jobs', { url, language, mode }))
   );
 
   let ok = 0, fail = 0;

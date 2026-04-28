@@ -3,9 +3,9 @@ package worker
 import (
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/scraper"
-	"unicode/utf8"
 	"hackton-treino/internal/util"
 	"strings"
+	"unicode/utf8"
 )
 
 // calcularQualidade retorna low/mid/high baseado na proporção de itens do Stack
@@ -18,22 +18,36 @@ import (
 //	< 30% → low  (não gera currículo)
 //	30-69% → mid
 //	≥ 70%  → high
-func calcularQualidade(result *scraper.ResultScraper, filtros []string, aliases map[string]string) db.JobQuality {
+func calcularQualidade(result *scraper.ResultScraper, skills []db.UserSkill, aliases map[string]string) db.JobQuality {
 	haystack := result.Stack
 	if len(haystack) == 0 {
 		return db.JobQualityMid
 	}
-	if len(filtros) == 0 {
+	if len(skills) == 0 {
 		return db.JobQualityMid
 	}
 
-	normalizedFiltros := make([]string, len(filtros))
-	for i, f := range filtros {
-		f = strings.TrimSpace(strings.ToLower(f))
+	// Normaliza skill_name + tags para matching mais preciso
+	var normalizedFiltros []string
+	for _, s := range skills {
+		f := strings.TrimSpace(strings.ToLower(s.SkillName))
 		if canonical, ok := aliases[f]; ok {
 			f = canonical
 		}
-		normalizedFiltros[i] = f
+		if f != "" {
+			normalizedFiltros = append(normalizedFiltros, f)
+		}
+		// Inclui tags na normalização
+		for _, tag := range s.Tags {
+			t := strings.TrimSpace(strings.ToLower(tag))
+			if t == "" {
+				continue
+			}
+			if canonical, ok := aliases[t]; ok {
+				t = canonical
+			}
+			normalizedFiltros = append(normalizedFiltros, t)
+		}
 	}
 
 	matched := 0

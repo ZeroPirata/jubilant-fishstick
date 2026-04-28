@@ -34,10 +34,9 @@ func (e *FeedbackStatus) Scan(src interface{}) error {
 
 type NullFeedbackStatus struct {
 	FeedbackStatus FeedbackStatus `json:"feedback_status"`
-	Valid          bool           `json:"valid"` // Valid is true if FeedbackStatus is not NULL
+	Valid          bool           `json:"valid"`
 }
 
-// Scan implements the Scanner interface.
 func (ns *NullFeedbackStatus) Scan(value interface{}) error {
 	if value == nil {
 		ns.FeedbackStatus, ns.Valid = "", false
@@ -47,7 +46,6 @@ func (ns *NullFeedbackStatus) Scan(value interface{}) error {
 	return ns.FeedbackStatus.Scan(value)
 }
 
-// Value implements the driver Valuer interface.
 func (ns NullFeedbackStatus) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
@@ -77,10 +75,9 @@ func (e *JobQuality) Scan(src interface{}) error {
 
 type NullJobQuality struct {
 	JobQuality JobQuality `json:"job_quality"`
-	Valid      bool       `json:"valid"` // Valid is true if JobQuality is not NULL
+	Valid      bool       `json:"valid"`
 }
 
-// Scan implements the Scanner interface.
 func (ns *NullJobQuality) Scan(value interface{}) error {
 	if value == nil {
 		ns.JobQuality, ns.Valid = "", false
@@ -90,7 +87,6 @@ func (ns *NullJobQuality) Scan(value interface{}) error {
 	return ns.JobQuality.Scan(value)
 }
 
-// Value implements the driver Valuer interface.
 func (ns NullJobQuality) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
@@ -121,29 +117,6 @@ func (e *JobStatus) Scan(src interface{}) error {
 	return nil
 }
 
-type NullJobStatus struct {
-	JobStatus JobStatus `json:"job_status"`
-	Valid     bool      `json:"valid"` // Valid is true if JobStatus is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullJobStatus) Scan(value interface{}) error {
-	if value == nil {
-		ns.JobStatus, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.JobStatus.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullJobStatus) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.JobStatus), nil
-}
-
 type SecurityEventType string
 
 const (
@@ -162,29 +135,6 @@ func (e *SecurityEventType) Scan(src interface{}) error {
 		return fmt.Errorf("unsupported scan type for SecurityEventType: %T", src)
 	}
 	return nil
-}
-
-type NullSecurityEventType struct {
-	SecurityEventType SecurityEventType `json:"security_event_type"`
-	Valid             bool              `json:"valid"` // Valid is true if SecurityEventType is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullSecurityEventType) Scan(value interface{}) error {
-	if value == nil {
-		ns.SecurityEventType, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.SecurityEventType.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullSecurityEventType) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.SecurityEventType), nil
 }
 
 type SkillLevel string
@@ -208,27 +158,14 @@ func (e *SkillLevel) Scan(src interface{}) error {
 	return nil
 }
 
-type NullSkillLevel struct {
-	SkillLevel SkillLevel `json:"skill_level"`
-	Valid      bool       `json:"valid"` // Valid is true if SkillLevel is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullSkillLevel) Scan(value interface{}) error {
-	if value == nil {
-		ns.SkillLevel, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.SkillLevel.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullSkillLevel) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.SkillLevel), nil
+type ErrorLog struct {
+	ID           pgtype.UUID        `json:"id"`
+	JobID        pgtype.UUID        `json:"job_id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	ErrorType    string             `json:"error_type"`
+	ErrorMessage string             `json:"error_message"`
+	Url          pgtype.Text        `json:"url"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type GeneratedResume struct {
@@ -255,6 +192,7 @@ type Job struct {
 	Status       JobStatus          `json:"status"`
 	Quality      NullJobQuality     `json:"quality"`
 	Language     pgtype.Text        `json:"language"`
+	Mode         string             `json:"mode"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
@@ -305,6 +243,7 @@ type UserAccount struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	IsAdmin      bool               `json:"is_admin"`
 }
 
 type UserCertificate struct {

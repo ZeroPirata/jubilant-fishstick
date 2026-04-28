@@ -18,9 +18,9 @@ VALUES ($1, $2, $3, $4)
 
 type QueryInsertSecurityEventParams struct {
 	EventType SecurityEventType `json:"event_type"`
-	Ip        pgtype.Text       `json:"ip"`
-	UserID    pgtype.UUID       `json:"user_id"`
-	Metadata  []byte            `json:"metadata"`
+	Ip        pgtype.Text `json:"ip"`
+	UserID    pgtype.UUID `json:"user_id"`
+	Metadata  []byte      `json:"metadata"`
 }
 
 func (q *Queries) QueryInsertSecurityEvent(ctx context.Context, arg QueryInsertSecurityEventParams) error {

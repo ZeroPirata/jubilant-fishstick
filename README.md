@@ -22,8 +22,9 @@ Usuário cadastra uma vaga (URL ou dados manuais)
   │  scraping_nl     → LLM estrutura a vaga    │  stack[], requisitos[], descrição limpa
   │  match perfil    → Redis cache + Postgres  │  experiências, habilidades, projetos…
   │  quality score   → algoritmo de matching   │  low / mid / high
-  │  buildUserPrompt → JSON para o LLM         │  dados truncados e ordenados
-  │  LLM gera docs   → currículo + cover       │  tokens de sistema preservados
+  │  gap analysis    → habilidades faltando    │  missing_skills[], coverage_pct via SSE
+  │  buildUserPrompt → JSON para o LLM         │  dados truncados, modo e idioma incluídos
+  │  LLM gera docs   → currículo + cover       │  respeita modo (full/resume_only/cover_only)
   │  substituição    → dados reais do usuário  │  {{CANDIDATO_NOME}} → "Gabriel"
   └────────────────────────────────────────────┘
               │
@@ -35,6 +36,68 @@ Usuário cadastra uma vaga (URL ou dados manuais)
 ```
 
 Atualizações de status chegam em tempo real no browser via **Server-Sent Events (SSE)** — sem polling.
+
+Funcionalidades recentes: avisos de perfil fraco antes do processamento, análise de gap de habilidades após a conclusão, modo de geração parcial (só currículo / só cover letter) e suporte completo a candidatos sem experiência profissional.
+
+---
+
+## Funcionalidades
+
+### Modo de geração parcial
+
+Cada vaga aceita um campo `mode` que controla o que o LLM gera:
+
+| Modo | Comportamento |
+|---|---|
+| `full` (padrão) | Gera currículo **e** cover letter |
+| `resume_only` | Gera apenas o currículo — `cover_letter` é string vazia |
+| `cover_only` | Gera apenas a cover letter — `curriculo` é string vazia |
+
+O modo é persistido na tabela `jobs` e pode ser alterado no reprocessamento (`PUT /jobs/{id}/retry` com `{"mode":"resume_only"}`). No frontend, o botão "Refazer" expande três opções de modo inline antes de disparar a requisição.
+
+### Avisos de perfil fraco
+
+Ao criar uma vaga (`POST /jobs`), a API verifica o estado do perfil e retorna um array `warnings` com alertas acionáveis:
+
+- Nenhuma habilidade técnica cadastrada
+- Nenhuma experiência profissional e nenhum projeto
+- Experiências sem conquistas e sem descrição (o LLM não terá conteúdo para os bullet points)
+- Projetos sem descrição
+
+O job é criado normalmente — os avisos são informativos, não bloqueantes. O frontend exibe um banner amarelo na tela de cadastro quando `warnings.length > 0`.
+
+### Análise de gap de habilidades
+
+Após o processamento de uma vaga, o worker computa o gap entre o stack exigido pela vaga e as habilidades cadastradas no perfil do usuário:
+
+```go
+type GapAnalysis struct {
+    MissingSkills []string `json:"missing_skills,omitempty"`
+    CoveragePct   int      `json:"coverage_pct"`
+}
+```
+
+O resultado é enviado via SSE no evento `completed` e exibido no painel de detalhes da qualidade (clique no badge de qualidade da vaga). O painel mostra:
+- Barra de progresso com a porcentagem de cobertura
+- Tags vermelhas para cada habilidade faltando no perfil
+
+O matching usa a mesma lógica word-boundary do score de qualidade, incluindo normalização por aliases globais.
+
+### Suporte a candidatos sem experiência profissional
+
+O sistema não rejeita mais perfis sem experiência profissional. Quando `experiencias` está vazio no prompt, o LLM ativa automaticamente o modo **first-job**:
+
+- O `SUMMARY` é gerado no formato "Desenvolvedor com formação em [curso] e projetos práticos em [stack da vaga], em busca de ingressar no mercado de [domínio]"
+- A seção `EXPERIÊNCIA / EXPERIENCE` é completamente omitida do currículo (título e conteúdo)
+- O texto "0 anos de experiência" é explicitamente proibido nos prompts
+
+### Tradução de habilidades por idioma
+
+Quando o currículo é gerado em inglês (`language = "en"`), o LLM recebe uma tabela de tradução nos prompts e é instruído a usar os termos em inglês na seção de habilidades. Termos como "Banco de dados", "Aprendizado de máquina" e "Contêineres" são traduzidos automaticamente para "Databases", "Machine learning" e "Containers".
+
+### Prevenção de seções vazias no PDF
+
+O gerador de PDF (`scripts/gerar_pdf.py`) usa um mecanismo de buffer para cabeçalhos de seção: um `<h2>` só é emitido no HTML quando há conteúdo seguinte. Isso evita que seções como `EXPERIENCE`, `EDUCATION` ou `CERTIFICATIONS` apareçam no PDF sem conteúdo abaixo — problema comum quando o LLM opta por omitir uma seção mas ainda emite o título.
 
 ---
 
@@ -139,14 +202,16 @@ sequenceDiagram
             end
         end
         Worker->>Worker: calcularQualidade(stack_vaga, filtros_usuario, aliases)
-        Worker->>Worker: buildUserPrompt(job, match)
+        Worker->>Worker: analisarGap(stack_vaga, habilidades_usuario, aliases)
+        Worker->>Worker: buildUserPrompt(job, match) — inclui modo e idioma
         Worker->>LLM: GenerateCurriculum(system_prompt, user_prompt_json)
         LLM-->>Worker: {curriculo, cover_letter}
         Worker->>Worker: validar token {{CANDIDATO_NOME}} presente
+        Worker->>Worker: aplicar modo (resume_only → cover_letter="", cover_only → curriculo="")
         Worker->>Worker: substituir placeholders pelos dados reais
         Worker->>DB: INSERT generated_resumes (content_json)
         Worker->>DB: UPDATE job quality + status = 'completed'
-        Worker->>SSE: Publish {id, status: completed, quality, company, title}
+        Worker->>SSE: Publish {id, status: completed, quality, company, title, gap}
     end
 ```
 
@@ -308,9 +373,12 @@ Eventos publicados pelo worker:
   { id, status: "processing" }
   { id, status: "scraping_basic" }
   { id, status: "scraping_nl" }
-  { id, status: "completed", quality, company_name, job_title }
+  { id, status: "completed", quality, company_name, job_title,
+      gap: { missing_skills: ["react", "graphql"], coverage_pct: 65 } }
   { id, status: "error" }
 ```
+
+O campo `gap` está presente apenas no evento `completed` e só quando há habilidades faltando no perfil do usuário em relação ao stack da vaga. O frontend usa esse dado para exibir a análise de gap no painel de detalhes da qualidade.
 
 O endpoint SSE fica fora do `TimeoutMiddleware` — é uma conexão longa por design. Um keepalive de `: keepalive\n\n` é enviado a cada 20 segundos para evitar que proxies fechem a conexão por inatividade.
 
@@ -347,7 +415,7 @@ erDiagram
 | `user_projects` | Projetos com `tags[]` e flag `is_academic` |
 | `user_academic_histories` | Formação com período e descrição |
 | `user_certificates` | Certificados com emissor, data e URL de verificação |
-| `jobs` | Vagas com status enum, quality enum, stack[], requirements[] |
+| `jobs` | Vagas com status enum, quality enum, stack[], requirements[], mode (full/resume_only/cover_only) |
 | `generated_resumes` | Currículos gerados em JSONB + caminhos dos PDFs |
 | `resumes_feedback` | Avaliação única por currículo (`poor/fair/good/excellent`) |
 | `user_job_filters` | Keywords de filtro de compatibilidade por usuário |
@@ -384,13 +452,13 @@ FROM jobs j
 WHERE
     j.user_id = @user_id AND
     j.deleted_at IS NULL AND
-    (@status::TEXT IS NULL OR j.status = @status::job_status) AND
-    (@quality::TEXT IS NULL OR j.quality = @quality::job_quality)
+    (NULLIF(@status::TEXT, '') IS NULL  OR j.status  = @status::job_status)  AND
+    (NULLIF(@quality::TEXT, '') IS NULL OR j.quality = @quality::job_quality)
 ORDER BY j.created_at DESC
 LIMIT @size OFFSET @cursor;
 ```
 
-O `COUNT(*) OVER()` retorna o total de registros sem uma segunda query — a paginação é resolvida em uma única roundtrip ao banco.
+`NULLIF(@status, '')` converte string vazia em NULL, evitando o cast `''::job_status` que o PostgreSQL rejeita com erro de enum inválido. O `COUNT(*) OVER()` retorna o total de registros sem uma segunda query — a paginação é resolvida em uma única roundtrip ao banco.
 
 ---
 
@@ -548,13 +616,40 @@ Todos os endpoints de listagem suportam paginação por cursor (`?offset=0&size=
 | GET | `/api/v1/jobs` | Listar vagas (`?status=completed&quality=high`) |
 | POST | `/api/v1/jobs` | Cadastrar vaga |
 | PUT / DELETE | `/api/v1/jobs/{id}` | Atualizar / remover vaga |
-| PUT | `/api/v1/jobs/{id}/retry` | Reprocessar vaga com erro |
+| PUT | `/api/v1/jobs/{id}/retry` | Reprocessar vaga (aceita `{"mode":"resume_only"}` no body) |
 | GET | `/api/v1/jobs/{id}/resumes` | Listar currículos da vaga |
 | GET | `/api/v1/jobs/{id}/resumes/{resume_id}` | Ver currículo |
 | DELETE | `/api/v1/jobs/{id}/resumes/{resume_id}` | Remover currículo |
 | POST | `/api/v1/jobs/{id}/resumes/{resume_id}/pdf` | Gerar PDF |
 | POST | `/api/v1/jobs/{id}/resumes/{resume_id}/feedback` | Avaliar currículo |
 | GET | `/api/v1/jobs/events` | SSE stream de eventos em tempo real |
+
+**Cadastro de vaga — campos aceitos:**
+
+```json
+{
+  "url": "https://...",
+  "company_name": "Acme (opcional)",
+  "job_title": "Eng. Sr. (opcional)",
+  "description": "Descrição manual (opcional)",
+  "language": "ptbr | en",
+  "mode": "full | resume_only | cover_only"
+}
+```
+
+**Resposta do cadastro:**
+
+```json
+{
+  "id": "uuid-da-vaga",
+  "warnings": [
+    "Nenhuma habilidade técnica cadastrada no perfil.",
+    "Perfil sem experiências profissionais e sem projetos."
+  ]
+}
+```
+
+`warnings` é um array vazio quando o perfil está completo. Quando presente, indica seções incompletas que podem prejudicar a qualidade do currículo gerado — o job é criado normalmente independente dos avisos.
 
 ### Filtros de qualidade
 
@@ -695,6 +790,7 @@ O Dockerfile usa multi-stage build: compila o binário Go em `golang:alpine` e c
 ├── internal/
 │   ├── db/                  # Código gerado pelo sqlc (type-safe, não editar)
 │   ├── handler/             # Handlers HTTP + helpers genéricos (GenericList, GenericCreate…)
+│   │   └── profile_check.go # Verificação de perfil fraco — retornada em POST /jobs
 │   ├── lockout/             # Rate limit de login por IP via Redis
 │   ├── metrics/             # Métricas Prometheus (promauto — registro automático)
 │   ├── middleware/          # Auth, CORS, logger, timeout, panic recovery, revocation
@@ -713,6 +809,7 @@ O Dockerfile usa multi-stage build: compila o binário Go em `golang:alpine` e c
 │   ├── sse/                 # Bus in-memory de Server-Sent Events
 │   ├── util/                # Helpers (UUID parse, normalização de stack, IP, datas…)
 │   └── worker/              # Pipeline assíncrono
+│       ├── gap_analysis.go  # Análise de gap: habilidades faltando + coverage_pct
 │       └── prompts/         # System prompts (system_ptbr.txt, system_en.txt)
 ├── repository/
 │   ├── schema.sql           # DDL completo (tabelas, tipos, índices)

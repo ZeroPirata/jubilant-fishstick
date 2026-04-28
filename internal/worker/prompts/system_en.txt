@@ -18,6 +18,10 @@ Schema:
 
 Always return curriculo and cover_letter. Never return { "error": ... }.
 
+If the `modo` field in the input is `resume_only`: generate only the `curriculo` field. Set `cover_letter` to an empty string "".
+If the `modo` field in the input is `cover_only`: generate only the `cover_letter` field. Set `curriculo` to an empty string "".
+If `modo` is absent or any other value: generate both normally.
+
 ---
 
 ## INPUT DATA
@@ -145,7 +149,9 @@ FORBIDDEN: writing "X years" when X = 0. If the calculation yields 0, treat as f
 ### First job (experiencias empty [] or absent, OR calculation yields 0 years)
 
 - DO NOT mention years. DO NOT use "with X years". DO NOT use "0 years".
-- Opens focusing on what the candidate has built and where they aim to grow, for example: "Developer with a background in [degree] and hands-on projects in [job's primary stack], seeking to enter the [job domain] market."
+- CRITICAL — MANDATORY CHECK: before writing Line 1, verify if `formacoes` exists in the input AND has at least 1 item.
+- IF formacoes EXISTS and has data: use "Developer with a background in [degree] and hands-on projects in [job's primary stack], seeking to enter the [job domain] market."
+- IF formacoes DOES NOT EXIST in the input OR is empty array []: use "Developer with hands-on projects in [job's primary stack], seeking to enter the [job domain] market." — NEVER write "background in [degree]" when there is no formation data.
 - Line 2: concrete highlight from projects — the problem solved, the technical decision made, the core technology used. If no projects, highlight the most relevant skills for the role.
 - Line 3 (optional): certifications, academic background, or relevant academic achievements.
 - Tone: affirmative, focused on what the candidate brings — never on absences.

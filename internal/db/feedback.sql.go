@@ -17,10 +17,10 @@ VALUES ($1, $2, $3, $4)
 `
 
 type QueryInsertFeedbackParams struct {
-	ResumeID pgtype.UUID    `json:"resume_id"`
-	UserID   pgtype.UUID    `json:"user_id"`
+	ResumeID pgtype.UUID `json:"resume_id"`
+	UserID   pgtype.UUID `json:"user_id"`
 	Status   FeedbackStatus `json:"status"`
-	Comments pgtype.Text    `json:"comments"`
+	Comments pgtype.Text `json:"comments"`
 }
 
 func (q *Queries) QueryInsertFeedback(ctx context.Context, arg QueryInsertFeedbackParams) error {

@@ -18,45 +18,30 @@ func (w *Worker) doScraper(ctx context.Context, job *db.Job) (*scraper.ResultScr
 
 	var basicDescription string
 
-	if job.Description.Valid && job.Description.String != "" {
-		// Descrição já fornecida — pula scraping básico, vai direto ao NL.
-		basicDescription = job.Description.String
-		result.Company = job.CompanyName.String
-		result.Title = job.JobTitle.String
+	if err := w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{
+		Status: db.JobStatusScrapingBasic,
+		ID:     job.ID,
+	}); err != nil {
+		w.Logger.Warn("Erro ao atualizar status para scraping_basic", zap.String("job_id", job.ID.String()), zap.Error(err))
+	}
 
-		if err := w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{
-			Status: db.JobStatusScrapingNl,
-			ID:     job.ID,
-		}); err != nil {
-			w.Logger.Warn("Erro ao atualizar status para scraping_nl", zap.String("job_id", job.ID.String()), zap.Error(err))
-		}
-	} else {
-		// Sem descrição — executa scraper HTTP completo.
-		if err := w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{
-			Status: db.JobStatusScrapingBasic,
-			ID:     job.ID,
-		}); err != nil {
-			w.Logger.Warn("Erro ao atualizar status para scraping_basic", zap.String("job_id", job.ID.String()), zap.Error(err))
-		}
+	newScraper := scraper.NewScraper(job.ExternalUrl, w.Logger)
+	basicScraper, err := newScraper.Scrape()
+	if err != nil {
+		w.Logger.Error("doScraper: Erro ao fazer scrape da vaga", zap.String("job_id", job.ID.String()), zap.Error(err))
+		return nil, fmt.Errorf("não foi possivel realizar o scraper: %w", err)
+	}
 
-		newScraper := scraper.NewScraper(job.ExternalUrl, w.Logger)
-		basicScraper, err := newScraper.Scrape()
-		if err != nil {
-			w.Logger.Error("doScraper: Erro ao fazer scrape da vaga", zap.String("job_id", job.ID.String()), zap.Error(err))
-			return nil, fmt.Errorf("não foi possivel realizar o scraper: %w", err)
-		}
+	basicDescription = basicScraper.BasicDescription
+	result.Company = basicScraper.Company
+	result.Title = basicScraper.Title
+	result.BasicDescription = basicScraper.BasicDescription
 
-		basicDescription = basicScraper.BasicDescription
-		result.Company = basicScraper.Company
-		result.Title = basicScraper.Title
-		result.BasicDescription = basicScraper.BasicDescription
-
-		if err := w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{
-			Status: db.JobStatusScrapingNl,
-			ID:     job.ID,
-		}); err != nil {
-			w.Logger.Warn("Erro ao atualizar status para scraping_nl", zap.String("job_id", job.ID.String()), zap.Error(err))
-		}
+	if err := w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{
+		Status: db.JobStatusScrapingNl,
+		ID:     job.ID,
+	}); err != nil {
+		w.Logger.Warn("Erro ao atualizar status para scraping_nl", zap.String("job_id", job.ID.String()), zap.Error(err))
 	}
 
 	nlScraper, err := w.LLM.GenerateScrapeSite(ctx, basicDescription)
