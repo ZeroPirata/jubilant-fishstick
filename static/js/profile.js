@@ -419,7 +419,7 @@ async function loadProjects() {
     tbody.innerHTML = rows.map(p => `
       <tr>
         <td>${escStr(p.project_name)}</td>
-        <td>${p.project_url ? `<a class="link" href="${escStr(p.project_url)}" target="_blank">↗</a>` : '—'}</td>
+        <td>${p.project_url ? `<a class="link" href="${escStr(p.project_url)}" target="_blank" rel="noopener noreferrer">↗</a>` : '—'}</td>
         <td style="color:var(--muted)">${d2m(p.start_date)} → ${d2m(p.end_date)}</td>
         <td style="color:var(--muted)">${(p.tags||[]).join(', ') || '—'}</td>
         <td>
