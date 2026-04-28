@@ -1,7 +1,19 @@
 # Job Pipeline
 
-[![Deploy](https://github.com/ZeroPirata/jubilant-fishstick/actions/workflows/deploy.yml/badge.svg)](https://github.com/ZeroPirata/jubilant-fishstick/actions/workflows/deploy.yml)
+> Engine inteligente de geração de currículos técnica, orquestrada em Go com processamento de IA.
 
+| CI/CD Status | Demo Online |
+| :--- | :--- |
+| [![Deploy](https://github.com/ZeroPirata/jubilant-fishstick/actions/workflows/deploy.yml/badge.svg)](https://github.com/ZeroPirata/jubilant-fishstick/actions/workflows/deploy.yml) | [![Acesse o Site](https://img.shields.io/badge/Acessar_Site-Gerador_de_Currículos-brightgreen?style=for-the-badge&logo=google-chrome&logoColor=white)](https://gerador-curriculo.gsbnunes.com.br) |
+
+
+## Propósito do Projeto
+Este é um projeto de portfólio desenvolvido como um **Laboratório de Engenharia de Software**. O objetivo principal foi aplicar e estressar conceitos avançados de arquitetura distribuída e concorrência em **Go**, simulando um ambiente de produção de alta criticidade.
+
+**Key Architecture Goals:**
+* **Arquitetura Hexagonal:** Desacoplamento total entre lógica de negócio e adaptadores externos (banco de dados, IA, renderizadores).
+* **Concorrência Nativa:** Uso intensivo de Goroutines e Channels para processamento paralelo de workers.
+* **Resiliência:** Implementação de retries e tratamento de falhas em sistemas assíncronos.
 
 Plataforma end-to-end para geração automatizada de currículos e cartas de apresentação personalizados por IA. O sistema automatiza todo o ciclo de candidatura: coleta dados da vaga, analisa compatibilidade com o perfil do candidato, gera documentos via LLM e entrega PDFs prontos para envio — sem intervenção manual.
 
