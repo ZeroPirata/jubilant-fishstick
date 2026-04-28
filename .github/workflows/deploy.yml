@@ -31,6 +31,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4.2.2
 
+      - name: Cleanup legacy processes
+        run: |
+          # Mata processos antigos se estiverem rodando fora do docker
+          pkill -f "./app" || true
+          pkill -f "gerar_pdf.py" || true
+
       - name: Sync files to /opt
         run: |
           rsync -av --delete \
