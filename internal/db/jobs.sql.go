@@ -302,13 +302,13 @@ type QuerySelectResumeJobParams struct {
 }
 
 type QuerySelectResumeJobRow struct {
-	ID              pgtype.UUID `json:"id"`
-	ContentJson     []byte      `json:"content_json"`
-	ResumePdfPath   pgtype.Text `json:"resume_pdf_path"`
-	CoverLetterPath pgtype.Text `json:"cover_letter_path"`
-	CompanyName     pgtype.Text `json:"company_name"`
-	JobTitle        pgtype.Text `json:"job_title"`
-	Language        pgtype.Text `json:"language"`
+	ID              pgtype.UUID    `json:"id"`
+	ContentJson     []byte         `json:"content_json"`
+	ResumePdfPath   pgtype.Text    `json:"resume_pdf_path"`
+	CoverLetterPath pgtype.Text    `json:"cover_letter_path"`
+	CompanyName     pgtype.Text    `json:"company_name"`
+	JobTitle        pgtype.Text    `json:"job_title"`
+	Language        pgtype.Text    `json:"language"`
 	Quality         NullJobQuality `json:"quality"`
 }
 
