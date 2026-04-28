@@ -101,7 +101,7 @@ Use ONLY information present in the input. FORBIDDEN to infer, extrapolate, or a
 - No role elevation ("architect", "tech lead") if the input does not say so
 - No projects or achievements not listed
 - No wrong years of experience — see calculation rule in PROFESSIONAL SUMMARY
-- descricao is context, not evidence: use descricao[] only to understand the domain and technology stack. 
+- descricao is context, not evidence: use descricao[] only to understand the domain and technology stack.
   NEVER extract specific claims, metrics, or architectural details from descricao to use as bullet assertions.
   Only conquistas[] entries can be the basis for concrete claims in bullets.
 
@@ -277,16 +277,26 @@ P3 — direct close. Forbidden: "I look forward to", "it would be an honor", "I 
 
 ## PRE-GENERATION CHECKLIST
 
-Before writing any content, verify:
+Before writing any content, verify each item below. If any fails: fix before outputting JSON.
 
-[ ] Years of experience: sum each role individually — NOT first date to today
-[ ] Every metric (%, ms, req/s) exists verbatim in conquistas[] or descricao — if not, remove it
-[ ] Every technology in SKILLS appears in habilidades[], experiencias[].stack[], or projetos[]
-[ ] Every project in PROJECTS appears in projetos[] from the input — do not invent or add projects
-[ ] No Portuguese words in any field of the output (EN only)
-[ ] Every certification in CERTIFICATIONS exists verbatim in certificacoes[] from the input — hallucinating certifications is a critical failure, remove any that are not in the input
+[ ] CERTIFICATIONS — check first: does certificacoes[] exist in the input AND contain at least 1 item?
+    YES → write the CERTIFICATIONS section using only those exact entries.
+    NO (absent, null, or empty []) → do NOT write the word "CERTIFICATIONS" anywhere in the output.
+    Generating any certification not present verbatim in certificacoes[] is a critical hallucination failure.
 
-If any item fails: fix before outputting JSON.
+[ ] Years of experience: complete the YEAR CALCULATION step — use ONLY that result in the summary.
+    Never derive years from first-date-to-today.
+
+[ ] Every metric (%, ms, req/s) exists verbatim in conquistas[] — if not, remove it.
+
+[ ] Every technology in SKILLS appears explicitly in habilidades[], experiencias[].stack[], or projetos[].
+    If absent from all three, remove it.
+
+[ ] Every project in PROJECTS appears in projetos[] from the input — do not invent or add projects.
+
+[ ] No Portuguese words anywhere in the output.
+
+---
 
 ## RESUME FORMAT
 
@@ -347,7 +357,11 @@ CRITICAL: NEVER use data from experiencias[] in this section. Company name and j
 
 CERTIFICATIONS
 
-(Include ONLY if certificacoes is non-empty in the input.)
+HARD STOP: if certificacoes[] is absent, null, or empty in the input — do NOT write this section.
+Do NOT write the heading "CERTIFICATIONS". Do NOT write any certificate name, issuer, or date.
+Generating certifications when certificacoes[] has no data is a critical hallucination failure.
+
+(Write the content below ONLY if certificacoes[] exists and has at least 1 item.)
 Each certificate spans EXACTLY 2 consecutive lines — no blank lines between them:
 Line 1: [Certificate Name] | [link]   (omit " | [link]" if no link)
 Line 2: [Issuer] — [Month/Year]

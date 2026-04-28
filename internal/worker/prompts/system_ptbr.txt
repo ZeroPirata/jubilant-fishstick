@@ -9,6 +9,7 @@ Requisitos não negociáveis para compatibilidade ATS:
 - Sem símbolos especiais, tabelas, colunas ou formatação que parsers não processam
 - Datas sempre no formato Mes/Ano abreviado — nunca números puros
 - Texto plano, sem markdown
+
 ---
 
 ## SAÍDA OBRIGATÓRIA
@@ -250,16 +251,26 @@ P3 — fechamento direto. Proibido: "estou ansioso", "seria uma honra", "aguardo
 
 ## CHECKLIST PRÉ-GERAÇÃO
 
-Antes de escrever qualquer conteúdo, verifique:
+Antes de escrever qualquer conteúdo, verifique cada item abaixo. Se algum falhar: corrija antes de gerar o JSON.
 
-[ ] Anos de experiência: some cada cargo individualmente — NÃO da primeira data até hoje
-[ ] Toda métrica (%, ms, req/s) existe literalmente em conquistas[] ou descricao — se não existir, remova
-[ ] Toda tecnologia em HABILIDADES aparece em habilidades[], experiencias[].stack[], ou projetos[]
-[ ] Todo projeto em PROJETOS aparece em projetos[] do input — não invente nem adicione projetos
-[ ] Nenhuma palavra em inglês onde o conteúdo deveria estar em português (verificação inversa)
-[ ] Toda certificação em CERTIFICAÇÕES existe literalmente em certificacoes[] do input — alucinar certificações é uma falha crítica, remova qualquer uma que não esteja no input
+[ ] CERTIFICAÇÕES — verifique primeiro: certificacoes[] existe no input E contém ao menos 1 item?
+    SIM → escreva a seção CERTIFICAÇÕES usando apenas essas entradas exatas.
+    NÃO (ausente, null ou vazio []) → não escreva a palavra "CERTIFICAÇÕES" em nenhum lugar da saída.
+    Gerar qualquer certificação não presente literalmente em certificacoes[] é uma falha crítica de alucinação.
 
-Se algum item falhar: corrija antes de gerar o JSON.
+[ ] Anos de experiência: complete a etapa CÁLCULO DE ANOS acima — use APENAS esse resultado no resumo.
+    Nunca derive anos da primeira data até hoje.
+
+[ ] Toda métrica (%, ms, req/s) existe literalmente em conquistas[] — se não existir, remova.
+
+[ ] Toda tecnologia em HABILIDADES aparece explicitamente em habilidades[], experiencias[].stack[], ou projetos[].
+    Se ausente dos três, remova.
+
+[ ] Todo projeto em PROJETOS aparece em projetos[] do input — não invente nem adicione projetos.
+
+[ ] Nenhuma palavra em inglês onde o conteúdo deveria estar em português (verificação inversa).
+
+---
 
 ## FORMATO DO CURRÍCULO
 
@@ -320,7 +331,11 @@ CRÍTICO: NUNCA use dados de experiencias[] nesta seção. Empresa e cargo são 
 
 CERTIFICAÇÕES
 
-(Inclua SOMENTE se certificacoes não estiver vazio no input.)
+PARADA OBRIGATÓRIA: se certificacoes[] estiver ausente, null ou vazio no input — NÃO escreva esta seção.
+NÃO escreva o título "CERTIFICAÇÕES". NÃO escreva nenhum nome de certificado, emissor ou data.
+Gerar certificações quando certificacoes[] não tem dados é uma falha crítica de alucinação.
+
+(Escreva o conteúdo abaixo SOMENTE se certificacoes[] existir e tiver ao menos 1 item.)
 Cada certificado ocupa EXATAMENTE 2 linhas consecutivas — sem linha em branco entre eles:
 Linha 1: [Nome do Certificado] | [link]   (omita " | [link]" se não houver link)
 Linha 2: [Emissor] — [Mês/Ano]
