@@ -266,3 +266,74 @@ func TestSummaryViolations_TecnologiaDaVagaEExperienciaInflada(t *testing.T) {
 		t.Errorf("stripped = %q", stripped)
 	}
 }
+
+// Caso real do benchmark (llama-3.2-11b): bullets com fatos de outra empresa.
+func TestAssemble_TecnologiaDeOutraExperiencia(t *testing.T) {
+	src := Source{
+		Lang:    "pt-br",
+		Aliases: map[string]string{"golang": "go", "google cloud platform": "gcp"},
+		Experiences: []SourceExperience{
+			{Company: "liax", Start: ym("2025-11"), Current: true,
+				Stack:        []string{"Golang", "Fiber API", "AWS SQS", "Redis"},
+				Achievements: []string{"Desenvolvi microsserviços em Go com Fiber", "mensageria com AWS SQS"}},
+			{Company: "iez! Telecom", Start: ym("2024-09"), End: ym("2025-11"),
+				Stack:        []string{"Golang", "gRPC", "Protobuf", "Envoy", "Google Cloud Platform"},
+				Achievements: []string{"sistema de assinaturas em Hexagonal Architecture", "dados de rede L7 com gRPC"}},
+			{Company: "tecsus", Start: ym("2022-11"), End: ym("2024-03"),
+				Stack:        []string{"Python", "UDP", "SQS"},
+				Achievements: []string{"pacotes via protocolo UDP com validação CRC-16"}},
+		},
+	}
+	var out LLMOutput
+	add := func(id int, bullets ...string) {
+		out.Experiencias = append(out.Experiencias, struct {
+			ID      int      `json:"id"`
+			Bullets []string `json:"bullets"`
+		}{id, bullets})
+	}
+	add(0,
+		"Desenvolveu microsserviços em Go com Fiber para motores de cálculo.",
+		"Desenvolveu sistemas com gRPC e Protobuf e service proxy via Envoy.", // é da iez
+		"Implantou em GCP com alta disponibilidade.",                          // alias de Google Cloud Platform, da iez
+	)
+	add(1,
+		"Projetou o sistema de assinaturas em Hexagonal Architecture com CronJobs em Go.", // Go está nas duas: ok
+		"Desenvolveu serviço de pacotes via UDP para parsing de protocolos.",              // é da tecsus
+	)
+
+	doc, warnings := Assemble(src, out)
+
+	if got := doc.Experiences[0].Bullets; len(got) != 1 || !strings.Contains(got[0], "Fiber") {
+		t.Errorf("liax: bullets = %v, want só o do Fiber", got)
+	}
+	if got := doc.Experiences[1].Bullets; len(got) != 1 || !strings.Contains(got[0], "Hexagonal") {
+		t.Errorf("iez: bullets = %v, want só o da Hexagonal Architecture", got)
+	}
+	joined := strings.Join(warnings, "\n")
+	for _, want := range []string{"citava gRPC", "citava gcp", "citava UDP"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("warnings deveriam conter %q:\n%s", want, joined)
+		}
+	}
+}
+
+// "Go" com caixa exata: a palavra portuguesa "go" não pode ser confundida com a linguagem,
+// e "Go" não pode casar dentro de "Google".
+func TestMentions(t *testing.T) {
+	cases := []struct {
+		text, term string
+		want       bool
+	}{
+		{"microsserviços em Go com Fiber", "Go", true},
+		{"integração com Google Sheets", "Go", false},
+		{"o go-live foi em março", "Go", false},
+		{"filas com AWS SQS", "aws sqs", true},
+		{"API em C# e C++", "C#", true},
+		{"Kubernetes", "kube", false},
+	}
+	for _, tc := range cases {
+		if got := mentions(tc.text, tc.term); got != tc.want {
+			t.Errorf("mentions(%q, %q) = %v, want %v", tc.text, tc.term, got, tc.want)
+		}
+	}
+}
