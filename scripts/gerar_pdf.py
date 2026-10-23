@@ -748,6 +748,130 @@ def cover_letter_para_html(texto: str) -> str:
     return "\n".join(html)
 
 
+# ── Documento estruturado (content_json versão 2) ─────────────────────────────
+# A IA escreve só o texto; o Go monta o Doc com os fatos do banco. Aqui ele vira HTML.
+# Cada template define o CSS e a ordem das seções — todos em uma coluna (ATS).
+
+_DOC_LABELS = {
+    "pt-br": {
+        "summary": "Resumo Profissional", "experience": "Experiência Profissional",
+        "skills": "Habilidades Técnicas", "projects": "Projetos",
+        "education": "Formação Acadêmica", "certifications": "Certificações",
+        "present": "Presente",
+        "months": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
+    },
+    "en": {
+        "summary": "Summary", "experience": "Experience", "skills": "Skills",
+        "projects": "Projects", "education": "Education", "certifications": "Certifications",
+        "present": "Present",
+        "months": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    },
+}
+
+TEMPLATES = {
+    "classico": {
+        "css": RESUME_CSS,
+        "order": ["summary", "experience", "skills", "projects", "education", "certifications"],
+    },
+}
+DEFAULT_TEMPLATE = "classico"
+
+
+def _fmt_month(ym: str, labels: dict) -> str:
+    m = re.match(r"^(\d{4})-(\d{2})$", ym or "")
+    if not m or not 1 <= int(m.group(2)) <= 12:
+        return ""
+    return f"{labels['months'][int(m.group(2)) - 1]}/{m.group(1)}"
+
+
+def _fmt_period(start: str, end: str, current: bool, labels: dict) -> str:
+    s = _fmt_month(start, labels)
+    e = labels["present"] if current else _fmt_month(end, labels)
+    return " - ".join(p for p in (s, e) if p)
+
+
+def _doc_header(h: dict) -> list:
+    out = ['<div class="header">']
+    if h.get("name"):
+        out.append(f'<div class="name">{_esc(h["name"])}</div>')
+    sep = ' <span class="sep">|</span> '
+    basic = [_esc(v) for v in (h.get("email"), h.get("phone")) if v]
+    web = [_contact_linkify(_normalize_url(v)) for v in (h.get("linkedin"), h.get("github"), h.get("portfolio")) if v]
+    if basic:
+        out.append(f'<div class="contact">{sep.join(basic)}</div>')
+    if web:
+        out.append(f'<div class="contact-web">{sep.join(web)}</div>')
+    out.append('</div>')
+    return out
+
+
+def _doc_section(key: str, doc: dict, labels: dict) -> list:
+    out: list = []
+    if key == "summary" and doc.get("summary"):
+        out.append(f'<p>{_esc(doc["summary"])}</p>')
+    elif key == "experience":
+        for e in doc.get("experiences") or []:
+            out.append(f'<div class="exp-role">{_esc(e.get("role", ""))}</div>')
+            meta = [_esc(e.get("company", ""))]
+            period = _fmt_period(e.get("start", ""), e.get("end", ""), e.get("current", False), labels)
+            if period:
+                meta.append(_esc(period))
+            out.append(f'<div class="exp-meta">{" — ".join(m for m in meta if m)}</div>')
+            bullets = e.get("bullets") or []
+            if bullets:
+                out.append("<ul>" + "".join(f"<li>{_esc(b)}</li>" for b in bullets) + "</ul>")
+    elif key == "skills":
+        for g in doc.get("skills") or []:
+            out.append(f'<div class="skill-line"><span class="skill-key">{_esc(g.get("category", ""))}:</span> '
+                       f'{_esc(", ".join(g.get("items") or []))}</div>')
+    elif key == "projects":
+        for p in doc.get("projects") or []:
+            out.append(f'<div class="proj-name">{_esc(p.get("name", ""))}</div>')
+            if p.get("url"):
+                url = _esc(_normalize_url(p["url"]))
+                out.append(f'<div class="proj-meta"><a href="{url}">{url}</a></div>')
+            if p.get("description"):
+                out.append(f'<div class="proj-desc">{_esc(p["description"])}</div>')
+    elif key == "education":
+        for e in doc.get("education") or []:
+            out.append(f'<div class="edu-course">{_esc(e.get("course", ""))}</div>')
+            meta = [_esc(e.get("institution", ""))]
+            period = _fmt_period(e.get("start", ""), e.get("end", ""), False, labels)
+            if period:
+                meta.append(_esc(period))
+            out.append(f'<div class="edu-institution">{" — ".join(m for m in meta if m)}</div>')
+    elif key == "certifications":
+        for c in doc.get("certifications") or []:
+            name = _esc(c.get("name", ""))
+            if c.get("url"):
+                name = f'<a href="{_esc(_normalize_url(c["url"]))}">{name}</a>'
+            out.append(f'<div class="cert-name">{name}</div>')
+            meta = [_esc(c.get("issuer", "")), _esc(_fmt_month(c.get("date", ""), labels))]
+            meta = [m for m in meta if m]
+            if meta:
+                out.append(f'<div class="cert-meta">{" — ".join(meta)}</div>')
+    if not out:
+        return []
+    return [f'<h2>{_esc(labels[key])}</h2>'] + out
+
+
+def doc_para_html(doc: dict, template: str = DEFAULT_TEMPLATE) -> str:
+    labels = _DOC_LABELS.get(doc.get("lang"), _DOC_LABELS["pt-br"])
+    tpl = TEMPLATES.get(template, TEMPLATES[DEFAULT_TEMPLATE])
+    html = _doc_header(doc.get("header") or {})
+    for key in tpl["order"]:
+        html.extend(_doc_section(key, doc, labels))
+    return "\n".join(html)
+
+
+def gerar_pdf_doc(doc: dict, template: str, caminho_saida: str) -> None:
+    tpl = TEMPLATES.get(template, TEMPLATES[DEFAULT_TEMPLATE])
+    lang = "en" if doc.get("lang") == "en" else "pt-BR"
+    HTML(string=_wrap_html(doc_para_html(doc, template), "Currículo", lang)).write_pdf(
+        caminho_saida, stylesheets=[tpl["css"]]
+    )
+
+
 # ── PDF generators ─────────────────────────────────────────────────────────────
 
 def _wrap_html(body: str, title: str, lang: str = "pt-BR") -> str:
@@ -795,6 +919,8 @@ def _process(dados: dict) -> dict:
     curriculo    = dados.get("curriculo", "")
     cover_letter = dados.get("cover_letter", "")
     output_dir   = dados.get("output_dir", "output")
+    doc          = dados.get("doc")
+    template     = dados.get("template") or DEFAULT_TEMPLATE
 
     sys.stderr.write(f"[INFO] Gerando PDFs para output_dir={output_dir}\n")
     sys.stderr.flush()
@@ -805,7 +931,10 @@ def _process(dados: dict) -> dict:
     cover_letter_path = os.path.join(output_dir, "cover_letter.pdf")
 
     try:
-        gerar_pdf_curriculo(curriculo, resume_path)
+        if doc:
+            gerar_pdf_doc(doc, template, resume_path)
+        else:
+            gerar_pdf_curriculo(curriculo, resume_path)  # content_json antigo (texto puro)
         sys.stderr.write(f"[INFO] Currículo gerado: {resume_path}\n")
         sys.stderr.flush()
     except Exception as e:

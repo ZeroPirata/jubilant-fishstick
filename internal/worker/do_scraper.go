@@ -7,6 +7,7 @@ import (
 	"hackton-treino/internal/metrics"
 	"hackton-treino/internal/scraper"
 	"hackton-treino/internal/util"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -33,6 +34,10 @@ func (w *Worker) doScraper(ctx context.Context, job *db.Job) (*scraper.ResultScr
 	}
 
 	basicDescription = basicScraper.BasicDescription
+	if strings.TrimSpace(basicDescription) == "" {
+		w.Logger.Warn("doScraper: descrição vazia", zap.String("job_id", job.ID.String()), zap.String("url", job.ExternalUrl))
+		return nil, fmt.Errorf("não foi possivel realizar o scraper: %w", scraper.ErrEmptyDescription)
+	}
 	result.Company = basicScraper.Company
 	result.Title = basicScraper.Title
 	result.BasicDescription = basicScraper.BasicDescription

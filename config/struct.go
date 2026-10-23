@@ -12,6 +12,14 @@ type Config struct {
 	ScrapeAi ScrapeAiConfig
 	Hash     HashConfig
 	Jwt      JwtConfig
+	Settings SettingsConfig
+}
+
+// SettingsConfig guarda o que é preciso para as configurações editáveis pelo painel.
+type SettingsConfig struct {
+	// Chave AES-256 em base64 (32 bytes) usada para criptografar as API keys salvas no banco.
+	// Gere com: openssl rand -base64 32
+	EncryptionKey string `env:"SETTINGS_ENCRYPTION_KEY"`
 }
 
 type JwtConfig struct {

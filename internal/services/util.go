@@ -2,9 +2,11 @@ package services
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // parseRetryDelay extrai o retryDelay do body de erro 429 do Gemini.
@@ -36,11 +38,45 @@ func parseRetryDelay(body []byte) time.Duration {
 
 var reTrailingComma = regexp.MustCompile(`,\s*([\]\}])`)
 
-// repairJSON remove trailing commas and closes any unclosed brackets.
+// Modelos de raciocínio (DeepSeek-R1, Qwen3...) podem mandar o "pensamento" dentro do content.
+var reThinkBlock = regexp.MustCompile(`(?s)<think>.*?</think>`)
+
+// extractContent pega o texto útil da resposta e transforma os casos silenciosos
+// (cortada por limite de tokens, vazia) em erros claros — que acionam o fallback.
+func extractContent(raw LLMResponse) (string, error) {
+	choice := raw.Choices[0]
+	content := strings.TrimSpace(reThinkBlock.ReplaceAllString(choice.Message.Content, ""))
+
+	switch choice.FinishReason {
+	case "length", "MAX_TOKENS":
+		return "", fmt.Errorf("AiService: resposta cortada pelo limite de tokens (finish_reason=%s, %d caracteres recebidos)",
+			choice.FinishReason, len(content))
+	}
+	if content == "" {
+		return "", fmt.Errorf("AiService: resposta vazia (finish_reason=%q); modelos de raciocínio podem gastar o limite pensando", choice.FinishReason)
+	}
+	return content, nil
+}
+
+// snippet devolve o começo de s para mensagens de erro, sem estourar o log.
+func snippet(s string) string {
+	const max = 200
+	if len(s) <= max {
+		return s
+	}
+	cut := max
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "…"
+}
+
+// repairJSON remove trailing commas e fecha strings, arrays e objetos deixados abertos
+// (resposta cortada), na ordem inversa em que foram abertos.
 func repairJSON(s string) string {
 	s = strings.TrimSpace(s)
 	s = reTrailingComma.ReplaceAllString(s, "$1")
-	open := 0
+	var stack []rune
 	inString := false
 	escaped := false
 	for _, c := range s {
@@ -60,14 +96,24 @@ func repairJSON(s string) string {
 			continue
 		}
 		switch c {
-		case '{', '[':
-			open++
+		case '{':
+			stack = append(stack, '}')
+		case '[':
+			stack = append(stack, ']')
 		case '}', ']':
-			open--
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
 		}
 	}
-	for range open {
-		s += "}"
+	if inString {
+		if escaped {
+			s = s[:len(s)-1]
+		}
+		s += `"`
+	}
+	for i := len(stack) - 1; i >= 0; i-- {
+		s += string(stack[i])
 	}
 	return s
 }

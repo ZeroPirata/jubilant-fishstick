@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"hackton-treino/config"
+	"hackton-treino/internal/aiconfig"
 	"hackton-treino/internal/handler"
 	"hackton-treino/internal/middleware"
 	adminRepo "hackton-treino/internal/repository/admin"
+	ucache "hackton-treino/internal/repository/cache"
 	"hackton-treino/internal/repository/secevents"
 	"hackton-treino/internal/security"
 	"hackton-treino/internal/sse"
@@ -22,7 +24,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.Config, rds *redis.Client, bus *sse.Bus) {
+func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.Config, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store) {
 	timeout := config.GetConfigDurationOrDefault(cfg.Project.ContextTimeout, 60*time.Second)
 	hash := config.LoadHashConfig(cfg)
 	hasher := security.NewHasher(hash)
@@ -74,6 +76,14 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	adminMux.HandleFunc("GET /errors",           adminH.ListErrorLogs)
 	adminMux.HandleFunc("GET /users",            adminH.ListUsers)
 	adminMux.HandleFunc("PATCH /users/{id}",     adminH.SetAdmin)
+
+	// Só master: configurações de IA (contêm API keys) e promoção de masters
+	master := middleware.MasterMiddleware(adminR)
+	aiH := handler.NewAISettingsHandler(logger, aiStore, ucache.New(rds), adminR, cfg)
+	adminMux.Handle("GET /ai-settings",             master(http.HandlerFunc(aiH.Get)))
+	adminMux.Handle("PUT /ai-settings/{purpose}",   master(http.HandlerFunc(aiH.Save)))
+	adminMux.Handle("POST /ai-settings/resume",     master(http.HandlerFunc(aiH.ResumeWorker)))
+	adminMux.Handle("PATCH /users/{id}/master",     master(http.HandlerFunc(aiH.SetMaster)))
 	adminHandler := middleware.AdminMiddleware(adminR)(adminMux)
 	protectedMux.Handle("/admin/", http.StripPrefix("/admin", adminHandler))
 

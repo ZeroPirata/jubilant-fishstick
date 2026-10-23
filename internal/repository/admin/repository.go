@@ -79,7 +79,7 @@ func (r *adminRepo) ListErrorLogs(ctx context.Context, limit, offset int) ([]Err
 
 func (r *adminRepo) ListUsers(ctx context.Context) ([]UserAccount, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, email, is_admin, created_at
+		`SELECT id, email, is_admin, is_master, created_at
 		 FROM user_accounts
 		 WHERE deleted_at IS NULL
 		 ORDER BY created_at DESC`,
@@ -94,7 +94,7 @@ func (r *adminRepo) ListUsers(ctx context.Context) ([]UserAccount, error) {
 		var u UserAccount
 		var id pgtype.UUID
 		var createdAt pgtype.Timestamptz
-		if err := rows.Scan(&id, &u.Email, &u.IsAdmin, &createdAt); err != nil {
+		if err := rows.Scan(&id, &u.Email, &u.IsAdmin, &u.IsMaster, &createdAt); err != nil {
 			return nil, err
 		}
 		u.ID = formatUUID(id.Bytes)
@@ -126,6 +126,32 @@ func (r *adminRepo) IsAdmin(ctx context.Context, userID string) (bool, error) {
 		`SELECT is_admin FROM user_accounts WHERE id = $1 AND deleted_at IS NULL`, uid,
 	).Scan(&isAdmin)
 	return isAdmin, err
+}
+
+func (r *adminRepo) IsMaster(ctx context.Context, userID string) (bool, error) {
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return false, err
+	}
+	var isMaster bool
+	err := r.db.QueryRow(ctx,
+		`SELECT is_master FROM user_accounts WHERE id = $1 AND deleted_at IS NULL`, uid,
+	).Scan(&isMaster)
+	return isMaster, err
+}
+
+func (r *adminRepo) SetMaster(ctx context.Context, userID string, isMaster bool) error {
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return err
+	}
+	_, err := r.db.Exec(ctx,
+		`UPDATE user_accounts
+		 SET is_master = $1, is_admin = is_admin OR $1, updated_at = NOW()
+		 WHERE id = $2`,
+		isMaster, uid,
+	)
+	return err
 }
 
 func formatUUID(b [16]byte) string {

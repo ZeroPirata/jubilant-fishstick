@@ -36,6 +36,9 @@ type Cache interface {
 	Delete(ctx context.Context, userId, topic string) error
 	SetRateLimit(ctx context.Context, ttl time.Duration) error
 	IsRateLimited(ctx context.Context) bool
+	// RateLimitRemaining devolve quanto falta para a pausa do worker acabar (0 = não pausado).
+	RateLimitRemaining(ctx context.Context) time.Duration
+	ClearRateLimit(ctx context.Context) error
 }
 
 func New(rds *redis.Client) Cache {
@@ -67,6 +70,18 @@ func (c *cache) Delete(ctx context.Context, userId, topic string) error {
 
 func (c *cache) SetRateLimit(ctx context.Context, ttl time.Duration) error {
 	return c.r.Set(ctx, keyLLMRateLimit, "1", ttl).Err()
+}
+
+func (c *cache) RateLimitRemaining(ctx context.Context) time.Duration {
+	ttl, err := c.r.TTL(ctx, keyLLMRateLimit).Result()
+	if err != nil || ttl < 0 {
+		return 0
+	}
+	return ttl
+}
+
+func (c *cache) ClearRateLimit(ctx context.Context) error {
+	return c.r.Del(ctx, keyLLMRateLimit).Err()
 }
 
 func (c *cache) IsRateLimited(ctx context.Context) bool {
