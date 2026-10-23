@@ -667,3 +667,9 @@ a.link:hover { text-decoration: underline; }
   .table-cards td.empty::before { content: none; }
   #tab-metricas .section-header { flex-wrap: wrap; gap: 10px; }
 }
+
+.tpl-select { width: auto; font-size: 12px; padding: 4px 8px; }
+@media (max-width: 640px) {
+  .resume-card-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .resume-card-actions { flex-wrap: wrap; }
+}

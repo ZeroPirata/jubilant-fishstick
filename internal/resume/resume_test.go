@@ -224,6 +224,12 @@ func TestSummaryViolations(t *testing.T) {
 		{"formação existe", Source{Lang: "en", Education: []Education{{Course: "ADS"}}}, "Developer with a degree in ADS.", 0},
 		{"com experiência pode citar anos", Source{Experiences: []SourceExperience{{Start: ym("2022-01"), Current: true}}, Education: []Education{{}}}, "Engenheiro com 4 anos em Go.", 0},
 		{"pt: formação inventada", Source{Lang: "pt-br"}, "Desenvolvedor com formação em Ciência da Computação.", 1},
+		// Caso real do lab: objetivo certo na linha 1, mas "possui experiência" na linha 2.
+		{"pt: possui experiência sem experiência", Source{Lang: "pt-br", Education: []Education{{}}},
+			"Desenvolvedor em busca da primeira oportunidade como Backend Engineer. Possui experiência em sistemas distribuídos.", 1},
+		{"pt: objetivo limpo", Source{Lang: "pt-br", Education: []Education{{}}},
+			"Desenvolvedor em busca da primeira oportunidade como Backend Engineer, com projetos práticos em Go. Construí um gerador de currículos.", 0},
+		{"en: experience in", Source{Lang: "en", Education: []Education{{}}}, "Developer seeking a first opportunity. Has experience in Go.", 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {

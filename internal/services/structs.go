@@ -21,7 +21,6 @@ type MatchResult struct {
 	Feedbacks     []string
 }
 
-
 type AiService struct {
 	Config           *config.Config
 	Source           ProviderSource

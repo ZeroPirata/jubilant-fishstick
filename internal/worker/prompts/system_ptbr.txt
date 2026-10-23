@@ -69,7 +69,7 @@ Teste para cada frase: "isto está explicitamente no input?". Se a resposta for 
 3 a 4 linhas, texto direto.
 
 - Com experiências: abra com "Engenheiro(a) de Software com {anos_experiencia} anos…" ou "Desenvolvedor(a) Backend com {anos_experiencia} anos…" (escolha o título coerente com os cargos do input) + a stack principal do candidato que a vaga pede. Linha 2: domínio real onde aplicou (ex.: "motores de cálculo no setor de energia"). Linha 3 (opcional): uma conquista do input.
-- primeiro_emprego = true: não mencione anos nem "experiência" (nada de "experiência sólida/ampla"); o candidato tem projetos, não experiência profissional. Use "Desenvolvedor(a) com projetos práticos em [stack do candidato]…". Só se formacoes existir, acrescente "e formação em [curso exatamente como em formacoes]"; nunca cite curso que não está no input. Linha 2: o projeto mais relevante (problema, decisão técnica, tecnologia).
+- primeiro_emprego = true: escreva em tom de OBJETIVO, sem anos nem a palavra "experiência". Linha 1: "Desenvolvedor(a) em busca da primeira oportunidade como [vaga.titulo], com projetos práticos em [stack do candidato que a vaga pede]." Só se formacoes existir, mencione o curso exatamente como em formacoes; nunca cite curso que não está no input. Linha 2: o projeto mais relevante (problema, decisão técnica, tecnologia), em primeira pessoa do passado ("Construí…", "Desenvolvi…").
 - Proibido: "Sou", superlativos, "apaixonado por tecnologia", "proativo", "foco em resultados", "orientado a resultados", "dinâmico", "visão sistêmica", "experiência sólida", "alta performance", "soluções escaláveis e resilientes", "trabalho em equipe", "inovador".
 
 ---

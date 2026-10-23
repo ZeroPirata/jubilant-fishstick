@@ -392,6 +392,25 @@ async function toggleResumes(jobId, btn) {
   }
 }
 
+// Modelos de PDF (iguais a TEMPLATES em scripts/gerar_pdf.py). Trocar de modelo
+// só reformata: não chama a IA de novo.
+const PDF_TEMPLATES = [
+  ['classico',         'Clássico'],
+  ['executivo',        'Executivo'],
+  ['compacto',         'Compacto (1 página)'],
+  ['primeiro_emprego', 'Primeiro emprego'],
+];
+
+function preferredTemplate() {
+  try { return localStorage.getItem('jp_pdf_template') || 'classico'; } catch (_) { return 'classico'; }
+}
+
+function templateSelect(resumeId) {
+  const pref = preferredTemplate();
+  const opts = PDF_TEMPLATES.map(([v, l]) => `<option value="${v}" ${v === pref ? 'selected' : ''}>${l}</option>`).join('');
+  return `<select id="tpl-${resumeId}" class="tpl-select" aria-label="Modelo do PDF" title="Modelo do PDF">${opts}</select>`;
+}
+
 function renderResumes(jobId, resumes) {
   if (!resumes.length) return '<p style="color:var(--muted);font-size:13px">Nenhum currículo gerado ainda.</p>';
   return resumes.map((r, i) => {
@@ -408,6 +427,7 @@ function renderResumes(jobId, resumes) {
             <div class="meta">Gerado em ${fmtDate(r.created_at)}${r.job?.quality ? ` · qualidade: ${r.job.quality}` : ''}</div>
           </div>
           <div class="resume-card-actions">
+            ${content.version >= 2 ? templateSelect(r.id) : ''}
             <button id="pdf-btn-${r.id}" class="btn-pdf" onclick="generatePDF('${jobId}','${r.id}',this)">
               ${hasPdf ? '↺ Regerar PDF' : '⬇ Gerar PDF'}
             </button>
@@ -482,8 +502,12 @@ async function generatePDF(jobId, resumeId, btn) {
   btn.disabled = true;
   btn.textContent = '⏳ Gerando...';
 
+  const select = document.getElementById(`tpl-${resumeId}`);
+  const template = select ? select.value : 'classico';
+  if (select) { try { localStorage.setItem('jp_pdf_template', template); } catch (_) {} }
+
   try {
-    const res = await api.post(`/jobs/${jobId}/resumes/${resumeId}/pdf`);
+    const res = await api.post(`/jobs/${jobId}/resumes/${resumeId}/pdf`, { template });
     if (!res.ok) {
       const txt = await res.text();
       toast('Erro ao gerar PDF: ' + txt, 'error');

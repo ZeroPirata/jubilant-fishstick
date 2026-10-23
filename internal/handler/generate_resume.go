@@ -25,6 +25,12 @@ type pythonInput struct {
 	Template    string          `json:"template,omitempty"`
 }
 
+// Modelos de PDF (scripts/gerar_pdf.py → TEMPLATES). Só valem para content_json v2;
+// currículos antigos (texto puro) usam sempre o renderizador original.
+var pdfTemplates = map[string]bool{"classico": true, "executivo": true, "compacto": true, "primeiro_emprego": true}
+
+const defaultPDFTemplate = "classico"
+
 // storedContent lê generated_resumes.content_json nos dois formatos:
 // v1 (só texto) e v2 (com doc estruturado).
 type storedContent struct {
