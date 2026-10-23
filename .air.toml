@@ -6,7 +6,8 @@ tmp_dir = "tmp"
   entrypoint = "tmp/main"
   cmd = "go build -buildvcs=false -trimpath -o tmp/main ./cmd/server 2>&1"
   delay = 100
-  exclude_dir = ["assets", "tmp", "vendor", "testdata", ".git", "node_modules", "data"]
+  # Pastas que não são código (dados do Postgres/pgAdmin, CI, editor, imagens).
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", ".git", "node_modules", "data", ".devcontainer", ".github", ".vscode", "imgs"]
   exclude_regex = ["_test.go"]
   include_ext = ["go", "tpl", "tmpl", "html"]
   kill_delay = "500ms"
