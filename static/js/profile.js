@@ -167,11 +167,11 @@ async function loadExperiences() {
     rows.forEach(e => { _expData[e.id] = e; });
     tbody.innerHTML = rows.map(e => `
       <tr>
-        <td>${escStr(e.company_name)}</td>
-        <td>${escStr(e.job_role)}</td>
-        <td style="color:var(--muted)">${d2m(e.start_date)} → ${e.is_current_job ? 'atual' : d2m(e.end_date)}</td>
-        <td style="color:var(--muted)">${(e.tech_stack||[]).join(', ') || '—'}</td>
-        <td style="color:var(--muted)">${(e.tags||[]).join(', ') || '—'}</td>
+        <td data-label="Empresa">${escStr(e.company_name)}</td>
+        <td data-label="Cargo">${escStr(e.job_role)}</td>
+        <td style="color:var(--muted)" data-label="Período">${d2m(e.start_date)} → ${e.is_current_job ? 'atual' : d2m(e.end_date)}</td>
+        <td style="color:var(--muted)" data-label="Habilidades"><span class="clamp-3" title="${escStr((e.tech_stack||[]).join(', '))}">${escStr((e.tech_stack||[]).join(', ')) || '—'}</span></td>
+        <td style="color:var(--muted)" data-label="Tags"><span class="clamp-3" title="${escStr((e.tags||[]).join(', '))}">${escStr((e.tags||[]).join(', ')) || '—'}</span></td>
         <td>
           <button class="btn-edit" onclick="editExperience('${e.id}')">✎</button>
           <button class="btn-delete" onclick="deleteExperience('${e.id}',this)">✕</button>
@@ -260,9 +260,9 @@ async function loadAcademic() {
     rows.forEach(a => { _acData[a.id] = a; });
     tbody.innerHTML = rows.map(a => `
       <tr>
-        <td>${escStr(a.institution_name)}</td>
-        <td>${escStr(a.course_name)}</td>
-        <td style="color:var(--muted)">${d2m(a.start_date)} → ${d2m(a.end_date)}</td>
+        <td data-label="Instituição">${escStr(a.institution_name)}</td>
+        <td data-label="Curso">${escStr(a.course_name)}</td>
+        <td style="color:var(--muted)" data-label="Período">${d2m(a.start_date)} → ${d2m(a.end_date)}</td>
         <td>
           <button class="btn-edit" onclick="editAcademic('${a.id}')">✎</button>
           <button class="btn-delete" onclick="deleteAcademic('${a.id}',this)">✕</button>
@@ -339,9 +339,9 @@ async function loadSkills() {
     rows.forEach(s => { _skData[s.id] = s; });
     tbody.innerHTML = rows.map(s => `
       <tr>
-        <td>${escStr(s.skill_name)}</td>
-        <td><span class="badge badge-${s.proficiency_level}">${s.proficiency_level}</span></td>
-        <td style="color:var(--muted)">${(s.tags||[]).join(', ') || '—'}</td>
+        <td data-label="Nome">${escStr(s.skill_name)}</td>
+        <td data-label="Nível"><span class="badge badge-${s.proficiency_level}">${s.proficiency_level}</span></td>
+        <td style="color:var(--muted)" data-label="Tags">${(s.tags||[]).join(', ') || '—'}</td>
         <td>
           <button class="btn-edit" onclick="editSkill('${s.id}')">✎</button>
           <button class="btn-delete" onclick="deleteSkill('${s.id}',this)">✕</button>
@@ -418,10 +418,10 @@ async function loadProjects() {
     rows.forEach(p => { _projData[p.id] = p; });
     tbody.innerHTML = rows.map(p => `
       <tr>
-        <td>${escStr(p.project_name)}</td>
-        <td>${p.project_url ? `<a class="link" href="${escStr(p.project_url)}" target="_blank" rel="noopener noreferrer">↗</a>` : '—'}</td>
-        <td style="color:var(--muted)">${d2m(p.start_date)} → ${d2m(p.end_date)}</td>
-        <td style="color:var(--muted)">${(p.tags||[]).join(', ') || '—'}</td>
+        <td data-label="Nome">${escStr(p.project_name)}</td>
+        <td data-label="Link">${p.project_url ? `<a class="link" href="${escStr(p.project_url)}" target="_blank" rel="noopener noreferrer">↗</a>` : '—'}</td>
+        <td style="color:var(--muted)" data-label="Período">${d2m(p.start_date)} → ${d2m(p.end_date)}</td>
+        <td style="color:var(--muted)" data-label="Tags">${(p.tags||[]).join(', ') || '—'}</td>
         <td>
           <button class="btn-edit" onclick="editProject('${p.id}')">✎</button>
           <button class="btn-delete" onclick="deleteProject('${p.id}',this)">✕</button>
@@ -505,10 +505,10 @@ async function loadCertificates() {
     rows.forEach(c => { _certData[c.id] = c; });
     tbody.innerHTML = rows.map(c => `
       <tr>
-        <td>${escStr(c.certificate_name)}</td>
-        <td style="color:var(--muted)">${escStr(c.issuing_organization)}</td>
-        <td style="color:var(--muted)">${d2m(c.issue_date)}</td>
-        <td>${c.credential_url ? `<a class="link" href="${escStr(c.credential_url)}" target="_blank">↗</a>` : '—'}</td>
+        <td data-label="Nome">${escStr(c.certificate_name)}</td>
+        <td style="color:var(--muted)" data-label="Emissor">${escStr(c.issuing_organization)}</td>
+        <td style="color:var(--muted)" data-label="Data">${d2m(c.issue_date)}</td>
+        <td data-label="Link">${c.credential_url ? `<a class="link" href="${escStr(c.credential_url)}" target="_blank">↗</a>` : '—'}</td>
         <td>
           <button class="btn-edit" onclick="editCertificate('${c.id}')">✎</button>
           <button class="btn-delete" onclick="deleteCertificate('${c.id}',this)">✕</button>

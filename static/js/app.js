@@ -56,6 +56,9 @@ function navigateTo(id) {
   const btn     = document.querySelector(`nav button[data-tab="${id}"]`);
   if (section) section.classList.add('active');
   if (btn)     btn.classList.add('active');
+  const crumb = document.getElementById('crumb-current');
+  if (crumb && btn) crumb.textContent = btn.textContent.trim().toLowerCase();
+  if (btn && window.matchMedia('(max-width: 860px)').matches) btn.scrollIntoView({ inline: 'nearest', block: 'nearest' });
 
   if (_activeTab === 'metricas') stopMetricsRefresh();
   _activeTab = id;
@@ -145,6 +148,11 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('reg-password').addEventListener('keydown', e => {
     if (e.key === 'Enter') doRegister();
   });
+
+  // Relógio da barra superior
+  const clock = document.getElementById('topbar-clock');
+  const tick = () => { if (clock) clock.textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); };
+  tick(); setInterval(tick, 30_000);
 
   if (getToken()) {
     showApp();

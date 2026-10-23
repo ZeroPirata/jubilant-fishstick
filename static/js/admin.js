@@ -67,12 +67,12 @@ function renderAdminErrors() {
     const when   = new Date(r.CreatedAt).toLocaleString('pt-BR');
     const msg    = `<span title="${r.ErrorMessage}" class="truncate" style="max-width:260px;display:inline-block">${r.ErrorMessage}</span>`;
     return `<tr>
-      <td>${badge}</td>
-      <td>${url}</td>
-      <td>${msg}</td>
-      <td>${jobID}</td>
-      <td style="color:var(--muted);font-size:12px">${user}</td>
-      <td style="color:var(--muted);font-size:12px;white-space:nowrap">${when}</td>
+      <td data-label="Tipo">${badge}</td>
+      <td data-label="URL">${url}</td>
+      <td data-label="Mensagem">${msg}</td>
+      <td data-label="Job">${jobID}</td>
+      <td style="color:var(--muted);font-size:12px" data-label="Usuário">${user}</td>
+      <td style="color:var(--muted);font-size:12px;white-space:nowrap" data-label="Quando">${when}</td>
     </tr>`;
   }).join('');
 }
@@ -132,9 +132,9 @@ function renderAdminUsers(users) {
     const masterBtn = !_isMaster ? '' : `<button class="btn ${u.IsMaster ? 'btn-danger' : 'btn-ghost'}" style="font-size:12px;padding:4px 10px"
           onclick="toggleMaster('${u.ID}', ${!u.IsMaster})">${u.IsMaster ? 'Remover master' : 'Tornar master'}</button>`;
     return `<tr>
-      <td>${aiEsc(u.Email)}</td>
-      <td>${badge}</td>
-      <td style="color:var(--muted);font-size:12px">${when}</td>
+      <td data-label="Email">${aiEsc(u.Email)}</td>
+      <td data-label="Papel">${badge}</td>
+      <td style="color:var(--muted);font-size:12px" data-label="Cadastro">${when}</td>
       <td style="display:flex;gap:6px">${adminBtn}${masterBtn}</td>
     </tr>`;
   }).join('');
