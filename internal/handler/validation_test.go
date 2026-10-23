@@ -102,6 +102,27 @@ func TestValidateEmail(t *testing.T) {
 	}
 }
 
+func TestNormalizeEmail(t *testing.T) {
+	cases := []struct {
+		label string
+		value string
+		want  string
+	}{
+		{"ja normalizado", "user@example.com", "user@example.com"},
+		{"maiusculas misturadas", "meUEmail@Gmail.COM", "meuemail@gmail.com"},
+		{"espacos nas pontas", "  user@example.com \n", "user@example.com"},
+		{"vazio", "", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			if got := NormalizeEmail(tc.value); got != tc.want {
+				t.Errorf("NormalizeEmail(%q) = %q, want %q", tc.value, got, tc.want)
+			}
+		})
+	}
+}
+
 // =============================================================================
 // Validate (combina validators)
 // =============================================================================

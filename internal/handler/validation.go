@@ -88,6 +88,12 @@ func MaxLength(key, value string, max int) Validator {
 	}
 }
 
+// NormalizeEmail deixa o e-mail num formato canônico (sem espaços e em minúsculas),
+// garantindo que "MeuEmail@gmail.com" e "meuemail@gmail.com" sejam a mesma conta.
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
 func ValidateEmail(key, value string) Validator {
 	return func() error {
 		if !strings.Contains(value, "@") || !strings.Contains(value, ".") {
