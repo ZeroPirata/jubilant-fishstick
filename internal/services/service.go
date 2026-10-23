@@ -222,10 +222,10 @@ func (ai *AiService) applyJsonFormat(body map[string]any, provider string) map[s
 // GenerateCurriculum percorre a cadeia de providers principal até um gerar um JSON válido.
 func (ai *AiService) GenerateCurriculum(ctx context.Context, systemPrompt, userPrompt string) (*resume.LLMOutput, error) {
 	var result *resume.LLMOutput
-	err := ai.withFallback(ctx, PurposeMain, func(ctx context.Context, p Provider, last bool) error {
-		r, err := ai.generateCurriculum(ctx, p, last, systemPrompt, userPrompt)
+	err := ai.withFallback(ctx, PurposeMain, func(ctx context.Context, p Provider, last bool) (Usage, error) {
+		r, usage, err := ai.generateCurriculum(ctx, p, last, systemPrompt, userPrompt)
 		result = r
-		return err
+		return usage, err
 	})
 	if err != nil {
 		return nil, err
@@ -233,44 +233,44 @@ func (ai *AiService) GenerateCurriculum(ctx context.Context, systemPrompt, userP
 	return result, nil
 }
 
-func (ai *AiService) generateCurriculum(ctx context.Context, p Provider, waitOn429 bool, systemPrompt, userPrompt string) (*resume.LLMOutput, error) {
+func (ai *AiService) generateCurriculum(ctx context.Context, p Provider, waitOn429 bool, systemPrompt, userPrompt string) (*resume.LLMOutput, Usage, error) {
 	body := ai.buildBody(AIInput{SystemPrompt: systemPrompt, UserPrompt: userPrompt}, p)
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("AiService: error in generate a json for body: %w", err)
+		return nil, Usage{}, fmt.Errorf("AiService: error in generate a json for body: %w", err)
 	}
 
 	raw, err := ai.sendRequest(ctx, ai.httpClient, payload, p, waitOn429)
 	if err != nil {
-		return nil, err
+		return nil, Usage{}, err
 	}
 
 	text, err := extractContent(raw)
 	if err != nil {
-		return nil, err
+		return nil, raw.Usage, err
 	}
 	content := sanitizeJSONLiterals(stripMarkdownCode(text))
 	var result resume.LLMOutput
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
-		return nil, fmt.Errorf("AiService: parse llm json: %w (início da resposta: %q)", err, snippet(content))
+		return nil, raw.Usage, fmt.Errorf("AiService: %w: %v (início da resposta: %q)", ErrParse, err, snippet(content))
 	}
 	if result.Error != "" {
-		return nil, fmt.Errorf("AiService: llm error: %s", result.Error)
+		return nil, raw.Usage, fmt.Errorf("AiService: llm error: %s", result.Error)
 	}
 	// JSON válido mas sem conteúdo (ex.: schema antigo ou modelo que ignorou o formato).
 	if result.Resumo == "" && result.CoverLetter == "" && len(result.Experiencias) == 0 {
-		return nil, fmt.Errorf("AiService: resposta sem conteúdo no schema esperado (início da resposta: %q)", snippet(content))
+		return nil, raw.Usage, fmt.Errorf("AiService: %w (início da resposta: %q)", ErrNoContent, snippet(content))
 	}
-	return &result, nil
+	return &result, raw.Usage, nil
 }
 
 // GenerateScrapeSite percorre a cadeia de providers de scrape até um extrair um JSON válido.
 func (ai *AiService) GenerateScrapeSite(ctx context.Context, description string) (*scraper.NLScraperResult, error) {
 	var result *scraper.NLScraperResult
-	err := ai.withFallback(ctx, PurposeScrape, func(ctx context.Context, p Provider, last bool) error {
-		r, err := ai.generateScrapeSite(ctx, p, last, description)
+	err := ai.withFallback(ctx, PurposeScrape, func(ctx context.Context, p Provider, last bool) (Usage, error) {
+		r, usage, err := ai.generateScrapeSite(ctx, p, last, description)
 		result = r
-		return err
+		return usage, err
 	})
 	if err != nil {
 		return nil, err
@@ -278,7 +278,7 @@ func (ai *AiService) GenerateScrapeSite(ctx context.Context, description string)
 	return result, nil
 }
 
-func (ai *AiService) generateScrapeSite(ctx context.Context, p Provider, waitOn429 bool, description string) (*scraper.NLScraperResult, error) {
+func (ai *AiService) generateScrapeSite(ctx context.Context, p Provider, waitOn429 bool, description string) (*scraper.NLScraperResult, Usage, error) {
 	// Timeout por provider: um modelo travado não consome o tempo dos próximos da cadeia.
 	scrapeTimeout := config.GetConfigDurationOrDefault(ai.Config.ScrapeAi.Timeout, 3600*time.Second)
 	scrapeCtx, cancel := context.WithTimeout(ctx, scrapeTimeout)
@@ -287,30 +287,37 @@ func (ai *AiService) generateScrapeSite(ctx context.Context, p Provider, waitOn4
 	body := ai.buildScrapeBody(description, p)
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("AiService: error in generate a json for body: %w", err)
+		return nil, Usage{}, fmt.Errorf("AiService: error in generate a json for body: %w", err)
 	}
 
 	raw, err := ai.sendRequest(scrapeCtx, ai.scrapeHttpClient, payload, p, waitOn429)
 	if err != nil {
-		return nil, err
+		return nil, Usage{}, err
 	}
 
 	content, err := extractContent(raw)
 	if err != nil {
-		return nil, err
+		return nil, raw.Usage, err
 	}
 	cleanContent := sanitizeJSONLiterals(stripMarkdownCode(content))
 	cleanContent = repairJSON(cleanContent)
 
 	var result scraper.NLScraperResult
 	if err := json.Unmarshal([]byte(cleanContent), &result); err != nil {
-		return nil, fmt.Errorf("AiService: parse scraper llm json: %w (início da resposta: %q)", err, snippet(cleanContent))
+		return nil, raw.Usage, fmt.Errorf("AiService: %w: %v (início da resposta: %q)", ErrParse, err, snippet(cleanContent))
 	}
-	return &result, nil
+	return &result, raw.Usage, nil
 }
 
 type LLMResponse struct {
 	Choices []Choice `json:"choices"`
+	Usage   Usage    `json:"usage"`
+}
+
+// Usage são os tokens consumidos numa chamada (para as métricas).
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
 }
 
 type Choice struct {
@@ -332,6 +339,10 @@ type geminiResponse struct {
 			} `json:"parts"`
 		} `json:"content"`
 	} `json:"candidates"`
+	UsageMetadata struct {
+		PromptTokenCount     int `json:"promptTokenCount"`
+		CandidatesTokenCount int `json:"candidatesTokenCount"`
+	} `json:"usageMetadata"`
 }
 
 // sendRequest envia o payload para um provider. Com waitOn429=false, um 429 retorna
@@ -390,7 +401,7 @@ func (ai *AiService) sendRequest(ctx context.Context, client *http.Client, paylo
 		if resp.StatusCode != http.StatusOK {
 			errBody, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			return LLMResponse{}, fmt.Errorf("AiService: status %d: %s", resp.StatusCode, string(errBody))
+			return LLMResponse{}, &ErrHTTPStatus{Code: resp.StatusCode, Body: snippet(string(errBody))}
 		}
 
 		if p.Name == "gemini" {
@@ -401,7 +412,7 @@ func (ai *AiService) sendRequest(ctx context.Context, client *http.Client, paylo
 				return LLMResponse{}, fmt.Errorf("AiService: decode gemini: %w", err)
 			}
 			if len(gr.Candidates) == 0 || len(gr.Candidates[0].Content.Parts) == 0 {
-				return LLMResponse{}, fmt.Errorf("AiService: empty gemini response")
+				return LLMResponse{}, fmt.Errorf("AiService: %w (gemini sem candidates)", ErrEmpty)
 			}
 			return LLMResponse{Choices: []Choice{{
 				Message: Message{
@@ -409,7 +420,10 @@ func (ai *AiService) sendRequest(ctx context.Context, client *http.Client, paylo
 					Content: gr.Candidates[0].Content.Parts[0].Text,
 				},
 				FinishReason: gr.Candidates[0].FinishReason,
-			}}}, nil
+			}}, Usage: Usage{
+				PromptTokens:     gr.UsageMetadata.PromptTokenCount,
+				CompletionTokens: gr.UsageMetadata.CandidatesTokenCount,
+			}}, nil
 		}
 
 		var raw LLMResponse
@@ -419,7 +433,7 @@ func (ai *AiService) sendRequest(ctx context.Context, client *http.Client, paylo
 			return LLMResponse{}, fmt.Errorf("AiService: decode: %w", err)
 		}
 		if len(raw.Choices) == 0 {
-			return LLMResponse{}, fmt.Errorf("AiService: empty response")
+			return LLMResponse{}, fmt.Errorf("AiService: %w (sem choices)", ErrEmpty)
 		}
 		return raw, nil
 	}

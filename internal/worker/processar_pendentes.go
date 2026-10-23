@@ -54,6 +54,7 @@ func (w *Worker) processarPendentes(ctx context.Context) {
 
 func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 	jobID := job.ID.String()
+	ctx = services.WithJobID(ctx, jobID)
 	userID := job.UserID.String()
 	w.Logger.Info("Processando vaga", zap.String("job_id", jobID))
 

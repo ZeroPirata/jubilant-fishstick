@@ -635,3 +635,35 @@ a.link:hover { text-decoration: underline; }
 .toast.success { border-color: var(--green); color: var(--green); }
 .toast.error   { border-color: var(--red);   color: var(--red); }
 .toast.hidden  { opacity: 0; pointer-events: none; transform: translateY(8px); }
+
+/* ── Métricas de IA: linha do tempo empilhada (sucesso / falha) ──
+   Cores de status da paleta de referência (good/critical, validadas no fundo escuro);
+   a falha também leva hachura de 45°, para não depender só da cor. */
+.chart-legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.swatch-ok, .ai-seg-ok { background: #0ca30c; }
+.swatch-fail, .ai-seg-fail { background: repeating-linear-gradient(45deg, #d03b3b 0 3px, #8f2a2a 3px 5px); }
+.ai-chart { display: flex; gap: 8px; }
+.ai-chart-y { display: flex; flex-direction: column; justify-content: space-between; font-size: 11px; color: var(--muted); text-align: right; min-width: 24px; padding-bottom: 20px; }
+.ai-timeline { display: flex; align-items: flex-end; gap: 2px; height: 160px; border-bottom: 1px solid var(--border); }
+.ai-col { flex: 1; min-width: 2px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; border-radius: 4px 4px 0 0; }
+.ai-col:hover { background: rgba(255,255,255,.04); }
+.ai-col > div { margin: 0 18%; }
+.ai-col > div:first-child { border-radius: 4px 4px 0 0; }
+.ai-xaxis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 6px; height: 14px; }
+.chart-tooltip { position: fixed; z-index: 50; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--text); box-shadow: 0 4px 12px rgba(0,0,0,.35); }
+.chart-tooltip b { font-weight: 600; }
+.chip-muted { background: rgba(113,128,150,.12); color: var(--muted); }
+
+/* Tabelas de métricas viram cards no celular: cada célula mostra o próprio rótulo. */
+@media (max-width: 640px) {
+  .table-cards thead { display: none; }
+  .table-cards, .table-cards tbody, .table-cards tr, .table-cards td { display: block; width: 100%; }
+  .table-cards tr { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; }
+  .table-cards td { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border: 0; text-align: right; max-width: none !important; white-space: normal !important; }
+  .table-cards td::before { content: attr(data-label); color: var(--muted); font-size: 11px; text-align: left; flex-shrink: 0; }
+  .table-cards td.empty { justify-content: center; }
+  .table-cards td.empty::before { content: none; }
+  #tab-metricas .section-header { flex-wrap: wrap; gap: 10px; }
+}

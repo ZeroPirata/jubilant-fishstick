@@ -8,6 +8,7 @@ import (
 	"hackton-treino/internal/handler"
 	"hackton-treino/internal/middleware"
 	adminRepo "hackton-treino/internal/repository/admin"
+	"hackton-treino/internal/repository/aimetrics"
 	ucache "hackton-treino/internal/repository/cache"
 	"hackton-treino/internal/repository/secevents"
 	"hackton-treino/internal/security"
@@ -34,7 +35,6 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	adminR := adminRepo.New(db)
 	adminH := handler.NewAdminHandler(logger, adminR)
 
-	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/", handler.ServeUI)
 	mux.Handle("/static/", http.StripPrefix("/static/", noCacheStatic(http.FileServer(http.Dir("static")))))
 	outputFS := http.FileServer(http.Dir(handler.OutputBaseDir()))
@@ -76,6 +76,11 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	adminMux.HandleFunc("GET /errors",           adminH.ListErrorLogs)
 	adminMux.HandleFunc("GET /users",            adminH.ListUsers)
 	adminMux.HandleFunc("PATCH /users/{id}",     adminH.SetAdmin)
+
+	// Métricas (admin): Prometheus bruto (antes público em /metrics) e histórico das chamadas de IA
+	metricsH := handler.NewMetricsHandler(logger, aimetrics.New(db))
+	adminMux.Handle("GET /metrics/raw", promhttp.Handler())
+	adminMux.HandleFunc("GET /metrics/ai", metricsH.AI)
 
 	// Só master: configurações de IA (contêm API keys) e promoção de masters
 	master := middleware.MasterMiddleware(adminR)

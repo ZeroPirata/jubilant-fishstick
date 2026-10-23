@@ -10,6 +10,7 @@ import (
 	"hackton-treino/internal/aiconfig"
 	"hackton-treino/internal/bootstrap"
 	"hackton-treino/internal/middleware"
+	"hackton-treino/internal/repository/aimetrics"
 	"hackton-treino/internal/repository/aisettings"
 	"hackton-treino/internal/routes"
 	"hackton-treino/internal/security"
@@ -69,6 +70,7 @@ func run() error {
 	if err := postgres.RunMigrations(dbmigrations.FS, cfg, zap.L()); err != nil {
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
+	postgres.RegisterPoolMetrics(db)
 
 	rds, err := cache.GetClient(cfg, zap.L())
 	if err != nil {
@@ -93,6 +95,9 @@ func run() error {
 	}()
 
 	llm := services.NewLLMService(cfg, aiStore)
+	aiCalls := aimetrics.New(db)
+	llm.Recorder = aiCalls
+	go pruneAICalls(ctx, aiCalls)
 	go func() {
 		worker.NewWorker(zap.L(), db, *llm, cfg.ScrapeAi.Activate, rds, bus, cfg.Worker).Start(ctx)
 	}()
@@ -145,4 +150,22 @@ func startServer(ctx context.Context, cfg config.Config, db *pgxpool.Pool, rds *
 		return err
 	}
 	return nil
+}
+
+// pruneAICalls apaga diariamente o histórico de chamadas de IA além da retenção.
+func pruneAICalls(ctx context.Context, repo *aimetrics.Repository) {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for {
+		if n, err := repo.Prune(ctx); err != nil {
+			zap.L().Warn("falha ao limpar histórico de chamadas de IA", zap.Error(err))
+		} else if n > 0 {
+			zap.L().Info("histórico de chamadas de IA limpo", zap.Int64("removidas", n))
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }

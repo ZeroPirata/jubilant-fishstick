@@ -49,11 +49,11 @@ func extractContent(raw LLMResponse) (string, error) {
 
 	switch choice.FinishReason {
 	case "length", "MAX_TOKENS":
-		return "", fmt.Errorf("AiService: resposta cortada pelo limite de tokens (finish_reason=%s, %d caracteres recebidos)",
-			choice.FinishReason, len(content))
+		return "", fmt.Errorf("AiService: %w (finish_reason=%s, %d caracteres recebidos)",
+			ErrTruncated, choice.FinishReason, len(content))
 	}
 	if content == "" {
-		return "", fmt.Errorf("AiService: resposta vazia (finish_reason=%q); modelos de raciocínio podem gastar o limite pensando", choice.FinishReason)
+		return "", fmt.Errorf("AiService: %w (finish_reason=%q); modelos de raciocínio podem gastar o limite pensando", ErrEmpty, choice.FinishReason)
 	}
 	return content, nil
 }

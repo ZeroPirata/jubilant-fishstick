@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -29,6 +30,37 @@ func (p Provider) Label() string {
 		return p.Name
 	}
 	return p.Name + "/" + p.Model
+}
+
+// AICall é uma tentativa de chamada a um provider, registrada para as métricas.
+type AICall struct {
+	Purpose          Purpose
+	Provider         string
+	Model            string
+	Position         int // posição na cadeia (0 = primeiro)
+	Status           string
+	Duration         time.Duration
+	PromptTokens     int
+	CompletionTokens int
+	JobID            string
+	Error            string
+}
+
+// CallRecorder guarda as tentativas (implementado sobre o banco). Opcional.
+type CallRecorder interface {
+	RecordAICall(ctx context.Context, c AICall)
+}
+
+type jobIDKey struct{}
+
+// WithJobID associa as chamadas feitas com este contexto a um job (para as métricas).
+func WithJobID(ctx context.Context, jobID string) context.Context {
+	return context.WithValue(ctx, jobIDKey{}, jobID)
+}
+
+func jobIDFrom(ctx context.Context) string {
+	id, _ := ctx.Value(jobIDKey{}).(string)
+	return id
 }
 
 // ProviderSource devolve a cadeia configurada no painel. Lista vazia = usar o .env.
@@ -73,7 +105,7 @@ func (ai *AiService) resolveProviders(ctx context.Context, purpose Purpose) []Pr
 // last indica o último provider: só ele espera e repete em caso de 429, os anteriores
 // passam a vez imediatamente. Se todos falharem por rate limit, retorna *ErrRateLimit
 // (o worker pausa); se algum falhou por outro motivo, retorna um erro comum.
-func (ai *AiService) withFallback(ctx context.Context, purpose Purpose, call func(ctx context.Context, p Provider, last bool) error) error {
+func (ai *AiService) withFallback(ctx context.Context, purpose Purpose, call func(ctx context.Context, p Provider, last bool) (Usage, error)) error {
 	providers := ai.resolveProviders(ctx, purpose)
 	if len(providers) == 0 {
 		return fmt.Errorf("AiService: nenhum provider de IA configurado para %q", purpose)
@@ -88,7 +120,14 @@ func (ai *AiService) withFallback(ctx context.Context, purpose Purpose, call fun
 			return err
 		}
 
-		err := call(ctx, p, i == len(providers)-1)
+		start := time.Now()
+		usage, err := call(ctx, p, i == len(providers)-1)
+		ai.record(ctx, AICall{
+			Purpose: purpose, Provider: p.Name, Model: p.Model, Position: i,
+			Status: ClassifyError(err), Duration: time.Since(start),
+			PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens,
+			JobID: jobIDFrom(ctx), Error: errorText(err),
+		})
 		if err == nil {
 			if i > 0 {
 				zap.L().Info("AiService: fallback usado",
@@ -116,4 +155,19 @@ func (ai *AiService) withFallback(ctx context.Context, purpose Purpose, call fun
 		return &ErrRateLimit{Msg: msg}
 	}
 	return errors.New(msg)
+}
+
+func (ai *AiService) record(ctx context.Context, c AICall) {
+	if ai.Recorder == nil {
+		return
+	}
+	// Mesmo com o job cancelado a tentativa precisa ficar registrada.
+	ai.Recorder.RecordAICall(context.WithoutCancel(ctx), c)
+}
+
+func errorText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return snippet(err.Error())
 }
