@@ -26,7 +26,8 @@ func GetDataBasePool(c *config.Config, logr *zap.Logger) (*pgxpool.Pool, error) 
 
 func CreateConnection(c *config.Config, logr *zap.Logger) (*pgxpool.Pool, error) {
 	database := getDatabaseConfig(c)
-	logr.Info("conexão: ", zap.Any("url", database))
+	logr.Info("conectando ao banco",
+		zap.String("host", c.Database.Host), zap.Int("port", c.Database.Port), zap.String("db", c.Database.Name))
 	poolConfig, err := setupPoolConfig(database, c, logr)
 	if err != nil {
 		return nil, err
