@@ -58,6 +58,16 @@ function avgDuration(m, metric, status) {
   return count > 0 ? sum / count : 0;
 }
 
+// Estado de uma taxa de sucesso (cores de status reservadas, sempre com rótulo).
+function statusLevel(rate) { return rate >= .9 ? 'good' : rate >= .7 ? 'warning' : 'critical'; }
+function statusChip(rate, label) {
+  return `<span class="status-chip status-${statusLevel(rate)}">${fmt(rate * 100)}% ${label}</span>`;
+}
+function setHTML(id, html) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+
 function set(id, value) {
   const el = document.getElementById(id);
   if (el) el.textContent = value;
@@ -229,7 +239,7 @@ function renderMetrics(m) {
   set('m-jobs-completed', completed);
   set('m-jobs-error',     errored);
   set('m-jobs-recovered', recovered);
-  set('m-jobs-total',     total > 0 ? `${Math.round(completed / total * 100)}% taxa de sucesso` : '—');
+  setHTML('m-jobs-total', total > 0 ? statusChip(completed / total, 'de sucesso') : '—');
 
   // Worker
   set('m-goroutines-active', get(m, 'hackton_worker_active_goroutines'));
@@ -402,7 +412,7 @@ async function loadAIMetrics() {
 function renderAIMetrics(d, range) {
   const s = d.summary;
   set('ai-calls', s.calls || '0');
-  set('ai-success', s.calls ? `${fmt(s.success_rate * 100)}% com sucesso` : 'nenhuma chamada no período');
+  setHTML('ai-success', s.calls ? statusChip(s.success_rate, 'com sucesso') : 'nenhuma chamada no período');
   set('ai-avg', fmtMs(s.avg_ok_ms));
   set('ai-tokens', fmtTokens(s.prompt_tokens + s.completion_tokens));
   set('ai-tokens-split', `${fmtTokens(s.prompt_tokens)} entrada · ${fmtTokens(s.completion_tokens)} saída`);
@@ -508,24 +518,27 @@ function renderGeneralMetrics(m, ai) {
   const ok = get(m, 'hackton_jobs_processed_total{status="completed"}');
   const err = get(m, 'hackton_jobs_processed_total{status="error"}');
   set('g-jobs-ok', ok);
-  set('g-jobs-sub', ok + err > 0 ? `${fmt(ok / (ok + err) * 100)}% de sucesso desde o reinício` : 'nenhum job desde o reinício');
+  setHTML('g-jobs-sub', ok + err > 0 ? statusChip(ok / (ok + err), 'de sucesso') : 'nenhum job desde o reinício');
   set('g-jobs-err', err);
   setThreshold('g-jobs-err', err, 1, 5);
 
   // IA (histórico de 24h no banco)
   const s = ai.summary;
   set('g-ai-calls', s.calls || '0');
-  set('g-ai-sub', s.calls ? `${fmt(s.success_rate * 100)}% com sucesso` : 'nenhuma chamada');
+  setHTML('g-ai-sub', s.calls ? statusChip(s.success_rate, 'com sucesso') : 'nenhuma chamada');
   set('g-ai-avg', fmtMs(s.avg_ok_ms));
   set('g-ai-fallback', s.fallback_saves ? `fallback salvou ${s.fallback_saves}×` : 'fallback não foi necessário');
 
   const models = document.getElementById('g-ai-models');
   const top = ai.models.slice().sort((a, b) => b.calls - a.calls).slice(0, 5);
-  models.innerHTML = top.length ? top.map(x => `<div class="mini-row" title="${aiEsc(x.last_error || '')}">
-      <span class="name">${escHtml(x.model || x.provider)}<small>${AI_PURPOSE_LABELS[x.purpose] || escHtml(x.purpose)} · ${x.calls} chamadas</small></span>
-      <span class="num" style="color:${x.calls && x.ok / x.calls >= .8 ? 'var(--green)' : x.ok ? 'var(--yellow)' : 'var(--red)'}">${fmt(x.calls ? x.ok / x.calls * 100 : 0)}%</span>
+  models.innerHTML = top.length ? top.map(x => {
+    const rate = x.calls ? x.ok / x.calls : 0;
+    return `<div class="mini-row" title="${aiEsc(x.last_error || '')}">
+      <span class="name">${escHtml(x.model || x.provider)}<small>${AI_PURPOSE_LABELS[x.purpose] || escHtml(x.purpose)} · ${x.calls} chamadas</small>
+        <span class="bar bar-${statusLevel(rate)}" aria-hidden="true"><i style="width:${(rate * 100).toFixed(0)}%"></i></span></span>
+      <span class="status-chip status-${statusLevel(rate)}">${fmt(rate * 100)}%</span>
       <span class="num">${fmtMs(x.p50_ms)}</span>
-    </div>`).join('') : '<div class="empty">Nenhuma chamada nas últimas 24h.</div>';
+    </div>`; }).join('') : '<div class="empty">Nenhuma chamada nas últimas 24h.</div>';
 
   // API
   const httpTotal = sumByPrefix(m, 'hackton_http_requests_total{');
@@ -534,7 +547,7 @@ function renderGeneralMetrics(m, ai) {
   const durSum = sumByPrefix(m, 'hackton_http_request_duration_seconds_sum{');
   const durCount = sumByPrefix(m, 'hackton_http_request_duration_seconds_count{');
   set('g-http-avg', durCount ? fmtDur(durSum / durCount) : '—');
-  set('g-http-sub', httpTotal ? `${httpTotal} requisições · ${fmt(http2xx / httpTotal * 100)}% 2xx` : 'sem requisições');
+  setHTML('g-http-sub', httpTotal ? `${statusChip(http2xx / httpTotal, '2xx')} <span style="margin-left:4px">${httpTotal} req.</span>` : 'sem requisições');
   set('g-5xx', http5xx);
   setThreshold('g-5xx', http5xx, 1, 10);
 
@@ -550,8 +563,9 @@ function renderGeneralMetrics(m, ai) {
   const sum = rows.reduce((a, r) => a + r.sum, 0);
   set('g-db-avg', total ? fmtDur(sum / total) : '—');
   set('g-db-queries', `${total} consultas`);
+  const maxSum = rows.length ? rows[0].sum : 0;
   document.getElementById('g-db-top').innerHTML = rows.slice(0, 3).map(r => `<div class="mini-row">
-      <span class="name">${escHtml(r.name)}</span>
+      <span class="name">${escHtml(r.name)}<span class="bar bar-dom" aria-hidden="true"><i style="width:${maxSum ? (r.sum / maxSum * 100).toFixed(0) : 0}%"></i></span></span>
       <span class="num">${r.count}×</span>
       <span class="num">${fmtDur(r.sum)}</span>
     </div>`).join('') || '<div class="empty">Nenhuma consulta desde o reinício.</div>';

@@ -196,23 +196,27 @@
 
       <!-- ── Geral: o essencial de cada área, com atalho para os detalhes ── -->
       <div id="metrics-view-geral">
+        <div class="domain-legend" aria-label="Cores por área">
+          <span data-domain="pipeline"><i></i>Pipeline</span><span data-domain="ia"><i></i>IA</span>
+          <span data-domain="api"><i></i>API</span><span data-domain="banco"><i></i>Banco</span><span data-domain="runtime"><i></i>Runtime</span>
+        </div>
         <div class="metrics-grid">
-          <div class="metric-card">
+          <div data-domain="pipeline" class="metric-card">
             <div class="metric-label">Jobs concluídos</div>
             <div class="metric-val" id="g-jobs-ok">—</div>
             <div class="metric-sub" id="g-jobs-sub">desde o último reinício</div>
           </div>
-          <div class="metric-card">
+          <div data-domain="ia" class="metric-card">
             <div class="metric-label">Chamadas de IA · 24h</div>
             <div class="metric-val" id="g-ai-calls">—</div>
             <div class="metric-sub" id="g-ai-sub">—</div>
           </div>
-          <div class="metric-card">
+          <div data-domain="ia" class="metric-card">
             <div class="metric-label">Tempo médio da IA</div>
             <div class="metric-val" id="g-ai-avg">—</div>
             <div class="metric-sub" id="g-ai-fallback">—</div>
           </div>
-          <div class="metric-card">
+          <div data-domain="api" class="metric-card">
             <div class="metric-label">API · latência média</div>
             <div class="metric-val" id="g-http-avg">—</div>
             <div class="metric-sub" id="g-http-sub">—</div>
@@ -220,12 +224,12 @@
         </div>
 
         <div class="grid-3">
-          <div class="metric-card panel-link">
+          <div data-domain="ia" class="metric-card panel-link">
             <div class="panel-head"><span class="metric-card-title">IA por modelo · 24h</span>
               <button class="btn-more" onclick="switchMetricsView('ia', document.querySelector('[data-mview=ia]'))">detalhes →</button></div>
             <div id="g-ai-models" class="mini-list"><div class="empty">Carregando...</div></div>
           </div>
-          <div class="metric-card panel-link">
+          <div data-domain="banco" class="metric-card panel-link">
             <div class="panel-head"><span class="metric-card-title">Banco de dados</span>
               <button class="btn-more" onclick="switchMetricsView('banco', document.querySelector('[data-mview=banco]'))">detalhes →</button></div>
             <div class="mini-kpis">
@@ -235,7 +239,7 @@
             <div class="metric-label" style="margin-top:12px">Consultas mais pesadas</div>
             <div id="g-db-top" class="mini-list"></div>
           </div>
-          <div class="metric-card panel-link">
+          <div data-domain="runtime" class="metric-card panel-link">
             <div class="panel-head"><span class="metric-card-title">Sistema</span>
               <button class="btn-more" onclick="switchMetricsView('sistema', document.querySelector('[data-mview=sistema]'))">detalhes →</button></div>
             <div class="mini-kpis">
@@ -252,22 +256,22 @@
 
       <!-- Linha 1: 4 stat cards -->
       <div class="metrics-grid">
-        <div class="metric-card">
+        <div data-domain="pipeline" class="metric-card">
           <div class="metric-label">Jobs Concluídos</div>
           <div class="metric-val" id="m-jobs-completed" style="color:var(--green)">—</div>
           <div class="metric-sub" id="m-jobs-total">—</div>
         </div>
-        <div class="metric-card">
+        <div data-domain="pipeline" class="metric-card">
           <div class="metric-label">Jobs com Erro</div>
           <div class="metric-val" id="m-jobs-error" style="color:var(--red)">—</div>
           <div class="metric-sub">total processados</div>
         </div>
-        <div class="metric-card">
+        <div data-domain="pipeline" class="metric-card">
           <div class="metric-label">Jobs Recuperados</div>
           <div class="metric-val" id="m-jobs-recovered" style="color:var(--yellow)">—</div>
           <div class="metric-sub">travados → pending</div>
         </div>
-        <div class="metric-card">
+        <div data-domain="pipeline" class="metric-card">
           <div class="metric-label">Goroutines Ativas</div>
           <div class="metric-val" id="m-goroutines-active" style="color:var(--accent)">—</div>
           <div class="metric-sub">processando agora</div>
@@ -277,7 +281,7 @@
       <!-- Linha 2: HTTP API + per-route breakdown lado a lado -->
       <div class="metrics-http-row">
         <div class="metric-card">
-          <div class="metric-card-title">HTTP API — Requisições</div>
+          <div data-domain="api" class="metric-card-title">HTTP API — Requisições</div>
           <div class="metric-row">
             <div>
               <div class="metric-label">Total de requisições</div>
@@ -299,7 +303,7 @@
           </div>
         </div>
 
-        <div class="metric-card" id="m-routes-card" style="display:none">
+        <div data-domain="api" class="metric-card" id="m-routes-card" style="display:none">
           <div class="metric-card-title">Requisições por Rota</div>
           <div class="table-wrap" style="margin:0">
             <table class="routes-table">
@@ -324,7 +328,7 @@
       <!-- Linha 3: LLM + Scraper -->
       <div class="metrics-grid2">
         <div class="metric-card">
-          <div class="metric-card-title">LLM — Geração de Currículo</div>
+          <div data-domain="ia" class="metric-card-title">LLM — Geração de Currículo</div>
           <div class="metric-row">
             <div>
               <div class="metric-label">Total de chamadas</div>
@@ -342,7 +346,7 @@
           </div>
         </div>
         <div class="metric-card">
-          <div class="metric-card-title">Scraper — Coleta de Vaga</div>
+          <div data-domain="pipeline" class="metric-card-title">Scraper — Coleta de Vaga</div>
           <div class="metric-row">
             <div>
               <div class="metric-label">Total de execuções</div>
@@ -363,7 +367,7 @@
       <!-- Linha 4: Go runtime -->
       <div class="metric-card metric-card-runtime">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <div class="metric-card-title" style="margin-bottom:0">Go Runtime</div>
+          <div data-domain="runtime" class="metric-card-title" style="margin-bottom:0">Go Runtime</div>
           <button id="btn-force-gc" class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="triggerGC()">Forçar GC</button>
         </div>
         <div class="metrics-grid4">
@@ -399,22 +403,22 @@
         </div>
 
         <div class="metrics-grid">
-          <div class="metric-card">
+          <div data-domain="ia" class="metric-card">
             <div class="metric-label">Chamadas</div>
             <div class="metric-val" id="ai-calls">—</div>
             <div class="metric-sub" id="ai-success">—</div>
           </div>
-          <div class="metric-card">
+          <div data-domain="ia" class="metric-card">
             <div class="metric-label">Tempo médio (sucesso)</div>
             <div class="metric-val" id="ai-avg">—</div>
             <div class="metric-sub">por chamada</div>
           </div>
-          <div class="metric-card">
+          <div data-domain="ia" class="metric-card">
             <div class="metric-label">Tokens</div>
             <div class="metric-val" id="ai-tokens">—</div>
             <div class="metric-sub" id="ai-tokens-split">—</div>
           </div>
-          <div class="metric-card">
+          <div data-domain="ia" class="metric-card">
             <div class="metric-label">Salvos pelo fallback</div>
             <div class="metric-val" id="ai-fallback">—</div>
             <div class="metric-sub">sucessos fora do 1º provider</div>
@@ -423,7 +427,7 @@
 
         <div class="metric-card" style="margin-bottom:16px">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-            <div class="metric-card-title" style="margin-bottom:0">Chamadas ao longo do tempo</div>
+            <div data-domain="ia" class="metric-card-title" style="margin-bottom:0">Chamadas ao longo do tempo</div>
             <div class="chart-legend">
               <span><i class="swatch swatch-ok"></i>Sucesso</span>
               <span><i class="swatch swatch-fail"></i>Falha</span>
@@ -440,7 +444,7 @@
         </div>
 
         <div class="metric-card" style="margin-bottom:16px">
-          <div class="metric-card-title">Por modelo</div>
+          <div data-domain="ia" class="metric-card-title">Por modelo</div>
           <div class="table-wrap" style="margin:0">
             <table class="routes-table table-cards">
               <thead>
@@ -457,7 +461,7 @@
         </div>
 
         <div class="metric-card">
-          <div class="metric-card-title">Falhas recentes</div>
+          <div data-domain="ia" class="metric-card-title">Falhas recentes</div>
           <div class="table-wrap" style="margin:0">
             <table class="routes-table table-cards">
               <thead><tr><th>Quando</th><th>Finalidade</th><th>Modelo</th><th>Tipo</th><th class="rt-num">Tempo</th><th>Erro</th></tr></thead>
@@ -470,29 +474,29 @@
       <!-- ── Banco: consultas e pool de conexões (desde o último reinício) ── -->
       <div id="metrics-view-banco" class="hidden">
         <div class="metrics-grid">
-          <div class="metric-card">
+          <div data-domain="banco" class="metric-card">
             <div class="metric-label">Conexões em uso</div>
             <div class="metric-val" id="db-acquired">—</div>
             <div class="metric-sub" id="db-conns">—</div>
           </div>
-          <div class="metric-card">
+          <div data-domain="banco" class="metric-card">
             <div class="metric-label">Esperas por conexão</div>
             <div class="metric-val" id="db-waits">—</div>
             <div class="metric-sub" id="db-wait-time">pool cheio</div>
           </div>
-          <div class="metric-card">
+          <div data-domain="banco" class="metric-card">
             <div class="metric-label">Consultas</div>
             <div class="metric-val" id="db-queries">—</div>
             <div class="metric-sub" id="db-errors">—</div>
           </div>
-          <div class="metric-card">
+          <div data-domain="banco" class="metric-card">
             <div class="metric-label">Tempo médio</div>
             <div class="metric-val" id="db-avg">—</div>
             <div class="metric-sub">por consulta</div>
           </div>
         </div>
         <div class="metric-card">
-          <div class="metric-card-title">Consultas por tempo total</div>
+          <div data-domain="banco" class="metric-card-title">Consultas por tempo total</div>
           <p style="color:var(--muted);font-size:12px;margin:-6px 0 10px">Desde o último reinício da aplicação. As do topo são as que mais pesam no banco.</p>
           <div class="table-wrap" style="margin:0">
             <table class="routes-table table-cards">
