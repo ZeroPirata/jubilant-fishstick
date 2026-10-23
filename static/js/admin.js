@@ -59,22 +59,49 @@ function renderAdminErrors() {
     return;
   }
 
-  body.innerHTML = page.map(r => {
+  // Conteúdo vem de páginas de vagas e respostas de IA: tudo escapado antes de ir para o HTML.
+  body.innerHTML = page.map((r, i) => {
     const badge  = errorTypeBadge(r.ErrorType);
-    const url    = r.URL    ? `<a href="${r.URL}" target="_blank" class="link truncate" style="max-width:180px;display:inline-block" title="${r.URL}">${r.URL}</a>` : '—';
-    const jobID  = r.JobID  ? `<span class="mono truncate" style="max-width:100px;display:inline-block" title="${r.JobID}">${r.JobID.slice(0,8)}…</span>` : '—';
-    const user   = r.UserEmail ?? '—';
+    const url    = r.URL ? `<span class="link truncate" style="max-width:180px;display:inline-block">${aiEsc(r.URL)}</span>` : '—';
+    const jobID  = r.JobID ? `<span class="mono">${aiEsc(r.JobID.slice(0, 8))}…</span>` : '—';
     const when   = new Date(r.CreatedAt).toLocaleString('pt-BR');
-    const msg    = `<span title="${r.ErrorMessage}" class="truncate" style="max-width:260px;display:inline-block">${r.ErrorMessage}</span>`;
-    return `<tr>
-      <td data-label="Tipo">${badge}</td>
+    const msg    = `<span class="truncate" style="max-width:300px;display:inline-block">${aiEsc(r.ErrorMessage)}</span>`;
+    return `<tr class="err-row" data-i="${start + i}" onclick="toggleErrorDetail(this)" title="Clique para ver a mensagem completa">
+      <td data-label="Tipo">${badge}<span class="err-chevron">▶</span></td>
       <td data-label="URL">${url}</td>
       <td data-label="Mensagem">${msg}</td>
       <td data-label="Job">${jobID}</td>
-      <td style="color:var(--muted);font-size:12px" data-label="Usuário">${user}</td>
+      <td style="color:var(--muted);font-size:12px" data-label="Usuário">${aiEsc(r.UserEmail ?? '—')}</td>
       <td style="color:var(--muted);font-size:12px;white-space:nowrap" data-label="Quando">${when}</td>
     </tr>`;
   }).join('');
+}
+
+// Abre/fecha, logo abaixo da linha, a mensagem completa do erro com URL e job.
+function toggleErrorDetail(tr) {
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains('err-detail-row')) {
+    next.remove();
+    tr.classList.remove('open');
+    return;
+  }
+  const r = _adminErrorsAll[+tr.dataset.i];
+  if (!r) return;
+  const detail = document.createElement('tr');
+  detail.className = 'err-detail-row';
+  const url = r.URL && /^https?:\/\//i.test(r.URL)
+    ? `<a class="link" href="${aiEsc(r.URL)}" target="_blank" rel="noopener noreferrer">${aiEsc(r.URL)}</a>` : aiEsc(r.URL || '—');
+  detail.innerHTML = `<td colspan="6"><div class="err-detail">
+      <div class="err-meta">
+        <span><b>Quando:</b> ${new Date(r.CreatedAt).toLocaleString('pt-BR')}</span>
+        <span><b>Usuário:</b> ${aiEsc(r.UserEmail ?? '—')}</span>
+        <span><b>Job:</b> <span class="mono">${aiEsc(r.JobID || '—')}</span></span>
+      </div>
+      <div class="err-meta"><span><b>URL:</b> ${url}</span></div>
+      <pre>${aiEsc(r.ErrorMessage)}</pre>
+    </div></td>`;
+  tr.after(detail);
+  tr.classList.add('open');
 }
 
 function errorTypeBadge(type) {
@@ -87,7 +114,7 @@ function errorTypeBadge(type) {
     llm_rate_limit:       ['chip-yellow', 'Rate limit LLM'],
   };
   const [cls, label] = map[type] ?? ['', type];
-  return `<span class="metric-chip ${cls}" style="white-space:nowrap">${label}</span>`;
+  return `<span class="metric-chip ${cls}" style="white-space:nowrap">${aiEsc(label)}</span>`;
 }
 
 function adminErrorsPrev() {

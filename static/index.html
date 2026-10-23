@@ -183,7 +183,8 @@
         <h2>Métricas</h2>
         <div class="toolbar" style="margin:0;align-items:center;gap:12px">
           <div class="sub-nav" style="margin:0">
-            <button class="active" data-mview="sistema" onclick="switchMetricsView('sistema',this)">Sistema</button>
+            <button class="active" data-mview="geral" onclick="switchMetricsView('geral',this)">Geral</button>
+            <button data-mview="sistema" onclick="switchMetricsView('sistema',this)">Sistema</button>
             <button data-mview="ia" onclick="switchMetricsView('ia',this)">IA</button>
             <button data-mview="banco" onclick="switchMetricsView('banco',this)">Banco</button>
           </div>
@@ -193,7 +194,61 @@
       </div>
       <p id="metrics-error" style="color:var(--red);font-size:13px;margin-bottom:12px"></p>
 
-      <div id="metrics-view-sistema">
+      <!-- ── Geral: o essencial de cada área, com atalho para os detalhes ── -->
+      <div id="metrics-view-geral">
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Jobs concluídos</div>
+            <div class="metric-val" id="g-jobs-ok">—</div>
+            <div class="metric-sub" id="g-jobs-sub">desde o último reinício</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Chamadas de IA · 24h</div>
+            <div class="metric-val" id="g-ai-calls">—</div>
+            <div class="metric-sub" id="g-ai-sub">—</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Tempo médio da IA</div>
+            <div class="metric-val" id="g-ai-avg">—</div>
+            <div class="metric-sub" id="g-ai-fallback">—</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">API · latência média</div>
+            <div class="metric-val" id="g-http-avg">—</div>
+            <div class="metric-sub" id="g-http-sub">—</div>
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <div class="metric-card panel-link">
+            <div class="panel-head"><span class="metric-card-title">IA por modelo · 24h</span>
+              <button class="btn-more" onclick="switchMetricsView('ia', document.querySelector('[data-mview=ia]'))">detalhes →</button></div>
+            <div id="g-ai-models" class="mini-list"><div class="empty">Carregando...</div></div>
+          </div>
+          <div class="metric-card panel-link">
+            <div class="panel-head"><span class="metric-card-title">Banco de dados</span>
+              <button class="btn-more" onclick="switchMetricsView('banco', document.querySelector('[data-mview=banco]'))">detalhes →</button></div>
+            <div class="mini-kpis">
+              <div><div class="metric-label">Conexões em uso</div><div class="metric-val metric-val-sm" id="g-db-acquired">—</div><div class="metric-sub" id="g-db-conns">—</div></div>
+              <div><div class="metric-label">Tempo médio</div><div class="metric-val metric-val-sm" id="g-db-avg">—</div><div class="metric-sub" id="g-db-queries">—</div></div>
+            </div>
+            <div class="metric-label" style="margin-top:12px">Consultas mais pesadas</div>
+            <div id="g-db-top" class="mini-list"></div>
+          </div>
+          <div class="metric-card panel-link">
+            <div class="panel-head"><span class="metric-card-title">Sistema</span>
+              <button class="btn-more" onclick="switchMetricsView('sistema', document.querySelector('[data-mview=sistema]'))">detalhes →</button></div>
+            <div class="mini-kpis">
+              <div><div class="metric-label">Jobs com erro</div><div class="metric-val metric-val-sm" id="g-jobs-err">—</div><div class="metric-sub">desde o reinício</div></div>
+              <div><div class="metric-label">Processando agora</div><div class="metric-val metric-val-sm" id="g-goroutines">—</div><div class="metric-sub">goroutines do worker</div></div>
+              <div><div class="metric-label">Heap em uso</div><div class="metric-val metric-val-sm" id="g-heap">—</div><div class="metric-sub">memória do Go</div></div>
+              <div><div class="metric-label">Respostas 5xx</div><div class="metric-val metric-val-sm" id="g-5xx">—</div><div class="metric-sub">erros do servidor</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="metrics-view-sistema" class="hidden">
 
       <!-- Linha 1: 4 stat cards -->
       <div class="metrics-grid">
@@ -851,9 +906,10 @@
       <div id="admin-ai" class="hidden">
         <div id="ai-status" style="margin-bottom:14px"></div>
 
+        <div class="grid-2 ai-chains">
         <div class="form-card">
-          <p style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">IA de Scrape · extração da vaga</p>
-          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Tenta na ordem da lista; só passa para o próximo se o anterior falhar. <span id="ai-env-scrape"></span></p>
+          <p class="card-eyebrow">IA de Scrape · extração da vaga</p>
+          <p class="card-note">Tenta na ordem da lista; só passa para o próximo se o anterior falhar. <span id="ai-env-scrape"></span></p>
           <div id="ai-chain-scrape"></div>
           <div class="list-controls">
             <button class="btn btn-ghost" onclick="aiAdd('scrape')">+ Adicionar provider</button>
@@ -862,14 +918,15 @@
         </div>
 
         <div class="form-card">
-          <p style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">IA Principal · geração do currículo</p>
-          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Tenta na ordem da lista; só passa para o próximo se o anterior falhar. <span id="ai-env-main"></span></p>
+          <p class="card-eyebrow">IA Principal · geração do currículo</p>
+          <p class="card-note">Tenta na ordem da lista; só passa para o próximo se o anterior falhar. <span id="ai-env-main"></span></p>
           <div id="ai-chain-main"></div>
           <div class="list-controls">
             <button class="btn btn-ghost" onclick="aiAdd('main')">+ Adicionar provider</button>
             <button class="btn btn-primary" style="margin-left:auto" onclick="aiSave('main')">Salvar principal</button>
           </div>
         </div>
+        </div><!-- /ai-chains -->
       </div>
     </section>
 

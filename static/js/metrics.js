@@ -291,19 +291,20 @@ function renderMetrics(m) {
   renderRouteTable(m);
 }
 
-let _metricsView = 'sistema';
+let _metricsView = 'geral';
 
 function switchMetricsView(view, btn) {
   _metricsView = view;
   document.querySelectorAll('[data-mview]').forEach(b => b.classList.toggle('active', b === btn));
-  for (const v of ['sistema', 'ia', 'banco']) {
+  for (const v of ['geral', 'sistema', 'ia', 'banco']) {
     document.getElementById(`metrics-view-${v}`).classList.toggle('hidden', v !== view);
   }
   refreshMetricsView();
 }
 
 function refreshMetricsView() {
-  if (_metricsView === 'ia') loadAIMetrics();
+  if (_metricsView === 'geral') loadGeneralMetrics();
+  else if (_metricsView === 'ia') loadAIMetrics();
   else loadMetrics();
 }
 
@@ -327,6 +328,18 @@ function renderDBMetrics(m) {
   set('db-waits', waits);
   set('db-wait-time', waits > 0 ? `${fmtDur(get(m, 'hackton_db_pool_acquire_seconds_total'))} aguardando no total` : 'nenhuma: o pool deu conta');
 
+  const rows = dbQueryRows(m);
+  const total = rows.reduce((a, r) => a + r.count, 0);
+  const errors = rows.reduce((a, r) => a + r.errors, 0);
+  const sum = rows.reduce((a, r) => a + r.sum, 0);
+  set('db-queries', total);
+  set('db-errors', errors > 0 ? `${errors} com erro` : 'nenhum erro');
+  set('db-avg', total > 0 ? fmtDur(sum / total) : '—');
+  renderDBQueryTable(rows);
+}
+
+// Consultas ao Postgres (tracer do pgx), ordenadas pelo tempo total gasto.
+function dbQueryRows(m) {
   const queries = {};
   for (const [k, v] of Object.entries(m)) {
     const mm = k.match(/^hackton_db_query_duration_seconds_(bucket|sum|count)\{(.*)\}$/);
@@ -337,18 +350,13 @@ function renderDBMetrics(m) {
     if (mm[1] === 'sum') q.sum += v;
     if (mm[1] === 'bucket') { const le = labels.le === '+Inf' ? Infinity : parseFloat(labels.le); q.buckets[le] = (q.buckets[le] || 0) + v; }
   }
-  const rows = Object.entries(queries).map(([name, q]) => ({
+  return Object.entries(queries).map(([name, q]) => ({
     name, ...q,
     p95: approxPercentile(Object.entries(q.buckets).map(([le, count]) => ({ le: Number(le), count })).sort((a, b) => a.le - b.le), 0.95),
   })).sort((a, b) => b.sum - a.sum);
+}
 
-  const total = rows.reduce((a, r) => a + r.count, 0);
-  const errors = rows.reduce((a, r) => a + r.errors, 0);
-  const sum = rows.reduce((a, r) => a + r.sum, 0);
-  set('db-queries', total);
-  set('db-errors', errors > 0 ? `${errors} com erro` : 'nenhum erro');
-  set('db-avg', total > 0 ? fmtDur(sum / total) : '—');
-
+function renderDBQueryTable(rows) {
   const body = document.getElementById('db-queries-body');
   body.innerHTML = rows.length ? rows.map(r => `<tr>
       <td data-label="Consulta"><code>${escHtml(r.name)}</code></td>
@@ -476,4 +484,75 @@ function renderAITimeline(timeline, since, bucketMs) {
     tip.style.top = (e.clientY - tip.offsetHeight - 10) + 'px';
   };
   el.onmouseleave = () => tip.classList.add('hidden');
+}
+
+// ── Geral: o essencial de Sistema, IA e Banco numa tela só ──
+
+async function loadGeneralMetrics() {
+  try {
+    const [rawRes, aiRes] = await Promise.all([api.get('/admin/metrics/raw'), api.get('/admin/metrics/ai?range=24h')]);
+    if (!rawRes.ok) throw new Error('métricas: status ' + rawRes.status);
+    if (!aiRes.ok) throw new Error('IA: status ' + aiRes.status);
+    const m = parsePrometheus(await rawRes.text());
+    const ai = (await aiRes.json()).data;
+    renderGeneralMetrics(m, ai);
+    set('metrics-error', '');
+    set('metrics-updated', 'Atualizado ' + new Date().toLocaleTimeString('pt-BR'));
+  } catch (e) {
+    set('metrics-error', 'Erro ao carregar métricas: ' + e.message);
+  }
+}
+
+function renderGeneralMetrics(m, ai) {
+  // Jobs (desde o último reinício)
+  const ok = get(m, 'hackton_jobs_processed_total{status="completed"}');
+  const err = get(m, 'hackton_jobs_processed_total{status="error"}');
+  set('g-jobs-ok', ok);
+  set('g-jobs-sub', ok + err > 0 ? `${fmt(ok / (ok + err) * 100)}% de sucesso desde o reinício` : 'nenhum job desde o reinício');
+  set('g-jobs-err', err);
+  setThreshold('g-jobs-err', err, 1, 5);
+
+  // IA (histórico de 24h no banco)
+  const s = ai.summary;
+  set('g-ai-calls', s.calls || '0');
+  set('g-ai-sub', s.calls ? `${fmt(s.success_rate * 100)}% com sucesso` : 'nenhuma chamada');
+  set('g-ai-avg', fmtMs(s.avg_ok_ms));
+  set('g-ai-fallback', s.fallback_saves ? `fallback salvou ${s.fallback_saves}×` : 'fallback não foi necessário');
+
+  const models = document.getElementById('g-ai-models');
+  const top = ai.models.slice().sort((a, b) => b.calls - a.calls).slice(0, 5);
+  models.innerHTML = top.length ? top.map(x => `<div class="mini-row" title="${aiEsc(x.last_error || '')}">
+      <span class="name">${escHtml(x.model || x.provider)}<small>${AI_PURPOSE_LABELS[x.purpose] || escHtml(x.purpose)} · ${x.calls} chamadas</small></span>
+      <span class="num" style="color:${x.calls && x.ok / x.calls >= .8 ? 'var(--green)' : x.ok ? 'var(--yellow)' : 'var(--red)'}">${fmt(x.calls ? x.ok / x.calls * 100 : 0)}%</span>
+      <span class="num">${fmtMs(x.p50_ms)}</span>
+    </div>`).join('') : '<div class="empty">Nenhuma chamada nas últimas 24h.</div>';
+
+  // API
+  const httpTotal = sumByPrefix(m, 'hackton_http_requests_total{');
+  const http2xx = sumHTTPByStatus(m, '2');
+  const http5xx = sumHTTPByStatus(m, '5');
+  const durSum = sumByPrefix(m, 'hackton_http_request_duration_seconds_sum{');
+  const durCount = sumByPrefix(m, 'hackton_http_request_duration_seconds_count{');
+  set('g-http-avg', durCount ? fmtDur(durSum / durCount) : '—');
+  set('g-http-sub', httpTotal ? `${httpTotal} requisições · ${fmt(http2xx / httpTotal * 100)}% 2xx` : 'sem requisições');
+  set('g-5xx', http5xx);
+  setThreshold('g-5xx', http5xx, 1, 10);
+
+  // Sistema
+  set('g-goroutines', get(m, 'hackton_worker_active_goroutines'));
+  set('g-heap', fmtBytes(get(m, 'go_memstats_heap_alloc_bytes')));
+
+  // Banco
+  set('g-db-acquired', get(m, 'hackton_db_pool_acquired_conns'));
+  set('g-db-conns', `de ${get(m, 'hackton_db_pool_max_conns')} · ${get(m, 'hackton_db_pool_empty_acquire_total')} esperas`);
+  const rows = dbQueryRows(m);
+  const total = rows.reduce((a, r) => a + r.count, 0);
+  const sum = rows.reduce((a, r) => a + r.sum, 0);
+  set('g-db-avg', total ? fmtDur(sum / total) : '—');
+  set('g-db-queries', `${total} consultas`);
+  document.getElementById('g-db-top').innerHTML = rows.slice(0, 3).map(r => `<div class="mini-row">
+      <span class="name">${escHtml(r.name)}</span>
+      <span class="num">${r.count}×</span>
+      <span class="num">${fmtDur(r.sum)}</span>
+    </div>`).join('') || '<div class="empty">Nenhuma consulta desde o reinício.</div>';
 }
