@@ -63,6 +63,9 @@ services:
     cap_add:
       - SETUID
       - SETGID
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
       - DAC_READ_SEARCH
 
   cache:
@@ -86,6 +89,7 @@ services:
     cap_add:
       - SETUID
       - SETGID
+      - CHOWN
 
 networks:
   app-network:

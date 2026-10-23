@@ -3,13 +3,13 @@
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
 
-  "build": {
-    "args": {
-      "UID": "1000"
-    }
-  },
-
   "workspaceFolder": "/workspace",
+  "forwardPorts": [8080, "pgadmin:80"],
+  "portsAttributes": {
+    "8080": { "label": "API" },
+    "pgadmin:80": { "label": "pgAdmin" }
+  },
+  "shutdownAction": "stopCompose",
   "mounts": [
     "source=hackton-go-bin,target=/go/bin,type=volume",
     "source=hackton-go-mod,target=/go/pkg/mod,type=volume",
