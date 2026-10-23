@@ -30,7 +30,12 @@ func (h *AdminHandler) Me(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, ErrInternalServerError.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"is_admin": isAdmin})
+	isMaster, err := h.Admin.IsMaster(r.Context(), userID.String())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, ErrInternalServerError.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"is_admin": isAdmin, "is_master": isMaster})
 }
 
 func (h *AdminHandler) ListErrorLogs(w http.ResponseWriter, r *http.Request) {
@@ -79,6 +84,19 @@ func (h *AdminHandler) SetAdmin(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, ErrInvalidRequestBody.Error())
 		return
+	}
+
+	// Um master não perde o admin por aqui: precisa ser rebaixado de master antes (só outro master faz isso).
+	if !body.IsAdmin {
+		targetMaster, err := h.Admin.IsMaster(r.Context(), userID)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "usuário não encontrado")
+			return
+		}
+		if targetMaster {
+			writeError(w, http.StatusConflict, "usuário é master; remova o master antes de remover o admin")
+			return
+		}
 	}
 
 	if err := h.Admin.SetAdmin(r.Context(), userID, body.IsAdmin); err != nil {

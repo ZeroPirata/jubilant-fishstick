@@ -22,3 +22,22 @@ func AdminMiddleware(repo admin.Repository) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// MasterMiddleware libera só usuários master (configurações sensíveis, como API keys).
+func MasterMiddleware(repo admin.Repository) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userID, ok := GetUserID(r.Context())
+			if !ok {
+				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				return
+			}
+			isMaster, err := repo.IsMaster(r.Context(), userID.String())
+			if err != nil || !isMaster {
+				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}

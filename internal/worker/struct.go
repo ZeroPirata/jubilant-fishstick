@@ -9,6 +9,7 @@ type vagaPrompt struct {
 }
 
 type experienciaPrompt struct {
+	ID         int      `json:"id"`
 	Empresa    string   `json:"empresa"`
 	Cargo      string   `json:"cargo"`
 	Descricao  string   `json:"descricao,omitempty"`
@@ -25,6 +26,7 @@ type habilidadePrompt struct {
 }
 
 type projetoPrompt struct {
+	ID        int    `json:"id"`
 	Nome      string `json:"nome"`
 	Descricao string `json:"descricao,omitempty"`
 	Link      string `json:"link,omitempty"`
@@ -50,12 +52,14 @@ type feedbackPrompt struct {
 }
 
 type userPrompt struct {
-	Vaga          vagaPrompt           `json:"vaga"`
-	Experiencias  []experienciaPrompt  `json:"experiencias"`
-	Habilidades   []habilidadePrompt   `json:"habilidades,omitempty"`
-	Projetos      []projetoPrompt      `json:"projetos,omitempty"`
-	Formacoes     []formacaoPrompt     `json:"formacoes,omitempty"`
-	Certificacoes []certificacaoPrompt `json:"certificacoes,omitempty"`
-	Feedback      feedbackPrompt       `json:"feedback"`
-	Modo          string               `json:"modo,omitempty"` // "resume_only" | "cover_only" — ausente = full
+	Vaga            vagaPrompt           `json:"vaga"`
+	AnosExperiencia int                  `json:"anos_experiencia"`
+	PrimeiroEmprego bool                 `json:"primeiro_emprego,omitempty"`
+	Experiencias    []experienciaPrompt  `json:"experiencias"`
+	Habilidades     []habilidadePrompt   `json:"habilidades,omitempty"`
+	Projetos        []projetoPrompt      `json:"projetos,omitempty"`
+	Formacoes       []formacaoPrompt     `json:"formacoes,omitempty"`
+	Certificacoes   []certificacaoPrompt `json:"certificacoes,omitempty"`
+	Feedback        feedbackPrompt       `json:"feedback"`
+	Modo            string               `json:"modo,omitempty"` // "resume_only" | "cover_only" — ausente = full
 }

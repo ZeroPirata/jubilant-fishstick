@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,9 +18,20 @@ func normalizarNome(s string) string {
 }
 
 type pythonInput struct {
-	Curriculo   string `json:"curriculo"`
-	CoverLetter string `json:"cover_letter"`
-	OutputDir   string `json:"output_dir"`
+	Curriculo   string          `json:"curriculo"`
+	CoverLetter string          `json:"cover_letter"`
+	OutputDir   string          `json:"output_dir"`
+	Doc         json.RawMessage `json:"doc,omitempty"` // content_json v2: renderizado pelo template
+	Template    string          `json:"template,omitempty"`
+}
+
+// storedContent lê generated_resumes.content_json nos dois formatos:
+// v1 (só texto) e v2 (com doc estruturado).
+type storedContent struct {
+	Version     int             `json:"version"`
+	Doc         json.RawMessage `json:"doc"`
+	Curriculo   string          `json:"curriculo"`
+	CoverLetter string          `json:"cover_letter"`
 }
 
 type pythonOutput struct {

@@ -356,7 +356,7 @@ func (h *JobHandler) GeneratePDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var conteudo map[string]string
+	var conteudo storedContent
 	if err := json.Unmarshal(row.ContentJson, &conteudo); err != nil {
 		http.Error(w, "content_json inválido", http.StatusInternalServerError)
 		return
@@ -370,9 +370,10 @@ func (h *JobHandler) GeneratePDF(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pyOut, err := h.PDF.Generate(ctx, pythonInput{
-		Curriculo:   conteudo["curriculo"],
-		CoverLetter: conteudo["cover_letter"],
+		Curriculo:   conteudo.Curriculo,
+		CoverLetter: conteudo.CoverLetter,
 		OutputDir:   fsDir,
+		Doc:         conteudo.Doc,
 	})
 	if err != nil {
 		h.Logger.Error("erro ao gerar PDF", zap.Error(err))

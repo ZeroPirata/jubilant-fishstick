@@ -72,6 +72,26 @@ func TestRepairJSON(t *testing.T) {
 			input: `{"a":1`,
 			want:  `{"a":1}`,
 		},
+		{
+			label: "array aberto dentro de objeto fecha com ] e depois }",
+			input: `{"Stack":["Go","Docker"`,
+			want:  `{"Stack":["Go","Docker"]}`,
+		},
+		{
+			label: "cortado no meio de uma string",
+			input: `{"Description":"Backend com Go","Stack":["Go","Kube`,
+			want:  `{"Description":"Backend com Go","Stack":["Go","Kube"]}`,
+		},
+		{
+			label: "cortado logo apos uma barra de escape",
+			input: `{"a":"linha\`,
+			want:  `{"a":"linha"}`,
+		},
+		{
+			label: "chaves dentro de string nao contam",
+			input: `{"a":"{[x"`,
+			want:  `{"a":"{[x"}`,
+		},
 	}
 
 	for _, tc := range cases {

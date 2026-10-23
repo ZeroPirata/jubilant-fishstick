@@ -1,7 +1,7 @@
 -- +goose Up
 -- +goose StatementBegin
--- Se for um texto simples, use TEXT. Se for um ENUM, use o nome do seu tipo.
-ALTER TABLE jobs ADD COLUMN "mode" TEXT; 
+-- IF NOT EXISTS: a 00001 também passou a criar essa coluna, então bancos novos já a têm.
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS "mode" TEXT;
 -- +goose StatementEnd
 
 -- +goose Down

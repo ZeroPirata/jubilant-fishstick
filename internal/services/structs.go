@@ -21,14 +21,10 @@ type MatchResult struct {
 	Feedbacks     []string
 }
 
-type LLMCurriculoResponse struct {
-	Curriculo   string `json:"curriculo"`
-	CoverLetter string `json:"cover_letter"`
-	Error       string `json:"error,omitempty"`
-}
 
 type AiService struct {
 	Config           *config.Config
+	Source           ProviderSource
 	httpClient       *http.Client
 	scrapeHttpClient *http.Client
 }

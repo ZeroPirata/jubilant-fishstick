@@ -7,9 +7,12 @@ import (
 	"hackton-treino/config"
 	"hackton-treino/database/cache"
 	"hackton-treino/database/postgres"
+	"hackton-treino/internal/aiconfig"
 	"hackton-treino/internal/bootstrap"
 	"hackton-treino/internal/middleware"
+	"hackton-treino/internal/repository/aisettings"
 	"hackton-treino/internal/routes"
+	"hackton-treino/internal/security"
 	"hackton-treino/internal/services"
 	"hackton-treino/internal/sse"
 	"hackton-treino/internal/worker"
@@ -75,12 +78,21 @@ func run() error {
 
 	bus := sse.NewBus()
 
+	secretBox, err := security.NewSecretBox(cfg.Settings.EncryptionKey)
+	if err != nil {
+		return fmt.Errorf("SETTINGS_ENCRYPTION_KEY inválida: %w", err)
+	}
+	if secretBox == nil {
+		zap.L().Warn("SETTINGS_ENCRYPTION_KEY não configurada: o painel não conseguirá salvar API keys")
+	}
+	aiStore := aiconfig.NewStore(aisettings.New(db), secretBox)
+
 	serverDone := make(chan error, 1)
 	go func() {
-		serverDone <- startServer(ctx, *cfg, db, rds, bus)
+		serverDone <- startServer(ctx, *cfg, db, rds, bus, aiStore)
 	}()
 
-	llm := services.NewLLMService(cfg)
+	llm := services.NewLLMService(cfg, aiStore)
 	go func() {
 		worker.NewWorker(zap.L(), db, *llm, cfg.ScrapeAi.Activate, rds, bus, cfg.Worker).Start(ctx)
 	}()
@@ -95,14 +107,14 @@ func run() error {
 	return nil
 }
 
-func startServer(ctx context.Context, cfg config.Config, db *pgxpool.Pool, rds *redis.Client, bus *sse.Bus) error {
+func startServer(ctx context.Context, cfg config.Config, db *pgxpool.Pool, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store) error {
 	port := ":8080"
 	if cfg.Server.Port != "" {
 		port = ":" + cfg.Server.Port
 	}
 
 	mux := http.NewServeMux()
-	routes.Setup(mux, zap.L(), db, cfg, rds, bus)
+	routes.Setup(mux, zap.L(), db, cfg, rds, bus, aiStore)
 
 	handler := middleware.MetricsMiddleware(
 		middleware.SecurityHeaders(

@@ -1,6 +1,7 @@
 // ── Admin panel ──
 
 let _adminErrorsAll  = [];
+let _isMaster        = false;
 let _adminErrorsPage = 0;
 const ADMIN_PAGE_SIZE = 20;
 
@@ -10,8 +11,10 @@ function switchAdminView(view, btn) {
   if (btn) btn.classList.add('active');
   document.getElementById('admin-errors').classList.toggle('hidden', view !== 'errors');
   document.getElementById('admin-users').classList.toggle('hidden',  view !== 'users');
+  document.getElementById('admin-ai').classList.toggle('hidden',     view !== 'ai');
   if (view === 'errors') loadAdminErrors();
   if (view === 'users')  loadAdminUsers();
+  if (view === 'ai')     loadAISettings();
 }
 
 // ── Error log ──
@@ -78,6 +81,8 @@ function errorTypeBadge(type) {
   const map = {
     scraper_incompatible: ['chip-yellow', 'Site incompatível'],
     scraper_error:        ['chip-red',    'Erro scraper'],
+    scraper_empty:        ['chip-yellow', 'Vaga sem descrição'],
+    profile_incomplete:   ['chip-yellow', 'Perfil vazio'],
     llm_error:            ['chip-red',    'Erro LLM'],
     llm_rate_limit:       ['chip-yellow', 'Rate limit LLM'],
   };
@@ -113,18 +118,24 @@ function renderAdminUsers(users) {
     return;
   }
   body.innerHTML = users.map(u => {
-    const badge = u.IsAdmin
-      ? `<span class="metric-chip chip-green">Admin</span>`
-      : `<span class="metric-chip" style="background:rgba(113,128,150,.1);color:var(--muted)">Usuário</span>`;
+    const badge = u.IsMaster
+      ? `<span class="metric-chip chip-yellow">Master</span>`
+      : u.IsAdmin
+        ? `<span class="metric-chip chip-green">Admin</span>`
+        : `<span class="metric-chip" style="background:rgba(113,128,150,.1);color:var(--muted)">Usuário</span>`;
     const btnLabel  = u.IsAdmin ? 'Remover admin' : 'Tornar admin';
     const btnClass  = u.IsAdmin ? 'btn-danger' : 'btn-ghost';
     const when = new Date(u.CreatedAt).toLocaleDateString('pt-BR');
+    // Master não perde o admin direto: precisa remover o master antes.
+    const adminBtn = u.IsMaster ? '' : `<button class="btn ${btnClass}" style="font-size:12px;padding:4px 10px"
+          onclick="toggleAdmin('${u.ID}', ${!u.IsAdmin})">${btnLabel}</button>`;
+    const masterBtn = !_isMaster ? '' : `<button class="btn ${u.IsMaster ? 'btn-danger' : 'btn-ghost'}" style="font-size:12px;padding:4px 10px"
+          onclick="toggleMaster('${u.ID}', ${!u.IsMaster})">${u.IsMaster ? 'Remover master' : 'Tornar master'}</button>`;
     return `<tr>
-      <td>${u.Email}</td>
+      <td>${aiEsc(u.Email)}</td>
       <td>${badge}</td>
       <td style="color:var(--muted);font-size:12px">${when}</td>
-      <td><button class="btn ${btnClass}" style="font-size:12px;padding:4px 10px"
-          onclick="toggleAdmin('${u.ID}', ${!u.IsAdmin})">${btnLabel}</button></td>
+      <td style="display:flex;gap:6px">${adminBtn}${masterBtn}</td>
     </tr>`;
   }).join('');
 }
@@ -140,6 +151,166 @@ async function toggleAdmin(userID, newVal) {
   }
 }
 
+async function toggleMaster(userID, newVal) {
+  if (newVal && !confirm('Master pode ver e trocar as API keys de IA. Confirmar?')) return;
+  try {
+    const res = await api.patch(`/admin/users/${userID}/master`, { is_master: newVal });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.error || 'status ' + res.status);
+    }
+    toast(newVal ? 'Usuário promovido a master.' : 'Master removido.');
+    loadAdminUsers();
+  } catch (e) {
+    toast('Erro: ' + e.message, 'error');
+  }
+}
+
+// ── Configurações de IA (master) ──
+const AI_PROVIDERS = {
+  openai: { label: 'OpenAI-compatível (Groq, OpenRouter, NVIDIA...)', url: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile' },
+  gemini: { label: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent', model: '(vai na URL)' },
+  ollama: { label: 'Ollama (local)', url: 'http://localhost:11434/v1/chat/completions', model: 'phi4' },
+};
+
+let _aiChains = { main: [], scrape: [] };
+let _aiEncryption = true;
+
+function aiEsc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function loadAISettings() {
+  try {
+    const res = await api.get('/admin/ai-settings');
+    if (!res.ok) throw new Error('status ' + res.status);
+    const d = (await res.json()).data;
+    _aiEncryption = d.encryption_enabled;
+    for (const purpose of ['main', 'scrape']) {
+      _aiChains[purpose] = (d[purpose] || []).map(p => ({ ...p, api_key: '', clear_key: false }));
+      document.getElementById(`ai-env-${purpose}`).textContent =
+        `Lista vazia = usa o .env (${d.env_fallback[purpose]}).`;
+      renderAIChain(purpose);
+    }
+    renderAIStatus(d.worker_paused_secs);
+  } catch (e) {
+    document.getElementById('ai-status').innerHTML =
+      `<span class="metric-chip chip-red">Erro ao carregar: ${aiEsc(e.message)}</span>`;
+  }
+}
+
+function renderAIStatus(pausedSecs) {
+  const parts = [];
+  if (pausedSecs > 0) {
+    const h = Math.floor(pausedSecs / 3600), m = Math.ceil((pausedSecs % 3600) / 60);
+    parts.push(`<span class="metric-chip chip-red">Worker pausado por rate limit (faltam ${h}h${m}m)</span>
+      <button class="btn btn-ghost btn-sm" onclick="aiResume()">Retomar agora</button>`);
+  } else {
+    parts.push(`<span class="metric-chip chip-green">Worker ativo</span>`);
+  }
+  if (!_aiEncryption) {
+    parts.push(`<span class="metric-chip chip-yellow">SETTINGS_ENCRYPTION_KEY não configurada: não é possível salvar API keys</span>`);
+  }
+  document.getElementById('ai-status').innerHTML =
+    `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${parts.join('')}</div>`;
+}
+
+function renderAIChain(purpose) {
+  const el = document.getElementById(`ai-chain-${purpose}`);
+  const chain = _aiChains[purpose];
+  if (!chain.length) {
+    el.innerHTML = `<p class="empty" style="margin-bottom:14px">Nenhum provider no painel.</p>`;
+    return;
+  }
+  el.innerHTML = chain.map((p, i) => {
+    const preset = AI_PROVIDERS[p.provider] || AI_PROVIDERS.openai;
+    const opts = Object.entries(AI_PROVIDERS).map(([k, v]) =>
+      `<option value="${k}" ${k === p.provider ? 'selected' : ''}>${aiEsc(v.label)}</option>`).join('');
+    let keyHint = 'sem key';
+    if (p.clear_key) keyHint = 'key será removida ao salvar';
+    else if (p.api_key) keyHint = 'key nova será salva';
+    else if (p.has_key) keyHint = `key salva: ${aiEsc(p.key_hint)}`;
+    const on = (field) => `oninput="aiSet('${purpose}',${i},'${field}',this.value)"`;
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;${p.enabled ? '' : 'opacity:.55'}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <strong style="font-size:13px">${i + 1}º</strong>
+        <label class="field-check" style="margin:0"><input type="checkbox" ${p.enabled ? 'checked' : ''}
+          onchange="aiSet('${purpose}',${i},'enabled',this.checked);renderAIChain('${purpose}')" /><label>Ativo</label></label>
+        <span style="margin-left:auto;display:flex;gap:4px">
+          <button class="btn-page" title="Subir" ${i === 0 ? 'disabled' : ''} onclick="aiMove('${purpose}',${i},-1)">↑</button>
+          <button class="btn-page" title="Descer" ${i === chain.length - 1 ? 'disabled' : ''} onclick="aiMove('${purpose}',${i},1)">↓</button>
+          <button class="btn btn-danger btn-sm" onclick="aiRemove('${purpose}',${i})">Remover</button>
+        </span>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Provider</label>
+          <select onchange="aiSet('${purpose}',${i},'provider',this.value);renderAIChain('${purpose}')">${opts}</select></div>
+        <div class="field"><label>Modelo</label>
+          <input type="text" value="${aiEsc(p.model)}" placeholder="${aiEsc(preset.model)}" ${on('model')} /></div>
+      </div>
+      <div class="field"><label>URL</label>
+        <input type="url" value="${aiEsc(p.url)}" placeholder="${aiEsc(preset.url)}" ${on('url')} /></div>
+      <div class="field" style="margin-bottom:0"><label>API key <span style="text-transform:none;letter-spacing:0">(${keyHint})</span></label>
+        <div style="display:flex;gap:8px">
+          <input type="password" autocomplete="new-password" value="${aiEsc(p.api_key)}"
+            placeholder="${p.has_key ? 'deixe vazio para manter a atual' : 'opcional para Ollama'}"
+            oninput="aiSet('${purpose}',${i},'api_key',this.value)" onchange="renderAIChain('${purpose}')" />
+          ${p.has_key && !p.clear_key ? `<button class="btn btn-ghost btn-sm" onclick="aiSet('${purpose}',${i},'clear_key',true);aiSet('${purpose}',${i},'api_key','');renderAIChain('${purpose}')">Remover key</button>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function aiSet(purpose, i, field, value) {
+  _aiChains[purpose][i][field] = value;
+  if (field === 'api_key' && value) _aiChains[purpose][i].clear_key = false;
+}
+
+function aiAdd(purpose) {
+  _aiChains[purpose].push({ id: '', provider: 'openai', url: '', model: '', enabled: true, has_key: false, api_key: '', clear_key: false });
+  renderAIChain(purpose);
+}
+
+function aiRemove(purpose, i) {
+  _aiChains[purpose].splice(i, 1);
+  renderAIChain(purpose);
+}
+
+function aiMove(purpose, i, dir) {
+  const chain = _aiChains[purpose];
+  [chain[i], chain[i + dir]] = [chain[i + dir], chain[i]];
+  renderAIChain(purpose);
+}
+
+async function aiSave(purpose) {
+  const providers = _aiChains[purpose].map(p => ({
+    id: p.id, provider: p.provider, url: p.url.trim(), model: p.model.trim(),
+    api_key: p.api_key.trim(), clear_key: p.clear_key, enabled: p.enabled,
+  }));
+  try {
+    const res = await api.put(`/admin/ai-settings/${purpose}`, { providers });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'status ' + res.status);
+    toast('Configuração salva. Vale a partir do próximo job.');
+    loadAISettings();
+  } catch (e) {
+    toast('Erro: ' + e.message, 'error');
+  }
+}
+
+async function aiResume() {
+  try {
+    const res = await api.post('/admin/ai-settings/resume', {});
+    if (!res.ok) throw new Error('status ' + res.status);
+    toast('Worker retomado.');
+    loadAISettings();
+  } catch (e) {
+    toast('Erro: ' + e.message, 'error');
+  }
+}
+
 // ── Bootstrap: check isAdmin on app load ──
 async function checkAdminStatus() {
   try {
@@ -147,8 +318,10 @@ async function checkAdminStatus() {
     if (!res.ok) return;
     const d = await res.json();
     const isAdmin = !!d.data?.is_admin;
+    _isMaster = !!d.data?.is_master;
     localStorage.setItem('jp_is_admin', isAdmin ? '1' : '0');
     applyAdminVisibility(isAdmin);
+    document.querySelectorAll('.master-only').forEach(el => el.classList.toggle('hidden', !_isMaster));
   } catch (_) {}
 }
 

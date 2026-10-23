@@ -33,6 +33,13 @@ func newTestService(t *testing.T, url string, client *http.Client) *AiService {
 	}
 }
 
+// send chama sendRequest com o provider do .env principal, esperando em 429
+// (comportamento de quando ele é o único/último da cadeia).
+func send(svc *AiService, ctx context.Context) (LLMResponse, error) {
+	p := svc.resolveProviders(ctx, PurposeMain)[0]
+	return svc.sendRequest(ctx, svc.httpClient, []byte(`{}`), p, true)
+}
+
 // spyBody envolve um io.ReadCloser e conta quantas vezes Close() foi chamado.
 // Útil para verificar que o corpo da resposta HTTP foi fechado inline, não via defer.
 type spyBody struct {
@@ -93,7 +100,7 @@ func TestSendRequest_BodyFechadoNoSucesso(t *testing.T) {
 	spy := &spyTransport{base: http.DefaultTransport}
 	svc := newTestService(t, srv.URL, &http.Client{Transport: spy})
 
-	_, err := svc.sendRequest(context.Background(), []byte(`{}`), false)
+	_, err := send(svc, context.Background())
 	if err != nil {
 		t.Fatalf("sendRequest: erro inesperado: %v", err)
 	}
@@ -120,7 +127,7 @@ func TestSendRequest_BodyFechadoNoErro(t *testing.T) {
 	spy := &spyTransport{base: http.DefaultTransport}
 	svc := newTestService(t, srv.URL, &http.Client{Transport: spy})
 
-	_, err := svc.sendRequest(context.Background(), []byte(`{}`), false)
+	_, err := send(svc, context.Background())
 	if err == nil {
 		t.Fatal("esperava erro para status 500, mas não recebeu nenhum")
 	}
@@ -145,7 +152,7 @@ func TestSendRequest_RateLimitEsgota(t *testing.T) {
 
 	svc := newTestService(t, srv.URL, &http.Client{Transport: http.DefaultTransport})
 
-	_, err := svc.sendRequest(context.Background(), []byte(`{}`), false)
+	_, err := send(svc, context.Background())
 
 	// o erro deve ser do tipo *ErrRateLimit — não um erro genérico de string
 	var errRL *ErrRateLimit
@@ -180,7 +187,7 @@ func TestSendRequest_RateLimitDepoisRecupera(t *testing.T) {
 
 	svc := newTestService(t, srv.URL, &http.Client{Transport: http.DefaultTransport})
 
-	resp, err := svc.sendRequest(context.Background(), []byte(`{}`), false)
+	resp, err := send(svc, context.Background())
 	if err != nil {
 		t.Fatalf("sendRequest: esperava sucesso após retry, recebeu: %v", err)
 	}
@@ -207,7 +214,7 @@ func TestSendRequest_ContextCanceladoDuranteRateLimit(t *testing.T) {
 	// (uma goroutine cancela enquanto a função espera o delay de 30s)
 	go cancel()
 
-	_, err := svc.sendRequest(ctx, []byte(`{}`), false)
+	_, err := send(svc, ctx)
 
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("esperava context.Canceled, recebeu: %v", err)
@@ -241,7 +248,7 @@ func TestSendRequest_GeminiParsing(t *testing.T) {
 		scrapeHttpClient: &http.Client{Transport: http.DefaultTransport},
 	}
 
-	resp, err := svc.sendRequest(context.Background(), []byte(`{}`), false)
+	resp, err := send(svc, context.Background())
 	if err != nil {
 		t.Fatalf("sendRequest gemini: %v", err)
 	}

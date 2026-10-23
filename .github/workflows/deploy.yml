@@ -45,6 +45,24 @@ jobs:
             --exclude 'data/' \
             ./ /opt/jubilant-fishstick/
 
+      # As migrations rodam sozinhas quando o app sobe (goose em cmd/server/main.go).
+      # O backup garante um ponto de retorno caso alguma delas altere dados de forma errada.
+      - name: Backup database
+        working-directory: /opt/jubilant-fishstick
+        run: |
+          set -eo pipefail
+          if [ -z "$(docker compose ps -q --status running db)" ]; then
+            echo "db não está rodando, pulando backup (primeiro deploy?)"
+            exit 0
+          fi
+          BACKUP_DIR="$HOME/db-backups/jubilant-fishstick"
+          mkdir -p "$BACKUP_DIR"
+          FILE="$BACKUP_DIR/$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}.sql.gz"
+          docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > "$FILE"
+          echo "✅ Backup salvo em $FILE ($(du -h "$FILE" | cut -f1))"
+          # Mantém só os 10 backups mais recentes
+          ls -1t "$BACKUP_DIR"/*.sql.gz | tail -n +11 | xargs -r rm --
+
       - name: Build and restart containers
         working-directory: /opt/jubilant-fishstick
         run: |

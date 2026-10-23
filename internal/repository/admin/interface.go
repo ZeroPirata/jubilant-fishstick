@@ -21,6 +21,7 @@ type UserAccount struct {
 	ID        string
 	Email     string
 	IsAdmin   bool
+	IsMaster  bool
 	CreatedAt time.Time
 }
 
@@ -38,6 +39,9 @@ type Repository interface {
 	ListUsers(ctx context.Context) ([]UserAccount, error)
 	SetAdmin(ctx context.Context, userID string, isAdmin bool) error
 	IsAdmin(ctx context.Context, userID string) (bool, error)
+	IsMaster(ctx context.Context, userID string) (bool, error)
+	// SetMaster promove (também vira admin) ou rebaixa um master (continua admin).
+	SetMaster(ctx context.Context, userID string, isMaster bool) error
 }
 
 type adminRepo struct {

@@ -1,4 +1,5 @@
-version: "3.9"
+# Nome fixo: evita colisão com outros projetos que também usam a pasta .devcontainer.
+name: hackton-treino-dev
 
 services:
   app:
@@ -10,8 +11,7 @@ services:
     volumes:
       - ..:/workspace:cached
     working_dir: /workspace
-    ports:
-      - "8080:8080"
+    # Portas encaminhadas pelo VS Code (forwardPorts), sem reservar no host.
     depends_on:
       db:
         condition: service_healthy
@@ -34,8 +34,6 @@ services:
     volumes:
       - ./data/pgadmin:/var/lib/pgadmin
       - ./data/pgadmin_logs:/var/log/pgadmin
-    ports:
-      - "8081:80"
     user: "5050"
     depends_on:
       db:
@@ -46,13 +44,11 @@ services:
 
   db:
     image: postgres:17-alpine
-    restart: always
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: pass
       POSTGRES_DB: desafio_db
-    ports:
-      - "5432:5432"
+    # Acessível pelos outros serviços em db:5432; não publicado no host.
     volumes:
       - ./data/pgdata:/var/lib/postgresql/data
       - ../repository/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
@@ -68,9 +64,7 @@ services:
 
   cache:
     image: redis:7-alpine
-    restart: always
-    ports:
-      - "6379:6379"
+    # Acessível pelos outros serviços em cache:6379; não publicado no host.
     volumes:
       - ./data/redis:/data
     networks:

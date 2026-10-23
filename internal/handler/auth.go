@@ -50,6 +50,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, ErrInvalidInputData.Error())
 		return
 	}
+	req.Email = NormalizeEmail(req.Email)
 
 	if err := Validate(
 		Required("email", req.Email),
@@ -86,6 +87,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, ErrInvalidInputData.Error())
 		return
 	}
+	req.Email = NormalizeEmail(req.Email)
 
 	if err := Validate(
 		Required("email", req.Email),

@@ -7,11 +7,11 @@ import (
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/metrics"
 	"hackton-treino/internal/repository/admin"
+	"hackton-treino/internal/resume"
 	"hackton-treino/internal/scraper"
 	"hackton-treino/internal/services"
 	"hackton-treino/internal/sse"
 	"hackton-treino/internal/util"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -98,8 +98,11 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 			return
 		}
 		errType := "scraper_error"
-		if errors.Is(sOut.err, scraper.ErrUnsupportedDomain) {
+		switch {
+		case errors.Is(sOut.err, scraper.ErrUnsupportedDomain):
 			errType = "scraper_incompatible"
+		case errors.Is(sOut.err, scraper.ErrEmptyDescription):
+			errType = "scraper_empty"
 		}
 		jobIDStr := jobID
 		userIDStr := userID
@@ -142,6 +145,23 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		return
 	}
 
+	// Sem nada no perfil não há o que a IA escrever: falha aqui em vez de pagar uma chamada.
+	// (Só experiência vazia é ok — o prompt tem a variante "primeiro emprego".)
+	if m := mOut.matches; len(m.Experiencias) == 0 && len(m.Projetos) == 0 && len(m.Habilidades) == 0 &&
+		len(m.Formacoes) == 0 && len(m.Certificacoes) == 0 {
+		jobIDStr, userIDStr, url := jobID, userID, job.ExternalUrl
+		w.AdminRepo.InsertErrorLog(ctx, admin.InsertErrorLogParams{
+			JobID:        &jobIDStr,
+			UserID:       &userIDStr,
+			ErrorType:    "profile_incomplete",
+			ErrorMessage: "perfil vazio: cadastre ao menos uma experiência, projeto, habilidade ou formação",
+			URL:          &url,
+		})
+		w.Logger.Warn("Perfil vazio, currículo não gerado", zap.String("job_id", jobID))
+		w.failJob(ctx, job)
+		return
+	}
+
 	quality := calcularQualidade(result, mOut.matches.Habilidades, w.aliases)
 	gap := analisarGap(result.Stack, mOut.matches.Habilidades, w.aliases)
 
@@ -162,8 +182,14 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		return
 	}
 
+	profile, errProfile := w.Users.QuerySelectProfile(ctx, userID)
+	if errProfile != nil {
+		w.Logger.Warn("Erro ao buscar perfil do usuário, currículo sem contato", zap.String("job_id", jobID), zap.Error(errProfile))
+	}
+	src := w.buildSource(job, &mOut.matches, profile)
+
 	llmStart := time.Now()
-	llmResponse, errLLM := w.LLM.GenerateCurriculum(ctx, prompt, str)
+	llmResponse, errLLM := w.generateWithCorrection(ctx, jobID, prompt, str, src)
 	llmStatus := "ok"
 	if errLLM != nil {
 		var errRL *services.ErrRateLimit
@@ -199,62 +225,22 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		return
 	}
 
-	if !strings.Contains(llmResponse.Curriculo, "{{CANDIDATO_NOME}}") {
-		w.Logger.Error("LLM não respeitou tokens de sistema — currículo rejeitado",
-			zap.String("job_id", jobID),
-			zap.String("preview", firstN(llmResponse.Curriculo, 120)),
-		)
-		w.failJob(ctx, job)
-		return
+	// A IA escreveu só o texto; empresa, cargo, datas e contato vêm do banco.
+	doc, warnings := resume.Assemble(src, *llmResponse)
+	for _, wr := range warnings {
+		w.Logger.Warn("Currículo: conteúdo da IA descartado", zap.String("job_id", jobID), zap.String("motivo", wr))
 	}
 
-	profile, errProfile := w.Users.QuerySelectProfile(ctx, userID)
-	if errProfile != nil {
-		w.Logger.Warn("Erro ao buscar perfil do usuário, usando placeholders", zap.String("job_id", jobID), zap.Error(errProfile))
+	coverLetter := strings.TrimSpace(rePlaceholder.ReplaceAllString(
+		strings.ReplaceAll(llmResponse.CoverLetter, "{{CANDIDATO_NOME}}", src.Header.Name), ""))
+
+	conteudo := storedResume{Version: resume.DocVersion, CoverLetter: coverLetter}
+	if job.Mode != "cover_only" {
+		conteudo.Doc = &doc
+		conteudo.Curriculo = resume.Text(doc)
 	}
-
-	portfolioStr := ""
-	if profile.PortfolioUrl.Valid {
-		portfolioStr = profile.PortfolioUrl.String
-	}
-
-	replacer := strings.NewReplacer(
-		"{{CANDIDATO_NOME}}", profile.FullName.String,
-		"{{CANDIDATO_EMAIL}}", func() string {
-			if profile.ContactEmail.Valid && profile.ContactEmail.String != "" {
-				return profile.ContactEmail.String
-			}
-			return profile.Email
-		}(),
-		"{{CANDIDATO_LINKEDIN}}", profile.LinkedinUrl.String,
-		"{{CANDIDATO_GITHUB}}", profile.GithubUrl.String,
-		"{{CANDIDATO_PORTFOLIO}}", portfolioStr,
-		"{{CANDIDAO_PORTFOLIO}}", portfolioStr,
-		"{{CANDIDATO_TELEFONE}}", profile.Phone.String,
-		"{{VAGA_EMPRESA}}", job.CompanyName.String,
-		"{{VAGA_TITULO}}", job.JobTitle.String,
-	)
-
-	rePlaceholder := regexp.MustCompile(`\s*\|\s*\{\{[^}]+\}\}|\{\{[^}]+\}\}\s*\|\s*|\{\{[^}]+\}\}`)
-	cleanUp := func(s string) string {
-		return rePlaceholder.ReplaceAllString(replacer.Replace(s), "")
-	}
-
-	curriculo := cleanUp(llmResponse.Curriculo)
-	coverLetter := cleanUp(llmResponse.CoverLetter)
-	switch job.Mode {
-	case "resume_only":
-		coverLetter = ""
-	case "cover_only":
-		curriculo = ""
-	}
-
-	conteudo := struct {
-		Curriculo   string `json:"curriculo"`
-		CoverLetter string `json:"cover_letter"`
-	}{
-		Curriculo:   curriculo,
-		CoverLetter: coverLetter,
+	if job.Mode == "resume_only" {
+		conteudo.CoverLetter = ""
 	}
 
 	conteudoJSON, errJSON := json.Marshal(conteudo)

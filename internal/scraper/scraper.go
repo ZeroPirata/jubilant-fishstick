@@ -11,6 +11,10 @@ import (
 
 var ErrUnsupportedDomain = errors.New("domínio não suportado")
 
+// ErrEmptyDescription: a página respondeu, mas sem texto da vaga (layout mudou, bloqueio
+// por IP, vaga expirada). Sem descrição não há o que mandar para a IA.
+var ErrEmptyDescription = errors.New("a página da vaga não retornou descrição (vaga expirada, layout mudou ou acesso bloqueado)")
+
 type Scraper struct {
 	Url    string
 	Logger *zap.Logger
