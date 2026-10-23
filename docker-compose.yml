@@ -11,6 +11,10 @@ services:
       - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
     volumes:
       - app_data:/app/storage
+    # Nome estável para serviços do host (ex.: Ollama em http://host.docker.internal:11434),
+    # independente do IP do gateway da rede Docker.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy
