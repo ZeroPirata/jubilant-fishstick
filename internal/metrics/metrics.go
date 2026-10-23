@@ -32,6 +32,13 @@ var (
 		Help: "Goroutines ativas processando jobs no momento.",
 	})
 
+	// Duração das consultas ao Postgres — labels: query (nome do sqlc ou "comando tabela"), status
+	DBQueryDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "hackton_db_query_duration_seconds",
+		Help:    "Duração das consultas ao Postgres em segundos.",
+		Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
+	}, []string{"query", "status"})
+
 	// Requisições HTTP recebidas pela API — labels: method, path, status
 	HTTPRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "hackton_http_requests_total",

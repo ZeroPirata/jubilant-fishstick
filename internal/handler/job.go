@@ -356,6 +356,16 @@ func (h *JobHandler) GeneratePDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Corpo opcional: {"template": "executivo"}. Sem corpo ou modelo desconhecido = clássico.
+	var body struct {
+		Template string `json:"template"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	template := body.Template
+	if !pdfTemplates[template] {
+		template = defaultPDFTemplate
+	}
+
 	var conteudo storedContent
 	if err := json.Unmarshal(row.ContentJson, &conteudo); err != nil {
 		http.Error(w, "content_json inválido", http.StatusInternalServerError)
@@ -374,6 +384,7 @@ func (h *JobHandler) GeneratePDF(w http.ResponseWriter, r *http.Request) {
 		CoverLetter: conteudo.CoverLetter,
 		OutputDir:   fsDir,
 		Doc:         conteudo.Doc,
+		Template:    template,
 	})
 	if err != nil {
 		h.Logger.Error("erro ao gerar PDF", zap.Error(err))

@@ -74,11 +74,13 @@ func Assemble(src Source, out LLMOutput) (Doc, []string) {
 	for _, e := range out.Experiencias {
 		bulletsByID[e.ID] = e.Bullets
 	}
+	evidences := make([]experienceEvidence, len(src.Experiences))
 	for i, e := range src.Experiences {
-		bullets, dropped := verifiedBullets(bulletsByID[i], e)
-		for _, b := range dropped {
-			warnings = append(warnings, "bullet com número inexistente no perfil removido: "+b)
-		}
+		evidences[i] = src.evidenceFor(e)
+	}
+	for i, e := range src.Experiences {
+		bullets, dropped := src.verifiedBullets(bulletsByID[i], i, evidences)
+		warnings = append(warnings, dropped...)
 		if len(bullets) == 0 {
 			// A IA não escreveu (ou só inventou): usa as conquistas cadastradas.
 			bullets = cleanList(e.Achievements)
@@ -180,29 +182,102 @@ func (s Source) canonical(name string) string {
 
 var reNumber = regexp.MustCompile(`\b\d+(?:[.,]\d+)?\b`)
 
-// verifiedBullets descarta bullets com números (métricas, percentuais, quantidades)
-// que não aparecem em nenhum dado daquela experiência: são métricas inventadas.
-func verifiedBullets(bullets []string, e SourceExperience) (kept, dropped []string) {
-	evidence := strings.Join(append(append([]string{e.Company, e.Role, e.Description}, e.Stack...), e.Achievements...), " ")
-	known := map[string]bool{}
-	for _, n := range reNumber.FindAllString(evidence, -1) {
-		known[normalizeNumber(n)] = true
+// experienceEvidence é tudo o que o perfil diz sobre uma experiência.
+type experienceEvidence struct {
+	text    string          // empresa, cargo, descrição, stack e conquistas
+	techs   map[string]bool // stack em nome canônico
+	numbers map[string]bool
+}
+
+func (s Source) evidenceFor(e SourceExperience) experienceEvidence {
+	ev := experienceEvidence{
+		text:    strings.Join(append(append([]string{e.Company, e.Role, e.Description}, e.Stack...), e.Achievements...), " "),
+		techs:   map[string]bool{},
+		numbers: map[string]bool{},
 	}
+	for _, t := range e.Stack {
+		ev.techs[s.canonical(t)] = true
+	}
+	for _, n := range reNumber.FindAllString(ev.text, -1) {
+		ev.numbers[normalizeNumber(n)] = true
+	}
+	return ev
+}
+
+// evidencedIn diz se a tecnologia aparece na experiência (stack, com aliases, ou no texto).
+func (s Source) evidencedIn(tech string, ev experienceEvidence) bool {
+	return ev.techs[s.canonical(tech)] || mentions(ev.text, tech)
+}
+
+// foreignTechs são as tecnologias de OUTRAS experiências que esta não menciona,
+// com as variações de nome (aliases) de cada uma: "Google Cloud Platform" também
+// procura "GCP" se o alias existir.
+func (s Source) foreignTechs(i int, evidences []experienceEvidence) []string {
+	variants := map[string][]string{}
+	for v, c := range s.Aliases {
+		variants[c] = append(variants[c], v)
+	}
+	seen := map[string]bool{}
+	var out []string
+	for j, e := range s.Experiences {
+		if j == i {
+			continue
+		}
+		for _, t := range e.Stack {
+			c := s.canonical(t)
+			if seen[c] || s.evidencedIn(t, evidences[i]) {
+				continue
+			}
+			seen[c] = true
+			out = append(out, t)
+			if c != strings.ToLower(strings.TrimSpace(t)) {
+				out = append(out, c)
+			}
+			out = append(out, variants[c]...)
+		}
+	}
+	return out
+}
+
+// verifiedBullets descarta bullets que afirmam o que o perfil não sustenta para
+// AQUELA experiência: números (métricas, percentuais) que não aparecem nos dados dela,
+// ou tecnologias que só aparecem em outra experiência (fato atribuído à empresa errada).
+// Devolve os mantidos e o motivo de cada descarte.
+func (s Source) verifiedBullets(bullets []string, i int, evidences []experienceEvidence) (kept, dropped []string) {
+	ev := evidences[i]
+	foreign := s.foreignTechs(i, evidences)
+	company := s.Experiences[i].Company
+
+bullets:
 	for _, b := range cleanList(bullets) {
-		ok := true
 		for _, n := range reNumber.FindAllString(b, -1) {
-			if !known[normalizeNumber(n)] {
-				ok = false
-				break
+			if !ev.numbers[normalizeNumber(n)] {
+				dropped = append(dropped, "bullet com número inexistente no perfil removido: "+b)
+				continue bullets
 			}
 		}
-		if ok {
-			kept = append(kept, b)
-		} else {
-			dropped = append(dropped, b)
+		for _, t := range foreign {
+			if mentions(b, t) {
+				dropped = append(dropped, "bullet de "+company+" citava "+t+", que é de outra experiência, removido: "+b)
+				continue bullets
+			}
 		}
+		kept = append(kept, b)
 	}
 	return kept, dropped
+}
+
+// mentions procura o termo como palavra inteira. Termos de até 2 letras ("Go", "C", "R")
+// exigem a mesma caixa, para não casar com palavras comuns do texto.
+func mentions(text, term string) bool {
+	term = strings.TrimSpace(term)
+	if term == "" {
+		return false
+	}
+	if len([]rune(term)) <= 2 {
+		return regexp.MustCompile(`(^|[^\pL\pN+#])` + regexp.QuoteMeta(term) + `($|[^\pL\pN+#])`).MatchString(text)
+	}
+	return wordRegexp(term).MatchString(text)
 }
 
 func normalizeNumber(n string) string {

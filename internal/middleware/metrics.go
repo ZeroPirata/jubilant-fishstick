@@ -17,11 +17,11 @@ func normalizePath(p string) string {
 }
 
 // MetricsMiddleware instrumenta todas as rotas com contador e histograma de latência.
-// Rotas de arquivo estático (/static/, /output/) e a própria /metrics são excluídas.
+// Rotas de arquivo estático (/static/, /output/) e a leitura das próprias métricas são excluídas.
 func MetricsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if path == "/metrics" || path == "/api/v1/jobs/events" || strings.HasPrefix(path, "/static/") || strings.HasPrefix(path, "/output/") {
+		if path == "/api/v1/admin/metrics/raw" || path == "/api/v1/jobs/events" || strings.HasPrefix(path, "/static/") || strings.HasPrefix(path, "/output/") {
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -126,13 +126,20 @@
     <!-- ─── MÉTRICAS ─── -->
     <section id="tab-metricas" data-tab>
       <div class="section-header">
-        <h2>Métricas do Sistema</h2>
+        <h2>Métricas</h2>
         <div class="toolbar" style="margin:0;align-items:center;gap:12px">
+          <div class="sub-nav" style="margin:0">
+            <button class="active" data-mview="sistema" onclick="switchMetricsView('sistema',this)">Sistema</button>
+            <button data-mview="ia" onclick="switchMetricsView('ia',this)">IA</button>
+            <button data-mview="banco" onclick="switchMetricsView('banco',this)">Banco</button>
+          </div>
           <span id="metrics-updated" style="color:var(--muted);font-size:12px"></span>
-          <button class="btn btn-ghost" onclick="loadMetrics()">↻ Atualizar</button>
+          <button class="btn btn-ghost" onclick="refreshMetricsView()">↻ Atualizar</button>
         </div>
       </div>
       <p id="metrics-error" style="color:var(--red);font-size:13px;margin-bottom:12px"></p>
+
+      <div id="metrics-view-sistema">
 
       <!-- Linha 1: 4 stat cards -->
       <div class="metrics-grid">
@@ -266,6 +273,123 @@
           <div>
             <div class="metric-label">Threads OS</div>
             <div class="metric-val metric-val-sm" id="m-go-threads">—</div>
+          </div>
+        </div>
+      </div>
+      </div><!-- /metrics-view-sistema -->
+
+      <!-- ── IA: histórico das chamadas aos providers (persistido no banco) ── -->
+      <div id="metrics-view-ia" class="hidden">
+        <div class="list-controls" style="margin-bottom:12px">
+          <select id="ai-range" onchange="loadAIMetrics()" style="width:auto" aria-label="Período">
+            <option value="24h">Últimas 24 horas</option>
+            <option value="7d">Últimos 7 dias</option>
+            <option value="30d">Últimos 30 dias</option>
+          </select>
+          <span style="color:var(--muted);font-size:12px">Cada tentativa conta, inclusive as que falharam e passaram a vez para o próximo da cadeia.</span>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Chamadas</div>
+            <div class="metric-val" id="ai-calls">—</div>
+            <div class="metric-sub" id="ai-success">—</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Tempo médio (sucesso)</div>
+            <div class="metric-val" id="ai-avg">—</div>
+            <div class="metric-sub">por chamada</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Tokens</div>
+            <div class="metric-val" id="ai-tokens">—</div>
+            <div class="metric-sub" id="ai-tokens-split">—</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Salvos pelo fallback</div>
+            <div class="metric-val" id="ai-fallback">—</div>
+            <div class="metric-sub">sucessos fora do 1º provider</div>
+          </div>
+        </div>
+
+        <div class="metric-card" style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+            <div class="metric-card-title" style="margin-bottom:0">Chamadas ao longo do tempo</div>
+            <div class="chart-legend">
+              <span><i class="swatch swatch-ok"></i>Sucesso</span>
+              <span><i class="swatch swatch-fail"></i>Falha</span>
+            </div>
+          </div>
+          <div class="ai-chart">
+            <div class="ai-chart-y"><span id="ai-ymax"></span><span>0</span></div>
+            <div style="flex:1;min-width:0">
+              <div id="ai-timeline" class="ai-timeline" role="img" aria-label="Chamadas de IA por intervalo, sucesso e falha"></div>
+              <div id="ai-xaxis" class="ai-xaxis"></div>
+            </div>
+          </div>
+          <div id="ai-tooltip" class="chart-tooltip hidden" role="status"></div>
+        </div>
+
+        <div class="metric-card" style="margin-bottom:16px">
+          <div class="metric-card-title">Por modelo</div>
+          <div class="table-wrap" style="margin:0">
+            <table class="routes-table table-cards">
+              <thead>
+                <tr>
+                  <th>Finalidade</th><th>Modelo</th>
+                  <th class="rt-num">Chamadas</th><th class="rt-num">Sucesso</th>
+                  <th class="rt-num">p50</th><th class="rt-num">p95</th>
+                  <th class="rt-num">Tokens méd. (entrada / saída)</th><th>Falhas por tipo</th>
+                </tr>
+              </thead>
+              <tbody id="ai-models-body"><tr><td colspan="8" class="empty">Carregando...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-card-title">Falhas recentes</div>
+          <div class="table-wrap" style="margin:0">
+            <table class="routes-table table-cards">
+              <thead><tr><th>Quando</th><th>Finalidade</th><th>Modelo</th><th>Tipo</th><th class="rt-num">Tempo</th><th>Erro</th></tr></thead>
+              <tbody id="ai-failures-body"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Banco: consultas e pool de conexões (desde o último reinício) ── -->
+      <div id="metrics-view-banco" class="hidden">
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Conexões em uso</div>
+            <div class="metric-val" id="db-acquired">—</div>
+            <div class="metric-sub" id="db-conns">—</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Esperas por conexão</div>
+            <div class="metric-val" id="db-waits">—</div>
+            <div class="metric-sub" id="db-wait-time">pool cheio</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Consultas</div>
+            <div class="metric-val" id="db-queries">—</div>
+            <div class="metric-sub" id="db-errors">—</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Tempo médio</div>
+            <div class="metric-val" id="db-avg">—</div>
+            <div class="metric-sub">por consulta</div>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-card-title">Consultas por tempo total</div>
+          <p style="color:var(--muted);font-size:12px;margin:-6px 0 10px">Desde o último reinício da aplicação. As do topo são as que mais pesam no banco.</p>
+          <div class="table-wrap" style="margin:0">
+            <table class="routes-table table-cards">
+              <thead><tr><th>Consulta</th><th class="rt-num">Execuções</th><th class="rt-num">Média</th><th class="rt-num">p95</th><th class="rt-num">Tempo total</th><th class="rt-num">Erros</th></tr></thead>
+              <tbody id="db-queries-body"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
+            </table>
           </div>
         </div>
       </div>

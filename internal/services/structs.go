@@ -21,10 +21,10 @@ type MatchResult struct {
 	Feedbacks     []string
 }
 
-
 type AiService struct {
 	Config           *config.Config
 	Source           ProviderSource
+	Recorder         CallRecorder
 	httpClient       *http.Client
 	scrapeHttpClient *http.Client
 }

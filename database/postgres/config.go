@@ -29,6 +29,7 @@ func setupPoolConfig(databaseUrl string, c *config.Config, logr *zap.Logger) (*p
 		return nil, fmt.Errorf("error parsing database URL: %w", err)
 	}
 
+	cfg.ConnConfig.Tracer = queryTracer{}
 	cfg.ConnConfig.OnNotice = func(c *pgconn.PgConn, n *pgconn.Notice) {
 		logr.Info("PostgreSQL NOTICE", zap.String("message", n.Message), zap.String("code", n.Code))
 	}

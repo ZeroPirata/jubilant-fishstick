@@ -158,7 +158,7 @@ graph TB
 | Auth | JWT HS256 + Argon2id + Redis revocation list |
 | Real-time | Server-Sent Events (SSE) — bus in-memory por `user_id` |
 | Logging | Uber Zap |
-| Observabilidade | Prometheus client (metrics) — endpoint `/metrics` compatível com Grafana |
+| Observabilidade | Prometheus client (metrics) — endpoint `/api/v1/admin/metrics/raw` (exige admin), compatível com Grafana; histórico das chamadas de IA em `/api/v1/admin/metrics/ai` |
 | Testes | `go test` — handler, middleware, worker, security, services, util |
 | CI/CD | GitHub Actions (self-hosted) — test gate → deploy → healthcheck → smoke test |
 | Infra | Docker + Docker Compose |

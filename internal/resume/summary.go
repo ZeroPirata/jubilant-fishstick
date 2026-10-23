@@ -15,7 +15,8 @@ type summaryCheck struct {
 var (
 	reZeroYears = regexp.MustCompile(`(?i)\b0\+?\s*(years?|anos?)\b`)
 	reDegree    = regexp.MustCompile(`(?i)\b(degree|bachelor'?s?|graduated|graduate|diploma|forma[çc][ãa]o|formad[oa]|gradua[çc][ãa]o|graduad[oa]|graduand[oa]|bacharel\w*|tecn[óo]log[oa])\b`)
-	reInflated  = regexp.MustCompile(`(?i)\b(extensive|proven|solid|strong|deep|years of)\s+(experience|background)\b|\bexperienced\b|experi[êe]ncia\s+(s[óo]lida|ampla|extensa|comprovada)|\bexperiente\b`)
+	// Afirmações de experiência profissional, para quem é primeiro emprego.
+	reInflated = regexp.MustCompile(`(?i)\b(extensive|proven|solid|strong|deep|years of)\s+(experience|background)\b|\bexperienced\b|\b(has|with)\s+experience\b|\bexperience\s+(in|with)\b|experi[êe]ncia\s+(s[óo]lida|ampla|extensa|comprovada|em|com|no|na)\b|\bpossui\s+experi[êe]ncia\b|\bexperiente\b`)
 )
 
 func matches(re *regexp.Regexp) func(string) []string {

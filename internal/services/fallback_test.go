@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -309,5 +311,73 @@ func TestCurriculo_SchemaAntigoViraErro(t *testing.T) {
 	_, err := svc.GenerateCurriculum(context.Background(), "sys", "user")
 	if err == nil || !strings.Contains(err.Error(), "sem conteúdo") {
 		t.Errorf("erro = %v, want 'sem conteúdo'", err)
+	}
+}
+
+type memRecorder struct{ calls []AICall }
+
+func (m *memRecorder) RecordAICall(_ context.Context, c AICall) { m.calls = append(m.calls, c) }
+
+// Cada tentativa vira um registro, com posição, status e tokens — inclusive as que
+// falharam e passaram a vez.
+func TestFallback_RegistraCadaTentativa(t *testing.T) {
+	limited, _ := fakeLLM(t, http.StatusTooManyRequests, `{}`)
+	broken, _ := fakeLLM(t, http.StatusInternalServerError, "erro")
+	good, _ := fakeLLM(t, http.StatusOK, `{"choices":[{"message":{"content":"{\"resumo\":\"ok\"}"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1200,"completion_tokens":300}}`)
+
+	rec := &memRecorder{}
+	svc := newFallbackService(&config.Config{}, fakeSource{PurposeMain: {
+		{Name: "openai", URL: limited.URL, Model: "a"},
+		{Name: "openai", URL: broken.URL, Model: "b"},
+		{Name: "openai", URL: good.URL, Model: "c"},
+	}})
+	svc.Recorder = rec
+
+	ctx := WithJobID(context.Background(), "job-123")
+	if _, err := svc.GenerateCurriculum(ctx, "sys", "user"); err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+
+	want := []struct {
+		model, status string
+		position      int
+	}{{"a", StatusRateLimit, 0}, {"b", StatusHTTPError, 1}, {"c", StatusOK, 2}}
+	if len(rec.calls) != len(want) {
+		t.Fatalf("registros = %d, want %d: %+v", len(rec.calls), len(want), rec.calls)
+	}
+	for i, w := range want {
+		c := rec.calls[i]
+		if c.Model != w.model || c.Status != w.status || c.Position != w.position || c.JobID != "job-123" || c.Purpose != PurposeMain {
+			t.Errorf("registro %d = %+v, want %+v", i, c, w)
+		}
+	}
+	if ok := rec.calls[2]; ok.PromptTokens != 1200 || ok.CompletionTokens != 300 || ok.Error != "" {
+		t.Errorf("tokens/erro do sucesso = %+v", ok)
+	}
+	if rec.calls[1].Error == "" {
+		t.Error("falha deveria guardar a mensagem de erro")
+	}
+}
+
+func TestClassifyError(t *testing.T) {
+	cases := []struct {
+		err  error
+		want string
+	}{
+		{nil, StatusOK},
+		{&ErrRateLimit{Msg: "x"}, StatusRateLimit},
+		{context.DeadlineExceeded, StatusTimeout},
+		{fmt.Errorf("x: %w", ErrTruncated), StatusTruncated},
+		{fmt.Errorf("x: %w", ErrEmpty), StatusEmpty},
+		{fmt.Errorf("x: %w", ErrParse), StatusParseError},
+		{fmt.Errorf("x: %w", ErrNoContent), StatusParseError},
+		{&ErrHTTPStatus{Code: 410}, StatusHTTPError},
+		{&url.Error{Op: "Post", URL: "http://x", Err: errors.New("connection refused")}, StatusNetworkErr},
+		{errors.New("outra coisa"), StatusOtherError},
+	}
+	for _, tc := range cases {
+		if got := ClassifyError(tc.err); got != tc.want {
+			t.Errorf("ClassifyError(%v) = %q, want %q", tc.err, got, tc.want)
+		}
 	}
 }

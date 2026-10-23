@@ -768,10 +768,71 @@ _DOC_LABELS = {
     },
 }
 
+def _template_css(font: str, size: float, accent: str, margin: str, header: str, h2: str,
+                  gap: float = 1.0, extra: str = "") -> CSS:
+    """CSS de um modelo. Todos seguem as regras de ATS: uma coluna, texto real,
+    títulos padrão e fontes comuns; variam tipografia, densidade e destaque."""
+    g = lambda pt: f"{pt * gap:.1f}pt"
+    return CSS(string=f"""
+@page {{ margin: {margin}; size: A4; }}
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: {font}; font-size: {size}pt; line-height: 1.4; color: #1f1f1f; }}
+a {{ color: #555; text-decoration: none; }}
+.header {{ padding-bottom: {g(6)}; margin-bottom: {g(8)}; {header} }}
+.name {{ font-size: {size * 2}pt; font-weight: bold; color: {accent}; margin-bottom: 3pt; }}
+.contact, .contact-web {{ font-size: {size - 1.5}pt; color: #555; }}
+.sep {{ color: #bbb; margin: 0 3pt; }}
+h2 {{ font-size: {size - 1.5}pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1.2pt;
+      color: {accent}; margin-top: {g(10)}; margin-bottom: {g(4)}; padding-bottom: 2pt; {h2} }}
+.exp-role, .proj-name, .edu-course {{ font-weight: bold; font-size: {size + 0.5}pt; color: {accent}; margin-top: {g(6)}; margin-bottom: 1pt; }}
+.exp-meta, .proj-meta, .edu-institution {{ font-size: {size - 1.5}pt; color: #555; margin-bottom: {g(2)}; }}
+ul {{ padding-left: 11pt; margin: {g(2)} 0 {g(3)} 0; }}
+li {{ font-size: {size - 0.5}pt; margin-bottom: {g(1)}; text-align: justify; }}
+.skill-line {{ font-size: {size - 0.5}pt; margin: {g(1.5)} 0; }}
+.skill-key {{ font-weight: bold; color: {accent}; }}
+.proj-desc {{ font-size: {size - 0.5}pt; color: #333; text-align: justify; }}
+.cert-name {{ font-weight: bold; font-size: {size - 1}pt; color: {accent}; margin-top: {g(4)}; }}
+.cert-name a {{ color: {accent}; }}
+.cert-meta {{ font-size: {size - 2.5}pt; color: #555; margin-bottom: {g(2)}; }}
+p {{ font-size: {size - 0.5}pt; margin: {g(2)} 0; line-height: 1.45; text-align: justify; }}
+{extra}
+""")
+
+
+_SERIF = "'Liberation Serif', 'Times New Roman', Cambria, serif"
+_SANS = "'Liberation Sans', Arial, Helvetica, sans-serif"
+
 TEMPLATES = {
+    # O original: sans-serif com destaque azul-escuro.
     "classico": {
         "css": RESUME_CSS,
         "order": ["summary", "experience", "skills", "projects", "education", "certifications"],
+    },
+    # Sênior / mercado tradicional: serifada, só preto e cinza, mais respiro, cabeçalho centralizado.
+    "executivo": {
+        "css": _template_css(_SERIF, 10.5, "#111", "2cm 2.2cm",
+                             header="text-align: center; border-bottom: 0.75pt solid #111;",
+                             h2="border-bottom: 0.5pt solid #999; letter-spacing: 2pt;", gap=1.25,
+                             extra=".exp-meta, .edu-institution { font-style: italic; }"),
+        "order": ["summary", "experience", "education", "skills", "projects", "certifications"],
+    },
+    # Para caber em 1 página: fonte e margens menores, habilidades em linha corrida.
+    "compacto": {
+        "css": _template_css(_SANS, 9, "#1a3a5c", "1.1cm 1.4cm",
+                             header="border-bottom: 1.5pt solid #1a3a5c;",
+                             h2="border-bottom: 0.5pt solid #1a3a5c;", gap=0.6),
+        "order": ["summary", "experience", "skills", "projects", "education", "certifications"],
+        "skills_inline": True,
+        "certs_inline": True,
+    },
+    # Júnior / estágio: objetivo em vez de resumo e o que o candidato tem (formação e
+    # projetos) antes da experiência.
+    "primeiro_emprego": {
+        "css": _template_css(_SANS, 10, "#0f4c5c", "1.6cm 1.9cm",
+                             header="border-bottom: 2pt solid #0f4c5c;",
+                             h2="border-bottom: 1pt solid #0f4c5c;", gap=1.1),
+        "order": ["summary", "education", "projects", "skills", "experience", "certifications"],
+        "labels": {"pt-br": {"summary": "Objetivo Profissional"}, "en": {"summary": "Objective"}},
     },
 }
 DEFAULT_TEMPLATE = "classico"
@@ -805,7 +866,7 @@ def _doc_header(h: dict) -> list:
     return out
 
 
-def _doc_section(key: str, doc: dict, labels: dict) -> list:
+def _doc_section(key: str, doc: dict, labels: dict, tpl: dict) -> list:
     out: list = []
     if key == "summary" and doc.get("summary"):
         out.append(f'<p>{_esc(doc["summary"])}</p>')
@@ -820,6 +881,10 @@ def _doc_section(key: str, doc: dict, labels: dict) -> list:
             bullets = e.get("bullets") or []
             if bullets:
                 out.append("<ul>" + "".join(f"<li>{_esc(b)}</li>" for b in bullets) + "</ul>")
+    elif key == "skills" and tpl.get("skills_inline") and doc.get("skills"):
+        parts = [f'<span class="skill-key">{_esc(g.get("category", ""))}:</span> {_esc(", ".join(g.get("items") or []))}'
+                 for g in doc["skills"]]
+        out.append(f'<p class="skill-line">{" &nbsp;·&nbsp; ".join(parts)}</p>')
     elif key == "skills":
         for g in doc.get("skills") or []:
             out.append(f'<div class="skill-line"><span class="skill-key">{_esc(g.get("category", ""))}:</span> '
@@ -840,6 +905,12 @@ def _doc_section(key: str, doc: dict, labels: dict) -> list:
             if period:
                 meta.append(_esc(period))
             out.append(f'<div class="edu-institution">{" — ".join(m for m in meta if m)}</div>')
+    elif key == "certifications" and tpl.get("certs_inline") and doc.get("certifications"):
+        items = []
+        for c in doc["certifications"]:
+            meta = " — ".join(m for m in (_esc(c.get("issuer", "")), _esc(_fmt_month(c.get("date", ""), labels))) if m)
+            items.append(f'<span class="skill-key">{_esc(c.get("name", ""))}</span>' + (f" ({meta})" if meta else ""))
+        out.append(f'<p class="skill-line">{" &nbsp;·&nbsp; ".join(items)}</p>')
     elif key == "certifications":
         for c in doc.get("certifications") or []:
             name = _esc(c.get("name", ""))
@@ -856,11 +927,12 @@ def _doc_section(key: str, doc: dict, labels: dict) -> list:
 
 
 def doc_para_html(doc: dict, template: str = DEFAULT_TEMPLATE) -> str:
-    labels = _DOC_LABELS.get(doc.get("lang"), _DOC_LABELS["pt-br"])
+    lang = doc.get("lang") if doc.get("lang") in _DOC_LABELS else "pt-br"
     tpl = TEMPLATES.get(template, TEMPLATES[DEFAULT_TEMPLATE])
+    labels = {**_DOC_LABELS[lang], **tpl.get("labels", {}).get(lang, {})}
     html = _doc_header(doc.get("header") or {})
     for key in tpl["order"]:
-        html.extend(_doc_section(key, doc, labels))
+        html.extend(_doc_section(key, doc, labels, tpl))
     return "\n".join(html)
 
 

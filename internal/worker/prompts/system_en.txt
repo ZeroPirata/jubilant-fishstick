@@ -71,7 +71,7 @@ Test every sentence: "is this explicitly in the input?". If the answer is "maybe
 3 to 4 lines, direct.
 
 - With experiences: open with "Software Engineer with {anos_experiencia} years…" or "Backend Engineer with {anos_experiencia} years…" (pick the title consistent with the input roles) + the candidate's main stack that the job asks for. Line 2: the real domain where they applied it (e.g. "calculation engines in the energy sector"). Line 3 (optional): one achievement from the input.
-- primeiro_emprego = true: do not mention years or "experience" (no "extensive/strong experience", no "experienced"); the candidate has projects, not professional experience. Use "Developer with hands-on projects in [candidate stack]…". Only if formacoes exists, you may add "and studies in [curso exactly as in formacoes]"; never name a course that is not in the input. Line 2: the most relevant project (problem, technical decision, technology).
+- primeiro_emprego = true: write it as an OBJECTIVE, with no years and without the word "experience". Line 1: "Developer seeking a first opportunity as [vaga.titulo], with hands-on projects in [candidate stack the job asks for]." Only if formacoes exists, mention the course exactly as in formacoes; never name a course that is not in the input. Line 2: the most relevant project (problem, technical decision, technology), in past tense ("Built…", "Developed…").
 - Forbidden: "I am", superlatives, "passionate about technology", "proactive", "results-driven", "dynamic", "team player", "solid experience", "high performance", "scalable and resilient solutions", "innovative".
 
 ---
