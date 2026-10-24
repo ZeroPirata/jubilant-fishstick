@@ -23,8 +23,9 @@ type ProviderRow struct {
 
 type Repository interface {
 	List(ctx context.Context, purpose string) ([]ProviderRow, error)
-	// Replace troca a cadeia inteira do purpose numa transação, na ordem recebida.
-	Replace(ctx context.Context, purpose string, rows []ProviderRow, updatedBy string) error
+	// Replace troca as cadeias recebidas (purpose → providers, na ordem) numa transação só;
+	// purposes fora do mapa ficam como estão.
+	Replace(ctx context.Context, chains map[string][]ProviderRow, updatedBy string) error
 }
 
 type repo struct {
@@ -59,32 +60,41 @@ func (r *repo) List(ctx context.Context, purpose string) ([]ProviderRow, error) 
 	return out, rows.Err()
 }
 
-func (r *repo) Replace(ctx context.Context, purpose string, rows []ProviderRow, updatedBy string) error {
+func (r *repo) Replace(ctx context.Context, chains map[string][]ProviderRow, updatedBy string) error {
 	var by pgtype.UUID
 	if err := by.Scan(updatedBy); err != nil {
 		return err
 	}
 
 	return pgx.BeginFunc(ctx, r.db, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `DELETE FROM ai_providers WHERE purpose = $1`, purpose); err != nil {
-			return err
-		}
-		for i, p := range rows {
-			var id pgtype.UUID
-			if p.ID != "" {
-				if err := id.Scan(p.ID); err != nil {
-					return err
-				}
-			}
-			_, err := tx.Exec(ctx,
-				`INSERT INTO ai_providers (id, purpose, position, provider, url, model, api_key_enc, enabled, updated_by)
-				 VALUES (COALESCE($1, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9)`,
-				id, purpose, i, p.Provider, p.URL, p.Model, p.APIKeyEnc, p.Enabled, by,
-			)
-			if err != nil {
+		for purpose, rows := range chains {
+			if err := replaceChain(ctx, tx, purpose, rows, by); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+func replaceChain(ctx context.Context, tx pgx.Tx, purpose string, rows []ProviderRow, by pgtype.UUID) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM ai_providers WHERE purpose = $1`, purpose); err != nil {
+		return err
+	}
+	for i, p := range rows {
+		var id pgtype.UUID
+		if p.ID != "" {
+			if err := id.Scan(p.ID); err != nil {
+				return err
+			}
+		}
+		_, err := tx.Exec(ctx,
+			`INSERT INTO ai_providers (id, purpose, position, provider, url, model, api_key_enc, enabled, updated_by)
+			 VALUES (COALESCE($1, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9)`,
+			id, purpose, i, p.Provider, p.URL, p.Model, p.APIKeyEnc, p.Enabled, by,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

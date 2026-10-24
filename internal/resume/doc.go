@@ -21,6 +21,7 @@ type Doc struct {
 	Projects       []Project       `json:"projects"`
 	Education      []Education     `json:"education"`
 	Certifications []Certification `json:"certifications"`
+	Languages      []Language      `json:"languages,omitempty"`
 }
 
 type Header struct {
@@ -67,6 +68,12 @@ type Certification struct {
 	URL    string `json:"url,omitempty"`
 }
 
+// Language já vem com nome e nível no idioma do documento ("Inglês", "Avançado").
+type Language struct {
+	Name  string `json:"name"`
+	Level string `json:"level"`
+}
+
 // LLMOutput é o JSON que a IA devolve (schema descrito no system prompt).
 type LLMOutput struct {
 	Resumo       string `json:"resumo"`
@@ -94,6 +101,7 @@ type Source struct {
 	Projects       []SourceProject
 	Education      []Education
 	Certifications []Certification
+	Languages      []Language // já traduzidos para Lang
 	Skills         []string
 	JobStack       []string          // stack da vaga: usada para detectar tecnologia que o candidato não tem
 	Aliases        map[string]string // stack_aliases: variação → nome canônico

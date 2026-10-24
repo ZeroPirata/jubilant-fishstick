@@ -6,19 +6,19 @@ import (
 )
 
 type labels struct {
-	summary, experience, skills, projects, education, certifications, present string
-	months                                                                    [12]string
+	summary, experience, skills, projects, education, certifications, languages, present string
+	months                                                                               [12]string
 }
 
 var labelsByLang = map[string]labels{
 	"pt-br": {
 		summary: "RESUMO PROFISSIONAL", experience: "EXPERIÊNCIA PROFISSIONAL", skills: "HABILIDADES TÉCNICAS",
-		projects: "PROJETOS", education: "FORMAÇÃO ACADÊMICA", certifications: "CERTIFICAÇÕES", present: "Presente",
+		projects: "PROJETOS", education: "FORMAÇÃO ACADÊMICA", certifications: "CERTIFICAÇÕES", languages: "IDIOMAS", present: "Presente",
 		months: [12]string{"Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"},
 	},
 	"en": {
 		summary: "SUMMARY", experience: "EXPERIENCE", skills: "SKILLS",
-		projects: "PROJECTS", education: "EDUCATION", certifications: "CERTIFICATIONS", present: "Present",
+		projects: "PROJECTS", education: "EDUCATION", certifications: "CERTIFICATIONS", languages: "LANGUAGES", present: "Present",
 		months: [12]string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"},
 	},
 }
@@ -139,6 +139,12 @@ func Text(d Doc) string {
 				s += " (" + dt + ")"
 			}
 			line(s)
+		}
+	}
+	if len(d.Languages) > 0 {
+		section(l.languages)
+		for _, lg := range d.Languages {
+			line(lg.Name + " — " + lg.Level)
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")

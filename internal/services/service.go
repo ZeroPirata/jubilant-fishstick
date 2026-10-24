@@ -62,6 +62,9 @@ type AIInput struct {
 const (
 	scrapeMaxTokens = 4096
 	mainMaxTokens   = 8192
+	// ExtractJSON devolve um JSON grande (currículo inteiro) e modelos que raciocinam
+	// gastam parte do limite pensando: com 8192 a resposta saía cortada.
+	extractMaxTokens = 16384
 )
 
 // buildScrapeBody monta o body da extração de dados da vaga (stack, requisitos, resumo).
@@ -166,11 +169,11 @@ Nota: "Distributed systems knowledge" é conceito — omitido.`
 
 	// OpenAI-compatible (nvidia, groq, openai, etc.)
 	return map[string]any{
-		"model":  scrapeModel,
-		"stream": false,
+		"model":           scrapeModel,
+		"stream":          false,
 		"response_format": map[string]string{"type": "json_object"},
-		"temperature": 0.0,
-		"max_tokens":  scrapeMaxTokens,
+		"temperature":     0.0,
+		"max_tokens":      scrapeMaxTokens,
 		"messages": []map[string]any{
 			{"role": "system", "content": systemPrompt},
 			{"role": "user", "content": userMsg},
@@ -401,7 +404,7 @@ func (ai *AiService) sendRequest(ctx context.Context, client *http.Client, paylo
 		if resp.StatusCode != http.StatusOK {
 			errBody, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			return LLMResponse{}, &ErrHTTPStatus{Code: resp.StatusCode, Body: snippet(string(errBody))}
+			return LLMResponse{}, &ErrHTTPStatus{Code: resp.StatusCode, Body: truncateUTF8(string(errBody), 2000)}
 		}
 
 		if p.Name == "gemini" {
@@ -478,4 +481,42 @@ func (ai *AiService) scrapSiteLLM(targetURL string) (string, error) {
 		content = content[:maxChars]
 	}
 	return content, nil
+}
+
+// ExtractJSON percorre a cadeia do purpose pedindo um JSON e entrega o conteúdo limpo a
+// decode. Se decode falhar (JSON inválido ou vazio para o caller), o próximo provider tenta.
+// Temperatura baixa: aqui a IA só transcreve dados, não escreve texto novo.
+func (ai *AiService) ExtractJSON(ctx context.Context, purpose Purpose, perProvider time.Duration, systemPrompt, userPrompt string, decode func(content string) error) error {
+	return ai.withFallback(ctx, purpose, func(ctx context.Context, p Provider, last bool) (Usage, error) {
+		// Um modelo travado não pode consumir o tempo dos próximos da cadeia.
+		ctx, cancel := context.WithTimeout(ctx, perProvider)
+		defer cancel()
+
+		body := ai.buildBody(AIInput{SystemPrompt: systemPrompt, UserPrompt: userPrompt}, p)
+		if gc, ok := body["generationConfig"].(map[string]any); ok {
+			gc["temperature"] = 0.1
+			gc["maxOutputTokens"] = extractMaxTokens
+		} else {
+			body["temperature"] = 0.1
+			body["max_tokens"] = extractMaxTokens
+		}
+		payload, err := json.Marshal(body)
+		if err != nil {
+			return Usage{}, fmt.Errorf("AiService: error in generate a json for body: %w", err)
+		}
+
+		raw, err := ai.sendRequest(ctx, ai.httpClient, payload, p, last)
+		if err != nil {
+			return Usage{}, err
+		}
+		text, err := extractContent(raw)
+		if err != nil {
+			return raw.Usage, err
+		}
+		content := repairJSON(sanitizeJSONLiterals(stripMarkdownCode(text)))
+		if err := decode(content); err != nil {
+			return raw.Usage, fmt.Errorf("AiService: %w: %v", ErrParse, err)
+		}
+		return raw.Usage, nil
+	})
 }

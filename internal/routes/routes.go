@@ -8,10 +8,14 @@ import (
 	"hackton-treino/internal/handler"
 	"hackton-treino/internal/middleware"
 	adminRepo "hackton-treino/internal/repository/admin"
+	"hackton-treino/internal/profileimport"
 	"hackton-treino/internal/repository/aimetrics"
+	"hackton-treino/internal/repository/importlog"
+	"hackton-treino/internal/repository/usermetrics"
 	ucache "hackton-treino/internal/repository/cache"
 	"hackton-treino/internal/repository/secevents"
 	"hackton-treino/internal/security"
+	"hackton-treino/internal/services"
 	"hackton-treino/internal/sse"
 	"net/http"
 	"runtime"
@@ -25,7 +29,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.Config, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store) {
+func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.Config, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store, llm *services.AiService) {
 	timeout := config.GetConfigDurationOrDefault(cfg.Project.ContextTimeout, 60*time.Second)
 	hash := config.LoadHashConfig(cfg)
 	hasher := security.NewHasher(hash)
@@ -62,6 +66,8 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	protectedMux := http.NewServeMux()
 	jobHandler := setupJobRoutes(protectedMux, logger, db, bus, secLog)
 	setupUserRoutes(protectedMux, logger, db, rds)
+	importLog := importlog.New(db, profileimport.StaleAfter)
+	setupProfileImportRoutes(protectedMux, logger, db, rds, llm, importLog)
 	setupFilterRoutes(protectedMux, logger, db)
 	setupSecurityRoutes(protectedMux, logger, secLog)
 
@@ -78,15 +84,18 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	adminMux.HandleFunc("PATCH /users/{id}",     adminH.SetAdmin)
 
 	// Métricas (admin): Prometheus bruto (antes público em /metrics) e histórico das chamadas de IA
-	metricsH := handler.NewMetricsHandler(logger, aimetrics.New(db))
+	userMetrics := usermetrics.New(db)
+	metricsH := handler.NewMetricsHandler(logger, aimetrics.New(db), userMetrics)
 	adminMux.Handle("GET /metrics/raw", promhttp.Handler())
 	adminMux.HandleFunc("GET /metrics/ai", metricsH.AI)
+	adminMux.HandleFunc("GET /metrics/users", metricsH.UserStats)
+	adminMux.HandleFunc("GET /imports", handler.NewImportLogHandler(logger, importLog).List)
 
 	// Só master: configurações de IA (contêm API keys) e promoção de masters
 	master := middleware.MasterMiddleware(adminR)
 	aiH := handler.NewAISettingsHandler(logger, aiStore, ucache.New(rds), adminR, cfg)
 	adminMux.Handle("GET /ai-settings",             master(http.HandlerFunc(aiH.Get)))
-	adminMux.Handle("PUT /ai-settings/{purpose}",   master(http.HandlerFunc(aiH.Save)))
+	adminMux.Handle("PUT /ai-settings",             master(http.HandlerFunc(aiH.Save)))
 	adminMux.Handle("POST /ai-settings/resume",     master(http.HandlerFunc(aiH.ResumeWorker)))
 	adminMux.Handle("PATCH /users/{id}/master",     master(http.HandlerFunc(aiH.SetMaster)))
 	adminHandler := middleware.AdminMiddleware(adminR)(adminMux)
@@ -107,7 +116,9 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 		})
 	})
 
-	protectedHandler := middleware.RevocationMiddleware(revoker)(middleware.AuthMiddleware(jwtManager)(protectedMux))
+	// ActivityMiddleware depois do Auth: precisa do usuário no contexto para registrar o último acesso.
+	activity := middleware.ActivityMiddleware(userMetrics, 5*time.Minute)
+	protectedHandler := middleware.RevocationMiddleware(revoker)(middleware.AuthMiddleware(jwtManager)(activity(protectedMux)))
 	apiMux.Handle("/", protectedHandler)
 
 	apiHandler := middleware.TimeoutMiddleware(timeout)(apiMux)

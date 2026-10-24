@@ -10,8 +10,10 @@ import (
 	"hackton-treino/internal/aiconfig"
 	"hackton-treino/internal/bootstrap"
 	"hackton-treino/internal/middleware"
+	"hackton-treino/internal/profileimport"
 	"hackton-treino/internal/repository/aimetrics"
 	"hackton-treino/internal/repository/aisettings"
+	"hackton-treino/internal/repository/importlog"
 	"hackton-treino/internal/routes"
 	"hackton-treino/internal/security"
 	"hackton-treino/internal/services"
@@ -89,15 +91,16 @@ func run() error {
 	}
 	aiStore := aiconfig.NewStore(aisettings.New(db), secretBox)
 
-	serverDone := make(chan error, 1)
-	go func() {
-		serverDone <- startServer(ctx, *cfg, db, rds, bus, aiStore)
-	}()
-
 	llm := services.NewLLMService(cfg, aiStore)
 	aiCalls := aimetrics.New(db)
 	llm.Recorder = aiCalls
-	go pruneAICalls(ctx, aiCalls)
+
+	serverDone := make(chan error, 1)
+	go func() {
+		serverDone <- startServer(ctx, *cfg, db, rds, bus, aiStore, llm)
+	}()
+
+	go pruneAICalls(ctx, aiCalls, importlog.New(db, profileimport.StaleAfter))
 	go func() {
 		worker.NewWorker(zap.L(), db, *llm, cfg.ScrapeAi.Activate, rds, bus, cfg.Worker).Start(ctx)
 	}()
@@ -112,20 +115,20 @@ func run() error {
 	return nil
 }
 
-func startServer(ctx context.Context, cfg config.Config, db *pgxpool.Pool, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store) error {
+func startServer(ctx context.Context, cfg config.Config, db *pgxpool.Pool, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store, llm *services.AiService) error {
 	port := ":8080"
 	if cfg.Server.Port != "" {
 		port = ":" + cfg.Server.Port
 	}
 
 	mux := http.NewServeMux()
-	routes.Setup(mux, zap.L(), db, cfg, rds, bus, aiStore)
+	routes.Setup(mux, zap.L(), db, cfg, rds, bus, aiStore, llm)
 
 	handler := middleware.MetricsMiddleware(
 		middleware.SecurityHeaders(
 			middleware.CORSMiddleware(cfg.Server.CORSAllowedOrigin)(
 				middleware.LoggingMiddleware(zap.L(),
-					middleware.BodyLimit(1<<20)(mux),
+					middleware.BodyLimit(1<<20, map[string]int64{routes.ImportUploadPath: routes.ImportUploadLimit})(mux),
 				),
 			),
 		),
@@ -152,8 +155,9 @@ func startServer(ctx context.Context, cfg config.Config, db *pgxpool.Pool, rds *
 	return nil
 }
 
-// pruneAICalls apaga diariamente o histórico de chamadas de IA além da retenção.
-func pruneAICalls(ctx context.Context, repo *aimetrics.Repository) {
+// pruneAICalls apaga diariamente o histórico de chamadas de IA (e das importações de
+// currículo, que guardam as mesmas tentativas) além da retenção.
+func pruneAICalls(ctx context.Context, repo *aimetrics.Repository, imports *importlog.Repository) {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	for {
@@ -161,6 +165,9 @@ func pruneAICalls(ctx context.Context, repo *aimetrics.Repository) {
 			zap.L().Warn("falha ao limpar histórico de chamadas de IA", zap.Error(err))
 		} else if n > 0 {
 			zap.L().Info("histórico de chamadas de IA limpo", zap.Int64("removidas", n))
+		}
+		if _, err := imports.Prune(ctx, aimetrics.Retention); err != nil {
+			zap.L().Warn("falha ao limpar histórico de importações", zap.Error(err))
 		}
 		select {
 		case <-ctx.Done():

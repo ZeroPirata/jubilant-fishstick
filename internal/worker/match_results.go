@@ -45,6 +45,11 @@ func (w *Worker) matchComBancoPessoal(ctx context.Context, job *db.Job) (service
 		return services.MatchResult{}, err
 	}
 
+	idiomas, err := w.cachedLanguages(ctx, userID, jobID)
+	if err != nil {
+		return services.MatchResult{}, err
+	}
+
 	excelentes, _ := w.Feedbacks.QuerySelectExcellentResumes(ctx, userID)
 	feedbacks, _ := w.Feedbacks.QuerySelectGoodFeedbacks(ctx, userID)
 
@@ -54,6 +59,7 @@ func (w *Worker) matchComBancoPessoal(ctx context.Context, job *db.Job) (service
 		Projetos:      projetos,
 		Formacoes:     formacoes,
 		Certificacoes: certificacoes,
+		Idiomas:       idiomas,
 		Excelentes:    excelentes,
 		Feedbacks:     feedbacks,
 	}, nil
@@ -121,5 +127,18 @@ func (w *Worker) cachedCertificates(ctx context.Context, userID, jobID string) (
 		return nil, errors.New("erro ao buscar certificações")
 	}
 	_ = ucache.SetTyped(ctx, w.Cache, userID, ucache.TopicCertificates, rows)
+	return rows, nil
+}
+
+func (w *Worker) cachedLanguages(ctx context.Context, userID, jobID string) ([]db.UserLanguage, error) {
+	if cached, hit := ucache.GetTyped[[]db.UserLanguage](ctx, w.Cache, userID, ucache.TopicLanguages); hit {
+		return cached, nil
+	}
+	rows, errR := w.Users.QuerySelectAllLanguages(ctx, userID)
+	if errR != nil {
+		w.Logger.Error("Erro ao buscar idiomas", zap.String("job_id", jobID), zap.Error(errR))
+		return nil, errors.New("erro ao buscar idiomas")
+	}
+	_ = ucache.SetTyped(ctx, w.Cache, userID, ucache.TopicLanguages, rows)
 	return rows, nil
 }

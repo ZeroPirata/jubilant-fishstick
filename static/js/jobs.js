@@ -126,14 +126,24 @@ function connectSSE() {
   if (!token) return;
   if (_evtSource) return;
   _evtSource = new EventSource(`${API_BASE}/jobs/events?token=${encodeURIComponent(token)}`);
+  _evtSource.onopen = () => setSSEStatus(true);
   _evtSource.onmessage = e => {
     try { applyJobEvent(JSON.parse(e.data)); } catch (_) {}
   };
   _evtSource.onerror = () => {
+    setSSEStatus(false);
     _evtSource.close();
     _evtSource = null;
     setTimeout(connectSSE, 5000);
   };
+}
+
+// Indicador da sidebar: reflete a conexão real de atualizações em tempo real.
+function setSSEStatus(online) {
+  const box = document.getElementById('sse-status');
+  if (!box) return;
+  box.classList.toggle('offline', !online);
+  document.getElementById('sse-status-text').textContent = online ? 'tempo real conectado' : 'reconectando…';
 }
 
 function disconnectSSE() {
@@ -289,13 +299,13 @@ async function loadJobs() {
       const { quality } = _jobMeta.get(j.id);
       return `
       <tr id="job-row-${j.id}">
-        <td style="color:var(--muted);font-size:11px" class="truncate" title="${j.id}">${j.id.slice(0,8)}…</td>
-        <td>${j.company_name || '<span style="color:var(--muted)">—</span>'}</td>
-        <td class="truncate" title="${j.job_title||''}">${j.job_title || '<span style="color:var(--muted)">—</span>'}</td>
-        <td>${badge(j.status, j.quality)}</td>
-        <td>${qualityBadge(j.id, quality)}</td>
-        <td style="color:var(--muted)">${fmtDate(j.created_at)}</td>
-        <td>
+        <td style="color:var(--muted);font-size:11px" class="truncate" title="${j.id}" data-label="ID">${j.id.slice(0,8)}…</td>
+        <td data-label="Empresa">${j.company_name || '<span style="color:var(--muted)">—</span>'}</td>
+        <td class="truncate" title="${j.job_title||''}" data-label="Título">${j.job_title || '<span style="color:var(--muted)">—</span>'}</td>
+        <td data-label="Status">${badge(j.status, j.quality)}</td>
+        <td data-label="Qualidade">${qualityBadge(j.id, quality)}</td>
+        <td style="color:var(--muted)" data-label="Cadastrada">${fmtDate(j.created_at)}</td>
+        <td data-label="URL">
           ${j.url ? `<a class="link" href="${j.url}" target="_blank" rel="noopener">↗ abrir</a>` : '—'}
         </td>
         <td>

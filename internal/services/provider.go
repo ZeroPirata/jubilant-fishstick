@@ -15,6 +15,7 @@ type Purpose string
 const (
 	PurposeMain   Purpose = "main"   // geração do currículo
 	PurposeScrape Purpose = "scrape" // extração dos dados da vaga
+	PurposeImport Purpose = "import" // leitura do currículo enviado pelo usuário (cadeia de scrape, depois a principal)
 )
 
 // Provider é uma entrada da cadeia de fallback.
@@ -53,6 +54,25 @@ type CallRecorder interface {
 
 type jobIDKey struct{}
 
+type observerKey struct{}
+
+// AttemptObserver acompanha a cadeia ao vivo (ex.: a tela de importação mostra qual modelo
+// está tentando e por que os anteriores falharam). Os dois campos são opcionais.
+type AttemptObserver struct {
+	Start func(p Provider, position int)
+	Done  func(c AICall)
+}
+
+// WithAttemptObserver faz as chamadas feitas com este contexto avisarem o observador.
+func WithAttemptObserver(ctx context.Context, o AttemptObserver) context.Context {
+	return context.WithValue(ctx, observerKey{}, o)
+}
+
+func observerFrom(ctx context.Context) AttemptObserver {
+	o, _ := ctx.Value(observerKey{}).(AttemptObserver)
+	return o
+}
+
 // WithJobID associa as chamadas feitas com este contexto a um job (para as métricas).
 func WithJobID(ctx context.Context, jobID string) context.Context {
 	return context.WithValue(ctx, jobIDKey{}, jobID)
@@ -71,6 +91,22 @@ type ProviderSource interface {
 // resolveProviders monta a cadeia na ordem de prioridade:
 // painel (banco) → .env do purpose → (scrape apenas) cadeia principal.
 func (ai *AiService) resolveProviders(ctx context.Context, purpose Purpose) []Provider {
+	if purpose == PurposeImport {
+		// Ler o currículo é extração, como ler a vaga: segue a ordem da cadeia de scrape e,
+		// de reserva, a principal (sem repetir modelo). A pessoa confere tudo antes de salvar.
+		chain := ai.resolveProviders(ctx, PurposeScrape)
+		seen := map[string]bool{}
+		for _, p := range chain {
+			seen[p.Name+"|"+p.URL+"|"+p.Model] = true
+		}
+		for _, p := range ai.resolveProviders(ctx, PurposeMain) {
+			if k := p.Name + "|" + p.URL + "|" + p.Model; !seen[k] {
+				seen[k] = true
+				chain = append(chain, p)
+			}
+		}
+		return chain
+	}
 	if ai.Source != nil {
 		ps, err := ai.Source.Providers(ctx, purpose)
 		if err != nil {
@@ -120,14 +156,26 @@ func (ai *AiService) withFallback(ctx context.Context, purpose Purpose, call fun
 			return err
 		}
 
+		obs := observerFrom(ctx)
+		if obs.Start != nil {
+			obs.Start(p, i)
+		}
 		start := time.Now()
 		usage, err := call(ctx, p, i == len(providers)-1)
-		ai.record(ctx, AICall{
+		c := AICall{
 			Purpose: purpose, Provider: p.Name, Model: p.Model, Position: i,
 			Status: ClassifyError(err), Duration: time.Since(start),
 			PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens,
 			JobID: jobIDFrom(ctx), Error: errorText(err),
-		})
+		}
+		// Cancelada por quem pediu (ex.: botão Cancelar da importação) não é falha do provider:
+		// fora das métricas para não derrubar a taxa de sucesso do modelo.
+		if !errors.Is(ctx.Err(), context.Canceled) {
+			ai.record(ctx, c)
+		}
+		if obs.Done != nil {
+			obs.Done(c)
+		}
 		if err == nil {
 			if i > 0 {
 				zap.L().Info("AiService: fallback usado",
@@ -165,9 +213,13 @@ func (ai *AiService) record(ctx context.Context, c AICall) {
 	ai.Recorder.RecordAICall(context.WithoutCancel(ctx), c)
 }
 
+// maxRecordedError é quanto do erro vai para as métricas: o suficiente para depurar
+// (ex.: o JSON inteiro de um 429 do Gemini) sem deixar a tabela crescer sem limite.
+const maxRecordedError = 4000
+
 func errorText(err error) string {
 	if err == nil {
 		return ""
 	}
-	return snippet(err.Error())
+	return truncateUTF8(err.Error(), maxRecordedError)
 }

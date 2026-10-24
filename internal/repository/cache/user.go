@@ -19,6 +19,7 @@ const (
 	TopicAcademic     = "academic"
 	TopicProjects     = "projects"
 	TopicCertificates = "certificates"
+	TopicLanguages    = "languages"
 
 	keyLLMRateLimit = "worker:llm_rate_limited"
 )

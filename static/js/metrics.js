@@ -1,6 +1,5 @@
 // ── Metrics dashboard — faz parse do formato Prometheus texto ──
 
-let _metricsTimer = null;
 
 function parsePrometheus(text) {
   const m = {};
@@ -56,6 +55,16 @@ function avgDuration(m, metric, status) {
   const count = get(m, `${metric}_count{status="${status}"}`);
   const sum   = get(m, `${metric}_sum{status="${status}"}`);
   return count > 0 ? sum / count : 0;
+}
+
+// Estado de uma taxa de sucesso (cores de status reservadas, sempre com rótulo).
+function statusLevel(rate) { return rate >= .9 ? 'good' : rate >= .7 ? 'warning' : 'critical'; }
+function statusChip(rate, label) {
+  return `<span class="status-chip status-${statusLevel(rate)}">${fmt(rate * 100)}% ${label}</span>`;
+}
+function setHTML(id, html) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
 }
 
 function set(id, value) {
@@ -229,7 +238,7 @@ function renderMetrics(m) {
   set('m-jobs-completed', completed);
   set('m-jobs-error',     errored);
   set('m-jobs-recovered', recovered);
-  set('m-jobs-total',     total > 0 ? `${Math.round(completed / total * 100)}% taxa de sucesso` : '—');
+  setHTML('m-jobs-total', total > 0 ? statusChip(completed / total, 'de sucesso') : '—');
 
   // Worker
   set('m-goroutines-active', get(m, 'hackton_worker_active_goroutines'));
@@ -287,34 +296,58 @@ function renderMetrics(m) {
   set('m-http-5xx',          http5xx);
 
   // Timestamp
-  set('metrics-updated', 'Atualizado ' + new Date().toLocaleTimeString('pt-BR'));
+  liveMark('metrics');
   renderRouteTable(m);
 }
 
-let _metricsView = 'sistema';
+let _metricsView = 'geral';
+let _aiFailures = [];
+
+// Abre/fecha, logo abaixo da linha, o erro completo da chamada (para depuração).
+function toggleAIFailure(tr) {
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains('err-detail-row')) { next.remove(); tr.classList.remove('open'); return; }
+  const f = _aiFailures[+tr.dataset.i];
+  if (!f) return;
+  const row = document.createElement('tr');
+  row.className = 'err-detail-row';
+  row.innerHTML = `<td colspan="6"><div class="err-detail">
+      <div class="err-meta">
+        <span><b>Quando:</b> ${new Date(f.at).toLocaleString('pt-BR')}</span>
+        <span><b>Finalidade:</b> ${AI_PURPOSE_LABELS[f.purpose] || escHtml(f.purpose)}</span>
+        <span><b>Provider:</b> ${escHtml(f.provider)}</span>
+        <span><b>Modelo:</b> <span class="mono">${escHtml(f.model || '—')}</span></span>
+        <span><b>Tipo:</b> ${escHtml(AI_STATUS_LABELS[f.status] || f.status)}</span>
+        <span><b>Tempo:</b> ${fmtMs(f.ms)}</span>
+      </div>
+      <pre>${escHtml(f.error || '(sem mensagem)')}</pre>
+    </div></td>`;
+  tr.after(row);
+  tr.classList.add('open');
+}
 
 function switchMetricsView(view, btn) {
   _metricsView = view;
   document.querySelectorAll('[data-mview]').forEach(b => b.classList.toggle('active', b === btn));
-  for (const v of ['sistema', 'ia', 'banco']) {
+  for (const v of ['geral', 'sistema', 'ia', 'banco']) {
     document.getElementById(`metrics-view-${v}`).classList.toggle('hidden', v !== view);
   }
   refreshMetricsView();
 }
 
 function refreshMetricsView() {
-  if (_metricsView === 'ia') loadAIMetrics();
+  if (_metricsView === 'geral') loadGeneralMetrics();
+  else if (_metricsView === 'ia') loadAIMetrics();
   else loadMetrics();
 }
 
 function startMetricsRefresh() {
   refreshMetricsView();
-  _metricsTimer = setInterval(refreshMetricsView, 30_000);
+  liveStart('metrics', refreshMetricsView, 10_000);
 }
 
 function stopMetricsRefresh() {
-  clearInterval(_metricsTimer);
-  _metricsTimer = null;
+  liveStop('metrics');
 }
 
 // ── Banco: consultas (tracer do pgx) e pool de conexões ──
@@ -327,6 +360,18 @@ function renderDBMetrics(m) {
   set('db-waits', waits);
   set('db-wait-time', waits > 0 ? `${fmtDur(get(m, 'hackton_db_pool_acquire_seconds_total'))} aguardando no total` : 'nenhuma: o pool deu conta');
 
+  const rows = dbQueryRows(m);
+  const total = rows.reduce((a, r) => a + r.count, 0);
+  const errors = rows.reduce((a, r) => a + r.errors, 0);
+  const sum = rows.reduce((a, r) => a + r.sum, 0);
+  set('db-queries', total);
+  set('db-errors', errors > 0 ? `${errors} com erro` : 'nenhum erro');
+  set('db-avg', total > 0 ? fmtDur(sum / total) : '—');
+  renderDBQueryTable(rows);
+}
+
+// Consultas ao Postgres (tracer do pgx), ordenadas pelo tempo total gasto.
+function dbQueryRows(m) {
   const queries = {};
   for (const [k, v] of Object.entries(m)) {
     const mm = k.match(/^hackton_db_query_duration_seconds_(bucket|sum|count)\{(.*)\}$/);
@@ -337,18 +382,13 @@ function renderDBMetrics(m) {
     if (mm[1] === 'sum') q.sum += v;
     if (mm[1] === 'bucket') { const le = labels.le === '+Inf' ? Infinity : parseFloat(labels.le); q.buckets[le] = (q.buckets[le] || 0) + v; }
   }
-  const rows = Object.entries(queries).map(([name, q]) => ({
+  return Object.entries(queries).map(([name, q]) => ({
     name, ...q,
     p95: approxPercentile(Object.entries(q.buckets).map(([le, count]) => ({ le: Number(le), count })).sort((a, b) => a.le - b.le), 0.95),
   })).sort((a, b) => b.sum - a.sum);
+}
 
-  const total = rows.reduce((a, r) => a + r.count, 0);
-  const errors = rows.reduce((a, r) => a + r.errors, 0);
-  const sum = rows.reduce((a, r) => a + r.sum, 0);
-  set('db-queries', total);
-  set('db-errors', errors > 0 ? `${errors} com erro` : 'nenhum erro');
-  set('db-avg', total > 0 ? fmtDur(sum / total) : '—');
-
+function renderDBQueryTable(rows) {
   const body = document.getElementById('db-queries-body');
   body.innerHTML = rows.length ? rows.map(r => `<tr>
       <td data-label="Consulta"><code>${escHtml(r.name)}</code></td>
@@ -364,9 +404,9 @@ function renderDBMetrics(m) {
 
 const AI_STATUS_LABELS = {
   rate_limit: 'rate limit', timeout: 'timeout', truncated: 'cortada', empty: 'vazia',
-  parse_error: 'JSON inválido', http_error: 'erro HTTP', network_error: 'rede', error: 'outro',
+  parse_error: 'JSON inválido', http_error: 'erro HTTP', network_error: 'rede', error: 'outro', canceled: 'cancelada',
 };
-const AI_PURPOSE_LABELS = { main: 'Currículo', scrape: 'Scrape' };
+const AI_PURPOSE_LABELS = { main: 'Currículo', scrape: 'Scrape', import: 'Importação' };
 const AI_BUCKET_MS = { '24h': 3600e3, '7d': 6 * 3600e3, '30d': 24 * 3600e3 };
 
 function fmtMs(ms) { return ms ? fmtDur(ms / 1000) : '—'; }
@@ -385,7 +425,7 @@ async function loadAIMetrics() {
     const d = (await res.json()).data;
     renderAIMetrics(d, range);
     set('metrics-error', '');
-    set('metrics-updated', 'Atualizado ' + new Date().toLocaleTimeString('pt-BR'));
+    liveMark('metrics');
   } catch (e) {
     set('metrics-error', 'Erro ao carregar métricas de IA: ' + e.message);
   }
@@ -394,7 +434,7 @@ async function loadAIMetrics() {
 function renderAIMetrics(d, range) {
   const s = d.summary;
   set('ai-calls', s.calls || '0');
-  set('ai-success', s.calls ? `${fmt(s.success_rate * 100)}% com sucesso` : 'nenhuma chamada no período');
+  setHTML('ai-success', s.calls ? statusChip(s.success_rate, 'com sucesso') : 'nenhuma chamada no período');
   set('ai-avg', fmtMs(s.avg_ok_ms));
   set('ai-tokens', fmtTokens(s.prompt_tokens + s.completion_tokens));
   set('ai-tokens-split', `${fmtTokens(s.prompt_tokens)} entrada · ${fmtTokens(s.completion_tokens)} saída`);
@@ -420,14 +460,19 @@ function renderAIMetrics(d, range) {
   }).join('') : '<tr><td colspan="8" class="empty">Nenhuma chamada no período.</td></tr>';
 
   const failures = document.getElementById('ai-failures-body');
-  failures.innerHTML = d.failures.length ? d.failures.map(f => `<tr>
+  // A atualização automática redesenha a tabela: reabre as falhas que estavam expandidas.
+  const failKey = f => f.at + '|' + f.model + '|' + f.status;
+  const wasOpen = new Set([...failures.querySelectorAll('tr.err-row.open')].map(tr => failKey(_aiFailures[+tr.dataset.i])));
+  _aiFailures = d.failures;
+  failures.innerHTML = d.failures.length ? d.failures.map((f, i) => `<tr class="err-row" data-i="${i}" onclick="toggleAIFailure(this)" title="Clique para ver o erro completo">
       <td style="white-space:nowrap" data-label="Quando">${new Date(f.at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
       <td data-label="Finalidade">${AI_PURPOSE_LABELS[f.purpose] || escHtml(f.purpose)}</td>
       <td data-label="Modelo"><code>${escHtml(f.model || f.provider)}</code></td>
-      <td data-label="Tipo"><span class="metric-chip chip-red" style="white-space:nowrap">${escHtml(AI_STATUS_LABELS[f.status] || f.status)}</span></td>
+      <td data-label="Tipo"><span class="metric-chip chip-red" style="white-space:nowrap">${escHtml(AI_STATUS_LABELS[f.status] || f.status)}</span><span class="err-chevron">▶</span></td>
       <td class="rt-num" data-label="Tempo">${fmtMs(f.ms)}</td>
       <td style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${aiEsc(f.error)}" data-label="Erro">${escHtml(f.error)}</td>
     </tr>`).join('') : '<tr><td colspan="6" class="empty">Nenhuma falha no período.</td></tr>';
+  failures.querySelectorAll('tr.err-row').forEach(tr => { if (wasOpen.has(failKey(_aiFailures[+tr.dataset.i]))) toggleAIFailure(tr); });
 }
 
 // Barras empilhadas por intervalo: sucesso embaixo, falha (hachurada) em cima.
@@ -463,6 +508,9 @@ function renderAITimeline(timeline, since, bucketMs) {
     `<span>${label(buckets[0].start)}</span><span>${label(mid.start)}</span><span>${label(buckets[buckets.length - 1].start)}</span>`;
 
   const tip = document.getElementById('ai-tooltip');
+  // position:fixed dentro de um ancestral com transform/animação vira relativo a ele (o
+  // tooltip aparecia longe do mouse): no body ele fica preso à janela.
+  if (tip.parentElement !== document.body) document.body.appendChild(tip);
   el.onmousemove = e => {
     const col = e.target.closest('.ai-col');
     if (!col) { tip.classList.add('hidden'); return; }
@@ -476,4 +524,97 @@ function renderAITimeline(timeline, since, bucketMs) {
     tip.style.top = (e.clientY - tip.offsetHeight - 10) + 'px';
   };
   el.onmouseleave = () => tip.classList.add('hidden');
+}
+
+// ── Geral: o essencial de Sistema, IA e Banco numa tela só ──
+
+async function loadGeneralMetrics() {
+  try {
+    const [rawRes, aiRes, usersRes] = await Promise.all([
+      api.get('/admin/metrics/raw'), api.get('/admin/metrics/ai?range=24h'), api.get('/admin/metrics/users'),
+    ]);
+    if (!rawRes.ok) throw new Error('métricas: status ' + rawRes.status);
+    if (!aiRes.ok) throw new Error('IA: status ' + aiRes.status);
+    if (!usersRes.ok) throw new Error('usuários: status ' + usersRes.status);
+    const m = parsePrometheus(await rawRes.text());
+    const ai = (await aiRes.json()).data;
+    renderGeneralMetrics(m, ai);
+    renderUserStats((await usersRes.json()).data);
+    set('metrics-error', '');
+    liveMark('metrics');
+  } catch (e) {
+    set('metrics-error', 'Erro ao carregar métricas: ' + e.message);
+  }
+}
+
+function renderGeneralMetrics(m, ai) {
+  // Jobs (desde o último reinício)
+  const ok = get(m, 'hackton_jobs_processed_total{status="completed"}');
+  const err = get(m, 'hackton_jobs_processed_total{status="error"}');
+  set('g-jobs-ok', ok);
+  setHTML('g-jobs-sub', ok + err > 0 ? statusChip(ok / (ok + err), 'de sucesso') : 'nenhum job desde o reinício');
+  set('g-jobs-err', err);
+  setThreshold('g-jobs-err', err, 1, 5);
+
+  // IA (histórico de 24h no banco)
+  const s = ai.summary;
+  set('g-ai-calls', s.calls || '0');
+  setHTML('g-ai-sub', s.calls ? statusChip(s.success_rate, 'com sucesso') : 'nenhuma chamada');
+  set('g-ai-avg', fmtMs(s.avg_ok_ms));
+  set('g-ai-fallback', s.fallback_saves ? `fallback salvou ${s.fallback_saves}×` : 'fallback não foi necessário');
+
+  const models = document.getElementById('g-ai-models');
+  const top = ai.models.slice().sort((a, b) => b.calls - a.calls).slice(0, 5);
+  models.innerHTML = top.length ? top.map(x => {
+    const rate = x.calls ? x.ok / x.calls : 0;
+    return `<div class="mini-row" title="${aiEsc(x.last_error || '')}">
+      <span class="name">${escHtml(x.model || x.provider)}<small>${AI_PURPOSE_LABELS[x.purpose] || escHtml(x.purpose)} · ${x.calls} chamadas</small>
+        <span class="bar bar-${statusLevel(rate)}" aria-hidden="true"><i style="width:${(rate * 100).toFixed(0)}%"></i></span></span>
+      <span class="status-chip status-${statusLevel(rate)}">${fmt(rate * 100)}%</span>
+      <span class="num">${fmtMs(x.p50_ms)}</span>
+    </div>`; }).join('') : '<div class="empty">Nenhuma chamada nas últimas 24h.</div>';
+
+  // API
+  const httpTotal = sumByPrefix(m, 'hackton_http_requests_total{');
+  const http2xx = sumHTTPByStatus(m, '2');
+  const http5xx = sumHTTPByStatus(m, '5');
+  const durSum = sumByPrefix(m, 'hackton_http_request_duration_seconds_sum{');
+  const durCount = sumByPrefix(m, 'hackton_http_request_duration_seconds_count{');
+  set('g-http-avg', durCount ? fmtDur(durSum / durCount) : '—');
+  setHTML('g-http-sub', httpTotal ? `${statusChip(http2xx / httpTotal, '2xx')} <span style="margin-left:4px">${httpTotal} req.</span>` : 'sem requisições');
+  set('g-5xx', http5xx);
+  setThreshold('g-5xx', http5xx, 1, 10);
+
+  // Sistema
+  set('g-goroutines', get(m, 'hackton_worker_active_goroutines'));
+  set('g-heap', fmtBytes(get(m, 'go_memstats_heap_alloc_bytes')));
+
+  // Banco
+  set('g-db-acquired', get(m, 'hackton_db_pool_acquired_conns'));
+  set('g-db-conns', `de ${get(m, 'hackton_db_pool_max_conns')} · ${get(m, 'hackton_db_pool_empty_acquire_total')} esperas`);
+  const rows = dbQueryRows(m);
+  const total = rows.reduce((a, r) => a + r.count, 0);
+  const sum = rows.reduce((a, r) => a + r.sum, 0);
+  set('g-db-avg', total ? fmtDur(sum / total) : '—');
+  set('g-db-queries', `${total} consultas`);
+  const maxSum = rows.length ? rows[0].sum : 0;
+  document.getElementById('g-db-top').innerHTML = rows.slice(0, 3).map(r => `<div class="mini-row">
+      <span class="name">${escHtml(r.name)}<span class="bar bar-dom" aria-hidden="true"><i style="width:${maxSum ? (r.sum / maxSum * 100).toFixed(0) : 0}%"></i></span></span>
+      <span class="num">${r.count}×</span>
+      <span class="num">${fmtDur(r.sum)}</span>
+    </div>`).join('') || '<div class="empty">Nenhuma consulta desde o reinício.</div>';
+}
+
+function renderUserStats(u) {
+  set('g-users-total', u.total);
+  set('g-users-new', u.new_7d ? `+${u.new_7d} nos últimos 7 dias` : 'nenhum novo em 7 dias');
+  set('g-users-24h', u.active_24h);
+  set('g-users-7d', u.active_7d);
+  set('g-users-30d', `${u.active_30d} em 30 dias`);
+  set('g-users-resumes', u.with_resumes);
+  const pct = u.total ? u.with_resumes / u.total : 0;
+  set('g-users-resumes-pct', u.total ? `${fmt(pct * 100)}% dos usuários` : '—');
+  document.getElementById('g-users-resumes-bar').style.width = (pct * 100).toFixed(0) + '%';
+  // last_seen_at passou a existir agora: quem não voltou desde então aparece como "sem registro".
+  set('g-users-note', u.never_seen ? `${u.never_seen} sem acesso registrado ainda` : '');
 }

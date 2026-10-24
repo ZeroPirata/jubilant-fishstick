@@ -757,13 +757,13 @@ _DOC_LABELS = {
         "summary": "Resumo Profissional", "experience": "Experiência Profissional",
         "skills": "Habilidades Técnicas", "projects": "Projetos",
         "education": "Formação Acadêmica", "certifications": "Certificações",
-        "present": "Presente",
+        "languages": "Idiomas", "present": "Presente",
         "months": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
     },
     "en": {
         "summary": "Summary", "experience": "Experience", "skills": "Skills",
         "projects": "Projects", "education": "Education", "certifications": "Certifications",
-        "present": "Present",
+        "languages": "Languages", "present": "Present",
         "months": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
     },
 }
@@ -806,7 +806,7 @@ TEMPLATES = {
     # O original: sans-serif com destaque azul-escuro.
     "classico": {
         "css": RESUME_CSS,
-        "order": ["summary", "experience", "skills", "projects", "education", "certifications"],
+        "order": ["summary", "experience", "skills", "projects", "education", "certifications", "languages"],
     },
     # Sênior / mercado tradicional: serifada, só preto e cinza, mais respiro, cabeçalho centralizado.
     "executivo": {
@@ -814,14 +814,14 @@ TEMPLATES = {
                              header="text-align: center; border-bottom: 0.75pt solid #111;",
                              h2="border-bottom: 0.5pt solid #999; letter-spacing: 2pt;", gap=1.25,
                              extra=".exp-meta, .edu-institution { font-style: italic; }"),
-        "order": ["summary", "experience", "education", "skills", "projects", "certifications"],
+        "order": ["summary", "experience", "education", "skills", "projects", "certifications", "languages"],
     },
     # Para caber em 1 página: fonte e margens menores, habilidades em linha corrida.
     "compacto": {
         "css": _template_css(_SANS, 9, "#1a3a5c", "1.1cm 1.4cm",
                              header="border-bottom: 1.5pt solid #1a3a5c;",
                              h2="border-bottom: 0.5pt solid #1a3a5c;", gap=0.6),
-        "order": ["summary", "experience", "skills", "projects", "education", "certifications"],
+        "order": ["summary", "experience", "skills", "projects", "education", "certifications", "languages"],
         "skills_inline": True,
         "certs_inline": True,
     },
@@ -831,7 +831,7 @@ TEMPLATES = {
         "css": _template_css(_SANS, 10, "#0f4c5c", "1.6cm 1.9cm",
                              header="border-bottom: 2pt solid #0f4c5c;",
                              h2="border-bottom: 1pt solid #0f4c5c;", gap=1.1),
-        "order": ["summary", "education", "projects", "skills", "experience", "certifications"],
+        "order": ["summary", "education", "projects", "skills", "experience", "certifications", "languages"],
         "labels": {"pt-br": {"summary": "Objetivo Profissional"}, "en": {"summary": "Objective"}},
     },
 }
@@ -921,6 +921,11 @@ def _doc_section(key: str, doc: dict, labels: dict, tpl: dict) -> list:
             meta = [m for m in meta if m]
             if meta:
                 out.append(f'<div class="cert-meta">{" — ".join(meta)}</div>')
+    elif key == "languages" and doc.get("languages"):
+        # Linha corrida em todos os modelos: "Inglês — Avançado · Espanhol — Básico".
+        items = [f'<span class="skill-key">{_esc(l.get("name", ""))}</span> — {_esc(l.get("level", ""))}'
+                 for l in doc["languages"]]
+        out.append(f'<p class="skill-line">{" &nbsp;·&nbsp; ".join(items)}</p>')
     if not out:
         return []
     return [f'<h2>{_esc(labels[key])}</h2>'] + out

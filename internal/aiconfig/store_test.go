@@ -26,16 +26,18 @@ func (m *memRepo) List(_ context.Context, purpose string) ([]aisettings.Provider
 	return append([]aisettings.ProviderRow(nil), m.rows[purpose]...), nil
 }
 
-func (m *memRepo) Replace(_ context.Context, purpose string, rows []aisettings.ProviderRow, _ string) error {
-	for i := range rows {
-		if rows[i].ID == "" {
-			m.next++
-			rows[i].ID = "id-" + string(rune('0'+m.next))
+func (m *memRepo) Replace(_ context.Context, chains map[string][]aisettings.ProviderRow, _ string) error {
+	for purpose, rows := range chains {
+		for i := range rows {
+			if rows[i].ID == "" {
+				m.next++
+				rows[i].ID = "id-" + string(rune('0'+m.next))
+			}
+			rows[i].Purpose = purpose
+			rows[i].Position = i
 		}
-		rows[i].Purpose = purpose
-		rows[i].Position = i
+		m.rows[purpose] = rows
 	}
-	m.rows[purpose] = rows
 	return nil
 }
 
@@ -121,6 +123,47 @@ func TestStore_IDDeOutraCadeiaNaoReaproveitaKey(t *testing.T) {
 
 	if len(repo.rows["scrape"][0].APIKeyEnc) != 0 {
 		t.Error("scrape herdou a key da cadeia main")
+	}
+}
+
+// key_from copia a key de uma IA já salva em outra cadeia (painel: "usar também no scrape").
+func TestStore_SaveAllCopiaKeyComKeyFrom(t *testing.T) {
+	repo := newMemRepo()
+	s := NewStore(repo, newBox(t))
+	_ = s.Save(ctx, services.PurposeMain, []Input{{Provider: "openai", URL: "https://a", Model: "m", APIKey: "key-da-main-1234", Enabled: true}}, "u")
+	mainID := repo.rows["main"][0].ID
+
+	err := s.SaveAll(ctx, map[services.Purpose][]Input{
+		services.PurposeMain:   {{ID: mainID, Provider: "openai", URL: "https://a", Model: "m", Enabled: true}},
+		services.PurposeScrape: {{KeyFrom: mainID, Provider: "openai", URL: "https://a", Model: "m", Enabled: true}},
+	}, "u")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, purpose := range []services.Purpose{services.PurposeMain, services.PurposeScrape} {
+		ps, _ := s.Providers(ctx, purpose)
+		if len(ps) != 1 || ps[0].Key != "key-da-main-1234" {
+			t.Errorf("%s: providers = %+v, want a key copiada", purpose, ps)
+		}
+	}
+	if repo.rows["scrape"][0].ID == mainID {
+		t.Error("scrape reaproveitou o ID da main (seria a mesma linha nas duas cadeias)")
+	}
+}
+
+func TestStore_SaveAllInvalidaNadaSeUmaCadeiaForInvalida(t *testing.T) {
+	repo := newMemRepo()
+	s := NewStore(repo, newBox(t))
+	err := s.SaveAll(ctx, map[services.Purpose][]Input{
+		services.PurposeMain:   {{Provider: "openai", URL: "https://a", Model: "m", Enabled: true}},
+		services.PurposeScrape: {{Provider: "openai", URL: "nada", Model: "m", Enabled: true}},
+	}, "u")
+	var verr *ValidationError
+	if !errors.As(err, &verr) || !strings.Contains(verr.Msg, "scrape") {
+		t.Fatalf("err = %v, want ValidationError citando a cadeia scrape", err)
+	}
+	if len(repo.rows["main"]) != 0 {
+		t.Error("salvou a principal mesmo com a scrape inválida")
 	}
 }
 

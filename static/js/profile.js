@@ -4,12 +4,14 @@ let _activePerfil = 'info';
 
 function showPerfilTab(id, btn) {
   _activePerfil = id;
-  document.querySelectorAll('.sub-section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.sub-nav button').forEach(b => b.classList.remove('active'));
+  // Só as sub-abas do Perfil: Métricas e Admin têm sub-nav própria.
+  document.querySelectorAll('#tab-perfil .sub-section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('#tab-perfil .sub-nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('perf-' + id)?.classList.add('active');
   btn.classList.add('active');
 
   const loaders = {
+    import:       loadImport,
     info:         loadProfileInfo,
     links:        loadProfileLinks,
     experiences:  loadExperiences,
@@ -17,8 +19,10 @@ function showPerfilTab(id, btn) {
     skills:       loadSkills,
     projects:     loadProjects,
     certificates: loadCertificates,
+    languages:    loadLanguages,
   };
   loaders[id]?.();
+  impSyncPill();
 }
 
 function loadProfile() {
@@ -167,11 +171,11 @@ async function loadExperiences() {
     rows.forEach(e => { _expData[e.id] = e; });
     tbody.innerHTML = rows.map(e => `
       <tr>
-        <td>${escStr(e.company_name)}</td>
-        <td>${escStr(e.job_role)}</td>
-        <td style="color:var(--muted)">${d2m(e.start_date)} → ${e.is_current_job ? 'atual' : d2m(e.end_date)}</td>
-        <td style="color:var(--muted)">${(e.tech_stack||[]).join(', ') || '—'}</td>
-        <td style="color:var(--muted)">${(e.tags||[]).join(', ') || '—'}</td>
+        <td data-label="Empresa">${escStr(e.company_name)}</td>
+        <td data-label="Cargo">${escStr(e.job_role)}</td>
+        <td style="color:var(--muted)" data-label="Período">${d2m(e.start_date)} → ${e.is_current_job ? 'atual' : d2m(e.end_date)}</td>
+        <td style="color:var(--muted)" data-label="Habilidades"><span class="clamp-3" title="${escStr((e.tech_stack||[]).join(', '))}">${escStr((e.tech_stack||[]).join(', ')) || '—'}</span></td>
+        <td style="color:var(--muted)" data-label="Tags"><span class="clamp-3" title="${escStr((e.tags||[]).join(', '))}">${escStr((e.tags||[]).join(', ')) || '—'}</span></td>
         <td>
           <button class="btn-edit" onclick="editExperience('${e.id}')">✎</button>
           <button class="btn-delete" onclick="deleteExperience('${e.id}',this)">✕</button>
@@ -260,9 +264,9 @@ async function loadAcademic() {
     rows.forEach(a => { _acData[a.id] = a; });
     tbody.innerHTML = rows.map(a => `
       <tr>
-        <td>${escStr(a.institution_name)}</td>
-        <td>${escStr(a.course_name)}</td>
-        <td style="color:var(--muted)">${d2m(a.start_date)} → ${d2m(a.end_date)}</td>
+        <td data-label="Instituição">${escStr(a.institution_name)}</td>
+        <td data-label="Curso">${escStr(a.course_name)}</td>
+        <td style="color:var(--muted)" data-label="Período">${a.start_date ? `${d2m(a.start_date)} → ${d2m(a.end_date)}` : `conclusão ${d2m(a.end_date) || '—'}`}</td>
         <td>
           <button class="btn-edit" onclick="editAcademic('${a.id}')">✎</button>
           <button class="btn-delete" onclick="deleteAcademic('${a.id}',this)">✕</button>
@@ -299,8 +303,8 @@ async function addAcademic() {
     start_date:       m2d(document.getElementById('ac-inicio').value.trim()),
     end_date:         m2d(document.getElementById('ac-fim').value.trim()),
   };
-  if (!body.institution_name || !body.course_name || !body.start_date) {
-    toast('Instituição, curso e data início são obrigatórios.', 'error'); return;
+  if (!body.institution_name || !body.course_name) {
+    toast('Instituição e curso são obrigatórios.', 'error'); return;
   }
   try {
     const res = _editingAcId
@@ -339,9 +343,9 @@ async function loadSkills() {
     rows.forEach(s => { _skData[s.id] = s; });
     tbody.innerHTML = rows.map(s => `
       <tr>
-        <td>${escStr(s.skill_name)}</td>
-        <td><span class="badge badge-${s.proficiency_level}">${s.proficiency_level}</span></td>
-        <td style="color:var(--muted)">${(s.tags||[]).join(', ') || '—'}</td>
+        <td data-label="Nome">${escStr(s.skill_name)}</td>
+        <td data-label="Nível"><span class="badge badge-${s.proficiency_level}">${s.proficiency_level}</span></td>
+        <td style="color:var(--muted)" data-label="Tags">${(s.tags||[]).join(', ') || '—'}</td>
         <td>
           <button class="btn-edit" onclick="editSkill('${s.id}')">✎</button>
           <button class="btn-delete" onclick="deleteSkill('${s.id}',this)">✕</button>
@@ -418,10 +422,10 @@ async function loadProjects() {
     rows.forEach(p => { _projData[p.id] = p; });
     tbody.innerHTML = rows.map(p => `
       <tr>
-        <td>${escStr(p.project_name)}</td>
-        <td>${p.project_url ? `<a class="link" href="${escStr(p.project_url)}" target="_blank" rel="noopener noreferrer">↗</a>` : '—'}</td>
-        <td style="color:var(--muted)">${d2m(p.start_date)} → ${d2m(p.end_date)}</td>
-        <td style="color:var(--muted)">${(p.tags||[]).join(', ') || '—'}</td>
+        <td data-label="Nome">${escStr(p.project_name)}</td>
+        <td data-label="Link">${p.project_url ? `<a class="link" href="${escStr(p.project_url)}" target="_blank" rel="noopener noreferrer">↗</a>` : '—'}</td>
+        <td style="color:var(--muted)" data-label="Período">${d2m(p.start_date)} → ${d2m(p.end_date)}</td>
+        <td style="color:var(--muted)" data-label="Tags">${(p.tags||[]).join(', ') || '—'}</td>
         <td>
           <button class="btn-edit" onclick="editProject('${p.id}')">✎</button>
           <button class="btn-delete" onclick="deleteProject('${p.id}',this)">✕</button>
@@ -505,10 +509,10 @@ async function loadCertificates() {
     rows.forEach(c => { _certData[c.id] = c; });
     tbody.innerHTML = rows.map(c => `
       <tr>
-        <td>${escStr(c.certificate_name)}</td>
-        <td style="color:var(--muted)">${escStr(c.issuing_organization)}</td>
-        <td style="color:var(--muted)">${d2m(c.issue_date)}</td>
-        <td>${c.credential_url ? `<a class="link" href="${escStr(c.credential_url)}" target="_blank">↗</a>` : '—'}</td>
+        <td data-label="Nome">${escStr(c.certificate_name)}</td>
+        <td style="color:var(--muted)" data-label="Emissor">${escStr(c.issuing_organization)}</td>
+        <td style="color:var(--muted)" data-label="Data">${d2m(c.issue_date)}</td>
+        <td data-label="Link">${c.credential_url ? `<a class="link" href="${escStr(c.credential_url)}" target="_blank">↗</a>` : '—'}</td>
         <td>
           <button class="btn-edit" onclick="editCertificate('${c.id}')">✎</button>
           <button class="btn-delete" onclick="deleteCertificate('${c.id}',this)">✕</button>
@@ -571,4 +575,106 @@ async function deleteCertificate(id, btn) {
     delete _certData[id];
     toast('Certificado removido.');
   } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
+}
+
+// ── Idiomas ──
+// Idiomas conhecidos vão pelo código (o currículo em inglês mostra "English"); outro
+// idioma vai pelo nome digitado. Mesma lista do backend (internal/resume/languages.go).
+const LANGUAGES = [
+  ['en', 'Inglês'], ['es', 'Espanhol'], ['pt', 'Português'], ['fr', 'Francês'], ['de', 'Alemão'], ['it', 'Italiano'],
+  ['ja', 'Japonês'], ['zh', 'Mandarim'], ['ko', 'Coreano'], ['ru', 'Russo'], ['ar', 'Árabe'], ['nl', 'Holandês'],
+  ['hi', 'Hindi'], ['libras', 'Libras'],
+];
+const LANGUAGE_LEVELS = [['basic', 'Básico'], ['intermediate', 'Intermediário'], ['advanced', 'Avançado'], ['fluent', 'Fluente'], ['native', 'Nativo']];
+const languageName = code => (LANGUAGES.find(([c]) => c === code) || [code, code])[1];
+const languageLevel = lvl => (LANGUAGE_LEVELS.find(([v]) => v === lvl) || [lvl, lvl])[1];
+
+let _languages = [];
+let _editingLgId = null;
+
+function fillLanguageSelects() {
+  const sel = document.getElementById('lg-lang');
+  if (sel.options.length) return;
+  sel.innerHTML = LANGUAGES.map(([c, n]) => `<option value="${c}">${n}</option>`).join('') + '<option value="_other">Outro…</option>';
+  document.getElementById('lg-level').innerHTML = LANGUAGE_LEVELS.map(([v, l]) => `<option value="${v}" ${v === 'intermediate' ? 'selected' : ''}>${l}</option>`).join('');
+}
+
+async function loadLanguages() {
+  fillLanguageSelects();
+  const tbody = document.getElementById('languages-body');
+  try {
+    const res = await api.get('/users/me/languages');
+    if (!res.ok) throw new Error('status ' + res.status);
+    _languages = (await res.json()).data || [];
+    tbody.innerHTML = _languages.length ? _languages.map(l => `
+      <tr>
+        <td data-label="Idioma">${escStr(languageName(l.language))}</td>
+        <td data-label="Nível"><span class="lang-level lang-${escStr(l.proficiency)}">${languageLevel(l.proficiency)}</span></td>
+        <td class="actions-cell">
+          <button class="btn-edit" onclick="editLanguage('${l.id}')">✎</button>
+          <button class="btn-delete" onclick="deleteLanguage('${l.id}',this)">✕</button>
+        </td>
+      </tr>`).join('') : '<tr><td colspan="3" class="empty">Nenhum idioma. Eles aparecem no fim do currículo gerado.</td></tr>';
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="3" class="empty">Erro ao carregar: ${escStr(e.message)}</td></tr>`;
+  }
+}
+
+function editLanguage(id) {
+  const l = _languages.find(x => x.id === id);
+  if (!l) return;
+  _editingLgId = id;
+  const known = LANGUAGES.some(([c]) => c === l.language);
+  document.getElementById('lg-lang').value = known ? l.language : '_other';
+  document.getElementById('lg-other').value = known ? '' : l.language;
+  document.getElementById('lg-other-wrap').classList.toggle('hidden', known);
+  document.getElementById('lg-level').value = l.proficiency;
+  document.getElementById('lg-title').textContent = 'Editar idioma';
+  document.getElementById('lg-submit-btn').textContent = 'Salvar';
+  document.getElementById('lg-cancel').classList.remove('hidden');
+}
+
+function cancelEditLanguage() {
+  _editingLgId = null;
+  document.getElementById('lg-lang').selectedIndex = 0;
+  document.getElementById('lg-other').value = '';
+  document.getElementById('lg-other-wrap').classList.add('hidden');
+  document.getElementById('lg-level').value = 'intermediate';
+  document.getElementById('lg-title').textContent = 'Novo idioma';
+  document.getElementById('lg-submit-btn').textContent = 'Adicionar';
+  document.getElementById('lg-cancel').classList.add('hidden');
+}
+
+async function saveLanguage() {
+  const sel = document.getElementById('lg-lang').value;
+  const language = sel === '_other' ? document.getElementById('lg-other').value.trim() : sel;
+  if (!language) { toast('Informe o idioma.', 'error'); return; }
+  const body = { language, proficiency: document.getElementById('lg-level').value };
+  const dup = _languages.find(l => l.language.toLowerCase() === language.toLowerCase() && l.id !== _editingLgId);
+  if (dup) { toast(`${languageName(dup.language)} já está no perfil: edite o nível dele.`, 'error'); return; }
+  try {
+    const res = _editingLgId
+      ? await api.put(`/users/me/languages/${_editingLgId}`, body)
+      : await api.post('/users/me/languages', body);
+    if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || 'status ' + res.status); }
+    toast(_editingLgId ? 'Idioma atualizado.' : 'Idioma adicionado.');
+    cancelEditLanguage();
+    loadLanguages();
+  } catch (e) {
+    toast('Erro: ' + e.message, 'error');
+  }
+}
+
+async function deleteLanguage(id, btn) {
+  if (!await confirmDialog('Remover este idioma do perfil?')) return;
+  btn.disabled = true;
+  try {
+    const res = await api.delete(`/users/me/languages/${id}`);
+    if (!res.ok) throw new Error('status ' + res.status);
+    if (_editingLgId === id) cancelEditLanguage();
+    loadLanguages();
+  } catch (e) {
+    btn.disabled = false;
+    toast('Erro: ' + e.message, 'error');
+  }
 }

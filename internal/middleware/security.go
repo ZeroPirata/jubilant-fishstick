@@ -15,11 +15,18 @@ func SecurityHeaders(next http.Handler) http.Handler {
 }
 
 // BodyLimit rejeita requests com body maior que maxBytes (padrão: 1MB).
-func BodyLimit(maxBytes int64) func(next http.Handler) http.Handler {
+// overrides dá outro limite a caminhos exatos (ex.: o envio do currículo).
+func BodyLimit(maxBytes int64, overrides ...map[string]int64) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Body != nil {
-				r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+				limit := maxBytes
+				for _, o := range overrides {
+					if n, ok := o[r.URL.Path]; ok {
+						limit = n
+					}
+				}
+				r.Body = http.MaxBytesReader(w, r.Body, limit)
 			}
 			next.ServeHTTP(w, r)
 		})

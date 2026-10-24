@@ -381,3 +381,45 @@ func TestClassifyError(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveProviders_ImportUsaScrapeEDepoisPrincipalSemRepetir(t *testing.T) {
+	a := Provider{Name: "gemini", URL: "u1", Model: "flash"}
+	b := Provider{Name: "openai", URL: "u2", Model: "gemma"}
+	c := Provider{Name: "ollama", URL: "u3", Model: "local"}
+	svc := newFallbackService(&config.Config{}, fakeSource{
+		PurposeMain:   {a, b},
+		PurposeScrape: {a, c},
+	})
+	got := svc.resolveProviders(context.Background(), PurposeImport)
+	want := []Provider{a, c, b}
+	if len(got) != len(want) {
+		t.Fatalf("cadeia = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("posição %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+type recorderFunc func(AICall)
+
+func (f recorderFunc) RecordAICall(_ context.Context, c AICall) { f(c) }
+
+func TestFallback_CanceladaNaoEntraNasMetricasMasAvisaOObservador(t *testing.T) {
+	svc := newFallbackService(&config.Config{}, fakeSource{PurposeMain: {{Name: "openai", URL: "u", Model: "m"}}})
+	var recorded, observed int
+	svc.Recorder = recorderFunc(func(AICall) { recorded++ })
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = WithAttemptObserver(ctx, AttemptObserver{Done: func(AICall) { observed++ }})
+	err := svc.withFallback(ctx, PurposeMain, func(ctx context.Context, p Provider, last bool) (Usage, error) {
+		cancel()
+		return Usage{}, ctx.Err()
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if recorded != 0 || observed != 1 {
+		t.Errorf("recorded=%d observed=%d, want 0 e 1", recorded, observed)
+	}
+}

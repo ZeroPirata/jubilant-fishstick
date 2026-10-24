@@ -65,6 +65,11 @@ func (h *JobHandler) StreamEvents(w http.ResponseWriter, r *http.Request) {
 	ch := h.Bus.Subscribe(userID.String())
 	defer h.Bus.Unsubscribe(userID.String(), ch)
 
+	// Envia os headers na hora: sem isso o navegador (e proxies como o cloudflared)
+	// só considera a conexão aberta no primeiro evento ou keepalive, até 20s depois.
+	fmt.Fprintf(w, ": conectado\n\n")
+	flusher.Flush()
+
 	keepalive := time.NewTicker(20 * time.Second)
 	defer keepalive.Stop()
 

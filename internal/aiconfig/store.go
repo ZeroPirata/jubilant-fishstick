@@ -52,7 +52,10 @@ type Input struct {
 	Model    string `json:"model"`
 	APIKey   string `json:"api_key"`
 	ClearKey bool   `json:"clear_key"`
-	Enabled  bool   `json:"enabled"`
+	// KeyFrom: ID de um provider já salvo (de qualquer cadeia) cuja key será copiada.
+	// É como o painel coloca na outra cadeia uma IA que já tem key, sem digitá-la de novo.
+	KeyFrom string `json:"key_from"`
+	Enabled bool   `json:"enabled"`
 }
 
 type cached struct {
@@ -144,30 +147,65 @@ func (s *Store) List(ctx context.Context, purpose services.Purpose) ([]View, err
 
 // Save troca a cadeia inteira do purpose e invalida o cache.
 func (s *Store) Save(ctx context.Context, purpose services.Purpose, inputs []Input, userID string) error {
-	if len(inputs) > maxProviders {
-		return &ValidationError{fmt.Sprintf("no máximo %d providers por cadeia", maxProviders)}
+	return s.SaveAll(ctx, map[services.Purpose][]Input{purpose: inputs}, userID)
+}
+
+// SaveAll troca as cadeias recebidas numa transação só (o painel salva principal e
+// scrape juntos: uma IA pode estar nas duas).
+func (s *Store) SaveAll(ctx context.Context, chains map[services.Purpose][]Input, userID string) error {
+	keysByPurpose := map[services.Purpose]map[string][]byte{}
+	allKeys := map[string][]byte{}
+	for _, purpose := range []services.Purpose{services.PurposeMain, services.PurposeScrape} {
+		existing, err := s.repo.List(ctx, string(purpose))
+		if err != nil {
+			return err
+		}
+		keys := make(map[string][]byte, len(existing))
+		for _, r := range existing {
+			keys[r.ID] = r.APIKeyEnc
+			allKeys[r.ID] = r.APIKeyEnc
+		}
+		keysByPurpose[purpose] = keys
 	}
 
-	existing, err := s.repo.List(ctx, string(purpose))
-	if err != nil {
+	out := make(map[string][]aisettings.ProviderRow, len(chains))
+	for purpose, inputs := range chains {
+		if _, ok := ParsePurpose(string(purpose)); !ok {
+			return &ValidationError{fmt.Sprintf("cadeia %q inválida", purpose)}
+		}
+		rows, err := s.buildRows(purpose, inputs, keysByPurpose[purpose], allKeys)
+		if err != nil {
+			return err
+		}
+		out[string(purpose)] = rows
+	}
+
+	if err := s.repo.Replace(ctx, out, userID); err != nil {
 		return err
 	}
-	keysByID := make(map[string][]byte, len(existing))
-	for _, r := range existing {
-		keysByID[r.ID] = r.APIKeyEnc
+	for purpose := range chains {
+		s.Invalidate(purpose)
 	}
+	return nil
+}
+
+func (s *Store) buildRows(purpose services.Purpose, inputs []Input, own, all map[string][]byte) ([]aisettings.ProviderRow, error) {
+	if len(inputs) > maxProviders {
+		return nil, &ValidationError{fmt.Sprintf("no máximo %d providers por cadeia", maxProviders)}
+	}
+	name := map[services.Purpose]string{services.PurposeMain: "principal", services.PurposeScrape: "scrape"}[purpose]
 
 	rows := make([]aisettings.ProviderRow, 0, len(inputs))
 	for i, in := range inputs {
 		if err := validate(in); err != nil {
-			return &ValidationError{fmt.Sprintf("provider %d: %s", i+1, err)}
+			return nil, &ValidationError{fmt.Sprintf("%s, provider %d: %s", name, i+1, err)}
 		}
 
 		row := aisettings.ProviderRow{
 			Provider: in.Provider, URL: in.URL, Model: in.Model, Enabled: in.Enabled,
 		}
 		// Só reaproveita ID (e a key guardada nele) se ele pertence a esta cadeia.
-		if _, ok := keysByID[in.ID]; ok {
+		if _, ok := own[in.ID]; ok {
 			row.ID = in.ID
 		}
 
@@ -176,23 +214,20 @@ func (s *Store) Save(ctx context.Context, purpose services.Purpose, inputs []Inp
 		case in.APIKey != "":
 			sealed, err := s.box.Seal(in.APIKey)
 			if errors.Is(err, security.ErrSecretBoxDisabled) {
-				return &ValidationError{"SETTINGS_ENCRYPTION_KEY não está configurada no servidor; não é possível salvar API keys"}
+				return nil, &ValidationError{"SETTINGS_ENCRYPTION_KEY não está configurada no servidor; não é possível salvar API keys"}
 			}
 			if err != nil {
-				return err
+				return nil, err
 			}
 			row.APIKeyEnc = sealed
 		case row.ID != "":
-			row.APIKeyEnc = keysByID[row.ID]
+			row.APIKeyEnc = own[row.ID]
+		case in.KeyFrom != "":
+			row.APIKeyEnc = all[in.KeyFrom]
 		}
 		rows = append(rows, row)
 	}
-
-	if err := s.repo.Replace(ctx, string(purpose), rows, userID); err != nil {
-		return err
-	}
-	s.Invalidate(purpose)
-	return nil
+	return rows, nil
 }
 
 func (s *Store) Invalidate(purpose services.Purpose) {

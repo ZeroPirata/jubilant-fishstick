@@ -285,6 +285,16 @@ type UserJobFilter struct {
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type UserLanguage struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	Language    string             `json:"language"`
+	Proficiency string             `json:"proficiency"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type UserLink struct {
 	UserID       pgtype.UUID        `json:"user_id"`
 	LinkedinUrl  pgtype.Text        `json:"linkedin_url"`

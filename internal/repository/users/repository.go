@@ -245,3 +245,33 @@ func (r *usersRepository) QueryDeleteCertificate(ctx context.Context, id, userID
 	}
 	return repository.HandleDatabaseError(r.Q.QueryDeleteCertificate(ctx, db.QueryDeleteCertificateParams{ID: eid, UserID: uid}))
 }
+
+func (r *usersRepository) QuerySelectAllLanguages(ctx context.Context, userID string) ([]db.UserLanguage, *repository.RepositoryError) {
+	uid, appErr := util.ParseUUID(userID)
+	if appErr != nil {
+		return nil, appErr
+	}
+	rows, err := r.Q.QuerySelectAllLanguages(ctx, uid)
+	return rows, repository.HandleDatabaseError(err)
+}
+
+func (r *usersRepository) QueryInsertLanguage(ctx context.Context, args db.QueryInsertLanguageParams) (db.UserLanguage, *repository.RepositoryError) {
+	row, err := r.Q.QueryInsertLanguage(ctx, args)
+	return row, repository.HandleDatabaseError(err)
+}
+
+func (r *usersRepository) QueryUpdateLanguage(ctx context.Context, args db.QueryUpdateLanguageParams) *repository.RepositoryError {
+	return repository.HandleDatabaseError(r.Q.QueryUpdateLanguage(ctx, args))
+}
+
+func (r *usersRepository) QueryDeleteLanguage(ctx context.Context, id, userID string) *repository.RepositoryError {
+	eid, appErr := util.ParseUUID(id)
+	if appErr != nil {
+		return appErr
+	}
+	uid, appErr := util.ParseUUID(userID)
+	if appErr != nil {
+		return appErr
+	}
+	return repository.HandleDatabaseError(r.Q.QueryDeleteLanguage(ctx, db.QueryDeleteLanguageParams{ID: eid, UserID: uid}))
+}
