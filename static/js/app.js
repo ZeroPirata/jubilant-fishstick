@@ -52,15 +52,16 @@ function toast(msg, tipo = 'success') {
 let _activeTab = '';
 function navigateTo(id) {
   document.querySelectorAll('section[data-tab]').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('nav button[data-tab]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.sidebar button[data-tab]').forEach(b => b.classList.remove('active'));
 
   const section = document.getElementById('tab-' + id);
-  const btn     = document.querySelector(`nav button[data-tab="${id}"]`);
+  // A Ajuda fica fora do menu (rodapé da barra lateral e ícone no topo do celular).
+  document.querySelectorAll(`.sidebar button[data-tab="${id}"]`).forEach(b => b.classList.add('active'));
+  const btn = document.querySelector(`nav button[data-tab="${id}"], .sidebar-foot button[data-tab="${id}"]`);
   if (section) section.classList.add('active');
-  if (btn)     btn.classList.add('active');
   const crumb = document.getElementById('crumb-current');
-  if (crumb && btn) crumb.textContent = btn.textContent.trim().toLowerCase();
-  if (btn && window.matchMedia('(max-width: 860px)').matches) btn.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  if (crumb && btn) crumb.textContent = (btn.querySelector('span') || btn).textContent.trim().toLowerCase();
+  if (btn?.closest('nav') && window.matchMedia('(max-width: 860px)').matches) btn.scrollIntoView({ inline: 'nearest', block: 'nearest' });
 
   if (_activeTab === 'metricas') stopMetricsRefresh();
   _activeTab = id;
@@ -69,6 +70,7 @@ function navigateTo(id) {
   if (id === 'filtros')  loadFilters();
   if (id === 'metricas') startMetricsRefresh();
   if (id === 'admin')    loadAdminPanel();
+  if (id === 'ajuda')    loadHelp();
   impSyncPill();
 }
 
@@ -140,7 +142,7 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   // Nav tabs
-  document.querySelectorAll('nav button[data-tab]').forEach(btn => {
+  document.querySelectorAll('.sidebar button[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => navigateTo(btn.dataset.tab));
   });
 

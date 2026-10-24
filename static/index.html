@@ -93,7 +93,10 @@
         <span class="brand-mark"><svg class="ico"><use href="#i-brand"/></svg></span>
         <span><span class="brand-name">Job<b>Pipeline</b></span><span class="brand-sub">console de candidaturas</span></span>
       </a>
-      <button class="btn-logout btn-logout-compact" onclick="doLogout()" aria-label="Sair"><svg class="ico"><use href="#i-logout"/></svg></button>
+      <div class="sidebar-head-actions">
+        <button class="btn-help btn-help-compact" data-tab="ajuda" aria-label="Ajuda"><svg class="ico"><use href="#i-help"/></svg></button>
+        <button class="btn-logout btn-logout-compact" onclick="doLogout()" aria-label="Sair"><svg class="ico"><use href="#i-logout"/></svg></button>
+      </div>
     </div>
 
     <div class="nav-label">Navegação</div>
@@ -103,11 +106,11 @@
       <button data-tab="perfil"><svg class="ico"><use href="#i-user"/></svg><span>Perfil</span></button>
       <button data-tab="metricas" class="admin-only hidden"><svg class="ico"><use href="#i-chart"/></svg><span>Métricas</span></button>
       <button data-tab="admin" class="admin-only hidden"><svg class="ico"><use href="#i-shield"/></svg><span>Painel admin</span></button>
-      <button data-tab="ajuda"><svg class="ico"><use href="#i-help"/></svg><span>Ajuda</span></button>
     </nav>
 
     <div class="sidebar-foot">
       <div class="sys-line" id="sse-status"><span class="pulse"></span><span id="sse-status-text">conectando…</span></div>
+      <button class="btn-help" data-tab="ajuda"><svg class="ico"><use href="#i-help"/></svg><span>Ajuda</span><kbd>guia rápido</kbd></button>
       <button class="btn-logout" onclick="doLogout()"><svg class="ico"><use href="#i-logout"/></svg>Sair</button>
     </div>
   </aside>
@@ -996,258 +999,26 @@
 
     <!-- ─── AJUDA ─── -->
     <section id="tab-ajuda" data-tab>
-      <div class="info-page">
-        <h2>Informações e guia de uso</h2>
-
-        <!-- Como funciona -->
-        <div class="info-section">
-          <div class="info-section-title">Como o sistema funciona</div>
-          <div class="pipeline">
-            <div class="pipeline-step">
-              <div class="pipe-num">1</div>
-              <div class="pipe-text">Cadastre uma vaga<small>URL do LinkedIn, Jobright, etc.</small></div>
-            </div>
-            <div class="pipeline-step">
-              <div class="pipe-num">2</div>
-              <div class="pipe-text">Scraping automático<small>Extrai empresa, título, requisitos e descrição da vaga</small></div>
-            </div>
-            <div class="pipeline-step">
-              <div class="pipe-num">3</div>
-              <div class="pipe-text">Análise de qualidade<small>Compara requisitos da vaga com seu perfil e calcula um score de fit</small></div>
-            </div>
-            <div class="pipeline-step">
-              <div class="pipe-num">4</div>
-              <div class="pipe-text">IA gera o currículo<small>Seleciona e adapta seus dados para a vaga específica</small></div>
-            </div>
-            <div class="pipeline-step">
-              <div class="pipe-num">5</div>
-              <div class="pipe-text">PDF gerado<small>Currículo e carta de apresentação prontos para baixar</small></div>
-            </div>
+      <div class="help">
+        <div class="help-head">
+          <div>
+            <h2>Guia rápido</h2>
+            <p class="help-sub">Escolha um tópico ou vá passando: <kbd>←</kbd> <kbd>→</kbd> no teclado, ou deslize no celular.</p>
           </div>
-          <div class="info-note">
-            <strong>Importante:</strong> a IA não inventa informações. Ela seleciona, reorganiza e adapta o que você cadastrou no perfil. Quanto mais completo o perfil, melhor o resultado.
-          </div>
+          <span class="help-count" id="help-count">1 / 1</span>
         </div>
-
-        <!-- Info Básica -->
-        <div class="info-section">
-          <div class="info-section-title">Perfil — Info Básica</div>
-          <div class="info-fields">
-            <div class="info-field">
-              <div class="info-field-name">Nome completo <span class="req">*</span></div>
-              <div class="info-field-desc">Aparece em destaque no topo do currículo gerado.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Email de registro</div>
-              <div class="info-field-desc">Somente leitura. Usado para login — não aparece diretamente no currículo.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Email de contato</div>
-              <div class="info-field-desc">O email que aparece no cabeçalho do currículo. Se deixado em branco, usa o email de registro. Útil se você quiser usar um e-mail profissional diferente do de login.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Telefone</div>
-              <div class="info-field-desc">Aparece no cabeçalho do currículo ao lado do email. Formato livre.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Resumo / About</div>
-              <div class="info-field-desc">Parágrafo de apresentação profissional. A IA usa como base para o "Summary" ou "Resumo Profissional" no topo do currículo, podendo adaptar o tom de acordo com a vaga.</div>
+        <div class="help-body">
+          <div class="help-topics" id="help-topics" role="tablist" aria-label="Tópicos da ajuda"></div>
+          <div class="help-stage">
+            <div class="help-progress" aria-hidden="true"><span id="help-progress-bar"></span></div>
+            <article class="help-slide" id="help-slide" aria-live="polite"></article>
+            <div class="help-controls">
+              <button class="btn btn-ghost" id="help-prev" onclick="helpStep(-1)">‹ Anterior</button>
+              <div class="help-dots" id="help-dots"></div>
+              <button class="btn btn-primary" id="help-next" onclick="helpStep(1)">Próximo ›</button>
             </div>
           </div>
         </div>
-
-        <!-- Links -->
-        <div class="info-section">
-          <div class="info-section-title">Perfil — Links</div>
-          <div class="info-fields">
-            <div class="info-field">
-              <div class="info-field-name">LinkedIn / GitHub / Portfolio</div>
-              <div class="info-field-desc">Aparecem no cabeçalho do currículo com rótulos amigáveis (ex: "LinkedIn", "GitHub"). O PDF os transforma em links clicáveis.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Outros links</div>
-              <div class="info-field-desc">Links adicionais com nome personalizado e URL. O campo <strong>Linguagem</strong> é opcional — serve para indicar o idioma do conteúdo do link (ex: um blog em inglês). Todos aparecem no cabeçalho do currículo.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Experiências -->
-        <div class="info-section">
-          <div class="info-section-title">Perfil — Experiências</div>
-          <div class="info-fields">
-            <div class="info-field">
-              <div class="info-field-name">Empresa / Cargo <span class="req">*</span></div>
-              <div class="info-field-desc">Título principal de cada entrada na seção de experiências do currículo.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Início / Fim <span class="req">*</span></div>
-              <div class="info-field-desc">Período da experiência no formato <code>AAAA-MM</code>. Se "Emprego atual" estiver marcado, "Fim" é ignorado e aparece <strong>Present</strong> ou <strong>Atual</strong> no currículo dependendo do idioma.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Descrição</div>
-              <div class="info-field-desc">Contexto geral do que você fazia nesta função. Ajuda a IA a entender o escopo do cargo, especialmente quando as conquistas não cobrem tudo.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Habilidades técnicas</div>
-              <div class="info-field-desc">Tecnologias que você usou <strong>especificamente nesta experiência</strong>. A IA usa isso para escrever bullet points precisos e contextualizados. Ex: <code>Go, gRPC, Redis, PostgreSQL</code>. Diferente da aba Habilidades (catálogo global) — aqui é o que você <em>usou neste cargo</em>.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Conquistas</div>
-              <div class="info-field-desc">Resultados quantificáveis que você alcançou. São transformados em bullet points de impacto no currículo. <strong>Quanto mais específico, melhor.</strong> Ex: <code>Reduziu latência do serviço de 800ms para 120ms</code>, <code>Liderou migração que cortou custo de infraestrutura em 35%</code>.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Tags</div>
-              <div class="info-field-desc">Palavras-chave que classificam esta experiência. A IA usa para decidir <strong>se inclui esta experiência</strong> no currículo de uma vaga específica. Ex: <code>backend, cloud, api, microsserviços</code>. Quanto mais descritivo, mais precisa a seleção por vaga.</div>
-            </div>
-          </div>
-          <div class="info-note">
-            <strong>Sobre Habilidades técnicas vs aba Habilidades:</strong> a aba Habilidades é seu catálogo global (Go: Avançado). O campo nesta seção indica <em>onde</em> você usou cada tecnologia. A IA usa as duas informações de formas diferentes — a aba para matching e a seção de skills do currículo; o campo de experiência para os bullet points de cada cargo.
-          </div>
-        </div>
-
-        <!-- Formação -->
-        <div class="info-section">
-          <div class="info-section-title">Perfil — Formação Acadêmica</div>
-          <div class="info-fields">
-            <div class="info-field">
-              <div class="info-field-name">Instituição / Curso <span class="req">*</span></div>
-              <div class="info-field-desc">Nome da universidade/escola e o curso. Ambos aparecem na seção de educação do currículo.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Início / Fim <span class="req">*</span></div>
-              <div class="info-field-desc">Período do curso no formato <code>AAAA-MM</code>. Se o curso ainda estiver em andamento, deixe "Fim" em branco.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Habilidades -->
-        <div class="info-section">
-          <div class="info-section-title">Perfil — Habilidades</div>
-          <div class="info-fields">
-            <div class="info-field">
-              <div class="info-field-name">Nome <span class="req">*</span></div>
-              <div class="info-field-desc">Nome da tecnologia, linguagem, ferramenta ou competência. Ex: <code>Go</code>, <code>Kubernetes</code>, <code>System Design</code>.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Nível <span class="req">*</span></div>
-              <div class="info-field-desc">
-                <table class="levels-table">
-                  <tr><td>Básico</td><td>Familiaridade inicial — já usou, consegue trabalhar com ajuda</td></tr>
-                  <tr><td>Intermediário</td><td>Uso regular — consegue trabalhar de forma independente na maioria das situações</td></tr>
-                  <tr><td>Avançado</td><td>Uso profissional sólido — resolve problemas complexos sem apoio externo</td></tr>
-                  <tr><td>Expert</td><td>Domínio profundo — referência na área, consegue ensinar e tomar decisões arquiteturais</td></tr>
-                </table>
-              </div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Tags</div>
-              <div class="info-field-desc">Categorias para agrupar habilidades no currículo gerado. Ex: <code>linguagem</code>, <code>framework</code>, <code>cloud</code>, <code>banco de dados</code>, <code>devops</code>. A IA pode usar isso para organizar a seção de habilidades de forma mais legível.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Projetos -->
-        <div class="info-section">
-          <div class="info-section-title">Perfil — Projetos</div>
-          <div class="info-fields">
-            <div class="info-field">
-              <div class="info-field-name">Nome / Descrição <span class="req">*</span></div>
-              <div class="info-field-desc">Nome e descrição do projeto. A descrição aparece no currículo — seja claro sobre o que o projeto faz e qual problema resolve.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Link</div>
-              <div class="info-field-desc">URL do repositório, demo ou documentação. Aparece ao lado do nome do projeto no currículo.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Início / Fim <span class="req">*</span></div>
-              <div class="info-field-desc">Período de desenvolvimento no formato <code>AAAA-MM</code>. Usado pela IA para priorizar projetos mais recentes.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Tags</div>
-              <div class="info-field-desc">Palavras-chave do projeto. A IA usa para decidir se o projeto é relevante para a vaga em questão. Ex: <code>backend</code>, <code>api</code>, <code>cli</code>, <code>open-source</code>.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Projeto acadêmico</div>
-              <div class="info-field-desc">Marque se o projeto foi desenvolvido durante a graduação. Isso fornece contexto extra para a IA ao apresentá-lo no currículo.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Certificados -->
-        <div class="info-section">
-          <div class="info-section-title">Perfil — Certificados</div>
-          <div class="info-fields">
-            <div class="info-field">
-              <div class="info-field-name">Nome / Emissor <span class="req">*</span></div>
-              <div class="info-field-desc">Nome do certificado e a organização que emitiu. Ambos aparecem na seção de certificações do currículo.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Data de emissão <span class="req">*</span></div>
-              <div class="info-field-desc">Mês e ano em que o certificado foi emitido, no formato <code>AAAA-MM</code>. Aparece ao lado do nome no currículo.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">URL de verificação</div>
-              <div class="info-field-desc">Link para validar o certificado (ex: Credly, AWS Certification, Coursera). O PDF transforma em link clicável no nome do certificado.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Tags</div>
-              <div class="info-field-desc">Área do certificado. Ex: <code>cloud</code>, <code>aws</code>, <code>devops</code>, <code>segurança</code>. Ajuda a IA a decidir quais certificados incluir por tipo de vaga.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Score de qualidade e Idiomas -->
-        <div class="info-section">
-          <div class="info-section-title">Score de Qualidade & Idiomas</div>
-          <div class="info-fields">
-            <div class="info-field">
-              <div class="info-field-name">Score de qualidade</div>
-              <div class="info-field-desc">
-                Calculado automaticamente comparando o stack da vaga com as suas <strong>Habilidades</strong> cadastradas no perfil. Quanto mais do que a vaga pede você tiver em habilidades, maior o score.
-                <div class="quality-row" style="margin-top:8px">
-                  <div class="qr-item"><span class="badge badge-low">low</span> Menos de 30% do stack da vaga cobre suas habilidades</div>
-                  <div class="qr-item"><span class="badge badge-mid">mid</span> Entre 30% e 70% — match parcial</div>
-                  <div class="qr-item"><span class="badge badge-high">high</span> 70% ou mais — bom fit</div>
-                </div>
-                <div style="margin-top:8px">O score não impede a geração do currículo — é uma indicação para você priorizar quais vagas candidatar. Mantenha suas habilidades atualizadas para scores mais precisos.</div>
-              </div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Idioma do currículo</div>
-              <div class="info-field-desc"><strong>PT-BR</strong> — currículo em Português com seções em português ("Experiência Profissional", "Habilidades Técnicas", etc.). Use para vagas de empresas brasileiras.<br><br><strong>EN</strong> — currículo em Inglês ("Experience", "Skills", etc.). Use para vagas internacionais ou empresas onde o padrão é inglês. O idioma é definido por vaga — você pode ter currículos nos dois idiomas para a mesma empresa.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Feedback -->
-        <div class="info-section">
-          <div class="info-section-title">Avaliação dos Currículos Gerados</div>
-          <div class="info-fields">
-            <div class="info-field">
-              <div class="info-field-name">Para que serve</div>
-              <div class="info-field-desc">Ao avaliar um currículo gerado, você alimenta o sistema com exemplos de qualidade. A IA usa avaliações <strong>Excelente</strong> como referência para currículos futuros do mesmo usuário — ajuda a manter o tom, o estilo e o nível de detalhe que funcionaram bem.</div>
-            </div>
-            <div class="info-field">
-              <div class="info-field-name">Fraco / Regular</div>
-              <div class="info-field-desc">Use para registrar o que não funcionou. O campo de comentário é importante aqui — descreva o que estava errado (ex: "muito genérico", "omitiu a conquista mais importante", "tom muito formal"). Isso é considerado em gerações futuras.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Dicas -->
-        <div class="info-section info-good">
-          <div class="info-section-title">Dicas para melhores resultados</div>
-          <ul class="tip-list">
-            <li><strong>Perfil completo antes de cadastrar vagas.</strong> A IA só pode usar o que está no seu perfil. Preencha pelo menos experiências, habilidades e projetos antes de começar a cadastrar vagas.</li>
-            <li><strong>Conquistas com números fazem diferença.</strong> "Reduziu latência em 40%" é infinitamente mais útil que "Melhorou a performance". O currículo gerado vai refletir essa especificidade.</li>
-            <li><strong>Tags consistentes melhoram o matching.</strong> Use os mesmos termos nas tags das experiências e nas habilidades. Ex: se a habilidade é <code>docker</code>, não use <code>Docker</code> na tag — a comparação é case-insensitive mas ortografia importa.</li>
-            <li><strong>Não cadastre conquistas demais.</strong> O sistema limita a 4 conquistas por experiência enviadas para a IA. Coloque as mais impactantes — a IA vai escolher as mais relevantes para cada vaga.</li>
-            <li><strong>O email de contato no currículo.</strong> Verifique se está configurado em Info Básica. É o email que aparece no PDF e que a empresa vai usar para entrar em contato.</li>
-            <li><strong>Use o feedback.</strong> Avaliar os currículos como "Excelente" quando estiverem bons treina o sistema para manter aquele padrão nas próximas gerações.</li>
-            <li><strong>Scraping pode falhar em certas vagas.</strong> Plataformas com login obrigatório ou proteção anti-bot (ex: LinkedIn com cookies de sessão) podem não ser extraídas automaticamente. Nesse caso, preencha empresa, título e descrição manualmente ao cadastrar.</li>
-          </ul>
-        </div>
-
       </div>
     </section>
 
@@ -1297,6 +1068,7 @@
 <script src="/static/js/jobs.js"></script>
 <script src="/static/js/profile.js"></script>
 <script src="/static/js/import.js"></script>
+<script src="/static/js/help.js"></script>
 <script src="/static/js/metrics.js"></script>
 <script src="/static/js/admin.js"></script>
 </body>
