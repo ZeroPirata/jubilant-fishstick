@@ -12,7 +12,6 @@ import (
 	"hackton-treino/internal/services"
 	"hackton-treino/internal/sse"
 	"hackton-treino/internal/util"
-	"strings"
 	"sync"
 	"time"
 
@@ -232,8 +231,7 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		w.Logger.Warn("Currículo: conteúdo da IA descartado", zap.String("job_id", jobID), zap.String("motivo", wr))
 	}
 
-	coverLetter := strings.TrimSpace(rePlaceholder.ReplaceAllString(
-		strings.ReplaceAll(llmResponse.CoverLetter, "{{CANDIDATO_NOME}}", src.Header.Name), ""))
+	coverLetter := fillCoverLetter(llmResponse.CoverLetter, src.Header.Name)
 
 	conteudo := storedResume{Version: resume.DocVersion, CoverLetter: coverLetter}
 	if job.Mode != "cover_only" {

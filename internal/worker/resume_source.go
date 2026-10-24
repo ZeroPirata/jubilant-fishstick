@@ -12,8 +12,22 @@ import (
 	"go.uber.org/zap"
 )
 
-// Placeholder que sobrou sem valor (ex.: {{CANDIDATO_NOME}} com perfil sem nome).
-var rePlaceholder = regexp.MustCompile(`\{\{[^}]+\}\}`)
+// O prompt pede {{CANDIDATO_NOME}}, mas o modelo às vezes escreve [CANDIDATO_NOME],
+// {CANDIDATO_NOME}, [Seu nome], [Your Name]...: tudo vira o nome do perfil.
+var reNamePlaceholder = regexp.MustCompile(`(?i)\{\{\s*candidato_nome\s*\}\}|[\[{<]\s*(?:candidato_nome|nome do candidato|seu nome|nome completo|your name|candidate name|full name)\s*[\]}>]`)
+
+// Placeholder que sobrou sem valor: {{ALGO}} ou [ALGO_EM_MAIUSCULAS].
+var rePlaceholder = regexp.MustCompile(`\{\{[^}]+\}\}|\[[A-Z][A-Z0-9_ ]{2,}\]`)
+
+func fillCoverLetter(text, name string) string {
+	text = reNamePlaceholder.ReplaceAllLiteralString(text, name)
+	text = rePlaceholder.ReplaceAllString(text, "")
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " \t")
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
 
 // storedResume é o formato de generated_resumes.content_json a partir da versão 2.
 // Curriculo (texto) continua sendo gravado para a pré-visualização da tela e para
