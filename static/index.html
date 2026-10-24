@@ -198,7 +198,7 @@
       <div id="metrics-view-geral">
         <div class="domain-legend" aria-label="Cores por área">
           <span data-domain="pipeline"><i></i>Pipeline</span><span data-domain="ia"><i></i>IA</span>
-          <span data-domain="api"><i></i>API</span><span data-domain="banco"><i></i>Banco</span><span data-domain="runtime"><i></i>Runtime</span>
+          <span data-domain="api"><i></i>API</span><span data-domain="banco"><i></i>Banco</span><span data-domain="runtime"><i></i>Runtime</span><span data-domain="users"><i></i>Usuários</span>
         </div>
         <div class="metrics-grid">
           <div data-domain="pipeline" class="metric-card">
@@ -223,7 +223,19 @@
           </div>
         </div>
 
-        <div class="grid-3">
+        <div class="grid-panels">
+          <div data-domain="users" class="metric-card panel-link">
+            <div class="panel-head"><span class="metric-card-title">Usuários</span>
+              <button class="btn-more" onclick="navigateTo('admin'); setTimeout(() => switchAdminView('users', document.querySelector('[data-admin=users]')), 50)">lista →</button></div>
+            <div class="mini-kpis">
+              <div><div class="metric-label">Total</div><div class="metric-val metric-val-sm" id="g-users-total">—</div><div class="metric-sub" id="g-users-new">—</div></div>
+              <div><div class="metric-label">Ativos · 24h</div><div class="metric-val metric-val-sm" id="g-users-24h">—</div><div class="metric-sub">usaram hoje</div></div>
+              <div><div class="metric-label">Ativos · 7 dias</div><div class="metric-val metric-val-sm" id="g-users-7d">—</div><div class="metric-sub" id="g-users-30d">—</div></div>
+              <div><div class="metric-label">Geraram currículo</div><div class="metric-val metric-val-sm" id="g-users-resumes">—</div><div class="metric-sub" id="g-users-resumes-pct">—</div></div>
+            </div>
+            <span class="bar bar-dom" style="margin-top:12px" aria-hidden="true"><i id="g-users-resumes-bar" style="width:0%"></i></span>
+            <div class="metric-sub" id="g-users-note" style="margin-top:8px"></div>
+          </div>
           <div data-domain="ia" class="metric-card panel-link">
             <div class="panel-head"><span class="metric-card-title">IA por modelo · 24h</span>
               <button class="btn-more" onclick="switchMetricsView('ia', document.querySelector('[data-mview=ia]'))">detalhes →</button></div>
@@ -897,10 +909,10 @@
         <div class="table-wrap">
           <table class="table-cards">
             <thead>
-              <tr><th>Email</th><th>Admin</th><th>Cadastrado em</th><th></th></tr>
+              <tr><th>Email</th><th>Papel</th><th>Último acesso</th><th>Cadastrado em</th><th></th></tr>
             </thead>
             <tbody id="admin-users-body">
-              <tr><td colspan="4" class="empty">Carregando...</td></tr>
+              <tr><td colspan="5" class="empty">Carregando...</td></tr>
             </tbody>
           </table>
         </div>

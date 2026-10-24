@@ -22,6 +22,7 @@ type UserAccount struct {
 	Email     string
 	IsAdmin   bool
 	IsMaster  bool
+	LastSeen  *time.Time
 	CreatedAt time.Time
 }
 

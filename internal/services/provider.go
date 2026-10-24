@@ -165,9 +165,13 @@ func (ai *AiService) record(ctx context.Context, c AICall) {
 	ai.Recorder.RecordAICall(context.WithoutCancel(ctx), c)
 }
 
+// maxRecordedError é quanto do erro vai para as métricas: o suficiente para depurar
+// (ex.: o JSON inteiro de um 429 do Gemini) sem deixar a tabela crescer sem limite.
+const maxRecordedError = 4000
+
 func errorText(err error) string {
 	if err == nil {
 		return ""
 	}
-	return snippet(err.Error())
+	return truncateUTF8(err.Error(), maxRecordedError)
 }

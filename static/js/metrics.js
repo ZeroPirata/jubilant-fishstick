@@ -302,6 +302,30 @@ function renderMetrics(m) {
 }
 
 let _metricsView = 'geral';
+let _aiFailures = [];
+
+// Abre/fecha, logo abaixo da linha, o erro completo da chamada (para depuração).
+function toggleAIFailure(tr) {
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains('err-detail-row')) { next.remove(); tr.classList.remove('open'); return; }
+  const f = _aiFailures[+tr.dataset.i];
+  if (!f) return;
+  const row = document.createElement('tr');
+  row.className = 'err-detail-row';
+  row.innerHTML = `<td colspan="6"><div class="err-detail">
+      <div class="err-meta">
+        <span><b>Quando:</b> ${new Date(f.at).toLocaleString('pt-BR')}</span>
+        <span><b>Finalidade:</b> ${AI_PURPOSE_LABELS[f.purpose] || escHtml(f.purpose)}</span>
+        <span><b>Provider:</b> ${escHtml(f.provider)}</span>
+        <span><b>Modelo:</b> <span class="mono">${escHtml(f.model || '—')}</span></span>
+        <span><b>Tipo:</b> ${escHtml(AI_STATUS_LABELS[f.status] || f.status)}</span>
+        <span><b>Tempo:</b> ${fmtMs(f.ms)}</span>
+      </div>
+      <pre>${escHtml(f.error || '(sem mensagem)')}</pre>
+    </div></td>`;
+  tr.after(row);
+  tr.classList.add('open');
+}
 
 function switchMetricsView(view, btn) {
   _metricsView = view;
@@ -438,11 +462,12 @@ function renderAIMetrics(d, range) {
   }).join('') : '<tr><td colspan="8" class="empty">Nenhuma chamada no período.</td></tr>';
 
   const failures = document.getElementById('ai-failures-body');
-  failures.innerHTML = d.failures.length ? d.failures.map(f => `<tr>
+  _aiFailures = d.failures;
+  failures.innerHTML = d.failures.length ? d.failures.map((f, i) => `<tr class="err-row" data-i="${i}" onclick="toggleAIFailure(this)" title="Clique para ver o erro completo">
       <td style="white-space:nowrap" data-label="Quando">${new Date(f.at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
       <td data-label="Finalidade">${AI_PURPOSE_LABELS[f.purpose] || escHtml(f.purpose)}</td>
       <td data-label="Modelo"><code>${escHtml(f.model || f.provider)}</code></td>
-      <td data-label="Tipo"><span class="metric-chip chip-red" style="white-space:nowrap">${escHtml(AI_STATUS_LABELS[f.status] || f.status)}</span></td>
+      <td data-label="Tipo"><span class="metric-chip chip-red" style="white-space:nowrap">${escHtml(AI_STATUS_LABELS[f.status] || f.status)}</span><span class="err-chevron">▶</span></td>
       <td class="rt-num" data-label="Tempo">${fmtMs(f.ms)}</td>
       <td style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${aiEsc(f.error)}" data-label="Erro">${escHtml(f.error)}</td>
     </tr>`).join('') : '<tr><td colspan="6" class="empty">Nenhuma falha no período.</td></tr>';
@@ -500,12 +525,16 @@ function renderAITimeline(timeline, since, bucketMs) {
 
 async function loadGeneralMetrics() {
   try {
-    const [rawRes, aiRes] = await Promise.all([api.get('/admin/metrics/raw'), api.get('/admin/metrics/ai?range=24h')]);
+    const [rawRes, aiRes, usersRes] = await Promise.all([
+      api.get('/admin/metrics/raw'), api.get('/admin/metrics/ai?range=24h'), api.get('/admin/metrics/users'),
+    ]);
     if (!rawRes.ok) throw new Error('métricas: status ' + rawRes.status);
     if (!aiRes.ok) throw new Error('IA: status ' + aiRes.status);
+    if (!usersRes.ok) throw new Error('usuários: status ' + usersRes.status);
     const m = parsePrometheus(await rawRes.text());
     const ai = (await aiRes.json()).data;
     renderGeneralMetrics(m, ai);
+    renderUserStats((await usersRes.json()).data);
     set('metrics-error', '');
     set('metrics-updated', 'Atualizado ' + new Date().toLocaleTimeString('pt-BR'));
   } catch (e) {
@@ -569,4 +598,18 @@ function renderGeneralMetrics(m, ai) {
       <span class="num">${r.count}×</span>
       <span class="num">${fmtDur(r.sum)}</span>
     </div>`).join('') || '<div class="empty">Nenhuma consulta desde o reinício.</div>';
+}
+
+function renderUserStats(u) {
+  set('g-users-total', u.total);
+  set('g-users-new', u.new_7d ? `+${u.new_7d} nos últimos 7 dias` : 'nenhum novo em 7 dias');
+  set('g-users-24h', u.active_24h);
+  set('g-users-7d', u.active_7d);
+  set('g-users-30d', `${u.active_30d} em 30 dias`);
+  set('g-users-resumes', u.with_resumes);
+  const pct = u.total ? u.with_resumes / u.total : 0;
+  set('g-users-resumes-pct', u.total ? `${fmt(pct * 100)}% dos usuários` : '—');
+  document.getElementById('g-users-resumes-bar').style.width = (pct * 100).toFixed(0) + '%';
+  // last_seen_at passou a existir agora: quem não voltou desde então aparece como "sem registro".
+  set('g-users-note', u.never_seen ? `${u.never_seen} sem acesso registrado ainda` : '');
 }

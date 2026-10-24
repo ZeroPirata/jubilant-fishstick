@@ -2,6 +2,7 @@ package handler
 
 import (
 	"hackton-treino/internal/repository/aimetrics"
+	"hackton-treino/internal/repository/usermetrics"
 	"net/http"
 	"time"
 
@@ -11,10 +12,22 @@ import (
 type MetricsHandler struct {
 	Logger  *zap.Logger
 	AICalls *aimetrics.Repository
+	Users   *usermetrics.Repository
 }
 
-func NewMetricsHandler(logger *zap.Logger, ai *aimetrics.Repository) *MetricsHandler {
-	return &MetricsHandler{Logger: logger, AICalls: ai}
+func NewMetricsHandler(logger *zap.Logger, ai *aimetrics.Repository, users *usermetrics.Repository) *MetricsHandler {
+	return &MetricsHandler{Logger: logger, AICalls: ai, Users: users}
+}
+
+// UserStats: total, novos, ativos (24h/7d/30d) e quantos já geraram currículo.
+func (h *MetricsHandler) UserStats(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.Users.Stats(r.Context())
+	if err != nil {
+		h.Logger.Error("metrics: erro ao agregar usuários", zap.Error(err))
+		writeError(w, http.StatusInternalServerError, ErrInternalServerError.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
 }
 
 // Janelas aceitas e a granularidade da linha do tempo de cada uma.

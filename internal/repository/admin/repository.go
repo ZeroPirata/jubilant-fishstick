@@ -79,7 +79,7 @@ func (r *adminRepo) ListErrorLogs(ctx context.Context, limit, offset int) ([]Err
 
 func (r *adminRepo) ListUsers(ctx context.Context) ([]UserAccount, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, email, is_admin, is_master, created_at
+		`SELECT id, email, is_admin, is_master, last_seen_at, created_at
 		 FROM user_accounts
 		 WHERE deleted_at IS NULL
 		 ORDER BY created_at DESC`,
@@ -93,9 +93,12 @@ func (r *adminRepo) ListUsers(ctx context.Context) ([]UserAccount, error) {
 	for rows.Next() {
 		var u UserAccount
 		var id pgtype.UUID
-		var createdAt pgtype.Timestamptz
-		if err := rows.Scan(&id, &u.Email, &u.IsAdmin, &u.IsMaster, &createdAt); err != nil {
+		var createdAt, lastSeen pgtype.Timestamptz
+		if err := rows.Scan(&id, &u.Email, &u.IsAdmin, &u.IsMaster, &lastSeen, &createdAt); err != nil {
 			return nil, err
+		}
+		if lastSeen.Valid {
+			u.LastSeen = &lastSeen.Time
 		}
 		u.ID = formatUUID(id.Bytes)
 		u.CreatedAt = createdAt.Time

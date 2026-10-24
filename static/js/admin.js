@@ -134,14 +134,14 @@ async function loadAdminUsers() {
     renderAdminUsers(d.data?.data || []);
   } catch (e) {
     document.getElementById('admin-users-body').innerHTML =
-      `<tr><td colspan="4" class="empty">Erro ao carregar: ${e.message}</td></tr>`;
+      `<tr><td colspan="5" class="empty">Erro ao carregar: ${e.message}</td></tr>`;
   }
 }
 
 function renderAdminUsers(users) {
   const body = document.getElementById('admin-users-body');
   if (!users.length) {
-    body.innerHTML = `<tr><td colspan="4" class="empty">Nenhum usuário.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="5" class="empty">Nenhum usuário.</td></tr>`;
     return;
   }
   body.innerHTML = users.map(u => {
@@ -161,10 +161,21 @@ function renderAdminUsers(users) {
     return `<tr>
       <td data-label="Email">${aiEsc(u.Email)}</td>
       <td data-label="Papel">${badge}</td>
+      <td style="color:var(--muted);font-size:12px" data-label="Último acesso" title="${u.LastSeen ? new Date(u.LastSeen).toLocaleString('pt-BR') : ''}">${relativeTime(u.LastSeen)}</td>
       <td style="color:var(--muted);font-size:12px" data-label="Cadastro">${when}</td>
       <td style="display:flex;gap:6px">${adminBtn}${masterBtn}</td>
     </tr>`;
   }).join('');
+}
+
+// "agora", "há 12 min", "há 3 h", "há 5 dias" (ou "—" sem registro).
+function relativeTime(iso) {
+  if (!iso) return '—';
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return 'agora';
+  if (s < 3600) return `há ${Math.floor(s / 60)} min`;
+  if (s < 86400) return `há ${Math.floor(s / 3600)} h`;
+  return `há ${Math.floor(s / 86400)} dia${s >= 172800 ? 's' : ''}`;
 }
 
 async function toggleAdmin(userID, newVal) {

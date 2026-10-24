@@ -717,9 +717,9 @@ a.link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .mini-row .empty { padding: 12px 0; }
 
 /* ══ Admin → log de erros: clique na linha expande o detalhe ══ */
-#admin-errors-body tr.err-row { cursor: pointer; }
-#admin-errors-body tr.err-row td:first-child { white-space: nowrap; }
-#admin-errors-body tr.err-row.open td { background: var(--accent-soft); }
+tr.err-row { cursor: pointer; }
+tr.err-row td:first-child { white-space: nowrap; }
+tr.err-row.open td { background: var(--accent-soft); }
 .err-detail-row td { padding: 0 !important; background: var(--bg-2) !important; }
 .err-detail { padding: 12px 14px; display: grid; gap: 8px; }
 .err-detail pre { white-space: pre-wrap; word-break: break-word; font: 400 12px/1.6 var(--font-mono); color: var(--text-2); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; max-height: 320px; overflow: auto; margin: 0; }
@@ -746,7 +746,14 @@ tr.err-row.open .err-chevron { transform: rotate(90deg); color: var(--accent); }
   --d-banco: #199e70;     /* slot 3 */
   --d-runtime: #c98500;   /* slot 4 */
   --d-ia: #d55181;        /* slot 5 */
+  --d-users: #008300;     /* slot 6 */
 }
+[data-domain="users"]    { --dom: var(--d-users); }
+/* painéis da aba Geral: 4 lado a lado em telas largas */
+.grid-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+.grid-panels > * { min-width: 0; }
+@media (min-width: 1680px) { .grid-panels { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 860px)  { .grid-panels { grid-template-columns: 1fr; } }
 [data-domain="api"]      { --dom: var(--d-api); }
 [data-domain="pipeline"] { --dom: var(--d-pipeline); }
 [data-domain="banco"]    { --dom: var(--d-banco); }
@@ -773,7 +780,7 @@ tr.err-row.open .err-chevron { transform: rotate(90deg); color: var(--accent); }
 .domain-legend i { width: 8px; height: 8px; border-radius: 2px; background: var(--dom); }
 
 /* barras finas nas mini-listas: sucesso (cor de status) e peso relativo (cor da área) */
-.bar { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--border) 80%, transparent); overflow: hidden; margin-top: 5px; }
+.bar { display: block; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--border) 80%, transparent); overflow: hidden; margin-top: 5px; }
 .bar > i { display: block; height: 100%; border-radius: 2px; min-width: 2px; }
 .bar-good > i     { background: #0ca30c; }
 .bar-warning > i  { background: #fab219; }

@@ -59,8 +59,10 @@ func extractContent(raw LLMResponse) (string, error) {
 }
 
 // snippet devolve o começo de s para mensagens de erro, sem estourar o log.
-func snippet(s string) string {
-	const max = 200
+func snippet(s string) string { return truncateUTF8(s, 200) }
+
+// truncateUTF8 corta s em até max bytes sem partir um caractere no meio.
+func truncateUTF8(s string, max int) string {
 	if len(s) <= max {
 		return s
 	}

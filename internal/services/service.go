@@ -401,7 +401,7 @@ func (ai *AiService) sendRequest(ctx context.Context, client *http.Client, paylo
 		if resp.StatusCode != http.StatusOK {
 			errBody, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			return LLMResponse{}, &ErrHTTPStatus{Code: resp.StatusCode, Body: snippet(string(errBody))}
+			return LLMResponse{}, &ErrHTTPStatus{Code: resp.StatusCode, Body: truncateUTF8(string(errBody), 2000)}
 		}
 
 		if p.Name == "gemini" {

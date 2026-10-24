@@ -9,6 +9,7 @@ import (
 	"hackton-treino/internal/middleware"
 	adminRepo "hackton-treino/internal/repository/admin"
 	"hackton-treino/internal/repository/aimetrics"
+	"hackton-treino/internal/repository/usermetrics"
 	ucache "hackton-treino/internal/repository/cache"
 	"hackton-treino/internal/repository/secevents"
 	"hackton-treino/internal/security"
@@ -78,9 +79,11 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	adminMux.HandleFunc("PATCH /users/{id}",     adminH.SetAdmin)
 
 	// Métricas (admin): Prometheus bruto (antes público em /metrics) e histórico das chamadas de IA
-	metricsH := handler.NewMetricsHandler(logger, aimetrics.New(db))
+	userMetrics := usermetrics.New(db)
+	metricsH := handler.NewMetricsHandler(logger, aimetrics.New(db), userMetrics)
 	adminMux.Handle("GET /metrics/raw", promhttp.Handler())
 	adminMux.HandleFunc("GET /metrics/ai", metricsH.AI)
+	adminMux.HandleFunc("GET /metrics/users", metricsH.UserStats)
 
 	// Só master: configurações de IA (contêm API keys) e promoção de masters
 	master := middleware.MasterMiddleware(adminR)
@@ -107,7 +110,9 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 		})
 	})
 
-	protectedHandler := middleware.RevocationMiddleware(revoker)(middleware.AuthMiddleware(jwtManager)(protectedMux))
+	// ActivityMiddleware depois do Auth: precisa do usuário no contexto para registrar o último acesso.
+	activity := middleware.ActivityMiddleware(userMetrics, 5*time.Minute)
+	protectedHandler := middleware.RevocationMiddleware(revoker)(middleware.AuthMiddleware(jwtManager)(activity(protectedMux)))
 	apiMux.Handle("/", protectedHandler)
 
 	apiHandler := middleware.TimeoutMiddleware(timeout)(apiMux)
