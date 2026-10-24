@@ -48,6 +48,8 @@ async function loadAdminImports() {
   }
 }
 
+const importSince = cur => Math.max(0, (Date.now() - new Date(cur.since)) / 1000);
+
 const importSecs = it => {
   const end = it.finished_at ? new Date(it.finished_at) : (it.status === 'processing' ? new Date() : null);
   return end ? (end - new Date(it.started_at)) / 1000 : null;
@@ -73,8 +75,9 @@ function renderAdminImports() {
   const wasOpen = new Set([...body.querySelectorAll('tr.err-row.open')].map(tr => tr.dataset.id));
   body.innerHTML = list.length ? list.map(it => {
     const [cls, label] = IMPORT_STATUS[it.status] || ['chip-muted', it.status];
-    const chain = it.attempts.map(a => `<span class="imp-chain-step ${a.status === 'ok' ? 'ok' : a.status === 'canceled' ? 'skip' : 'fail'}" title="${aiEsc(AI_STATUS_LABELS[a.status] || a.status)}">${aiEsc(a.model)}</span>`)
-      .join('<span class="imp-chain-arrow">→</span>') || '<span style="color:var(--muted)">—</span>';
+    const steps = (it.attempts || []).map(a => `<span class="imp-chain-step ${a.status === 'ok' ? 'ok' : a.status === 'canceled' ? 'skip' : 'fail'}" title="${aiEsc(AI_STATUS_LABELS[a.status] || a.status)}">${aiEsc(a.model)}</span>`);
+    if (it.current) steps.push(`<span class="imp-chain-step now" title="tentando agora">${aiEsc(it.current.model)} · ${fmtDur(importSince(it.current))}</span>`);
+    const chain = steps.join('<span class="imp-chain-arrow">→</span>') || '<span style="color:var(--muted)">—</span>';
     const secs = importSecs(it);
     return `<tr class="err-row" data-id="${aiEsc(it.id)}" onclick="toggleImportDetail(this)" title="Clique para ver as tentativas">
       <td data-label="Quando">${new Date(it.started_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
@@ -95,14 +98,22 @@ function toggleImportDetail(tr) {
   if (!it) return;
   const r = it.result;
   const found = r ? `${r.experiences} experiências · ${r.academic} formações · ${r.skills} habilidades · ${r.projects} projetos · ${r.certificates} certificados · ${r.languages || 0} idiomas` : '—';
-  const attempts = it.attempts.length ? it.attempts.map((a, i) => `
+  const now = it.current ? `
+    <div class="imp-att-row">
+      <span class="imp-att-n">${(it.attempts || []).length + 1}º</span>
+      <span class="mono">${aiEsc(it.current.model)}</span><span style="color:var(--muted)">${aiEsc(it.current.provider)}</span>
+      <span class="metric-chip chip-yellow"><i class="imp-now-dot"></i>tentando agora</span>
+      <span class="mono" style="color:var(--muted)">${fmtDur(importSince(it.current))}</span>
+    </div>` : '';
+  const attempts = (it.attempts || []).length || now ? (it.attempts || []).map((a, i) => `
     <div class="imp-att-row">
       <span class="imp-att-n">${i + 1}º</span>
       <span class="mono">${aiEsc(a.model)}</span><span style="color:var(--muted)">${aiEsc(a.provider)}</span>
       <span class="metric-chip ${a.status === 'ok' ? 'chip-green' : a.status === 'canceled' ? 'chip-muted' : 'chip-red'}">${aiEsc(AI_STATUS_LABELS[a.status] || a.status)}</span>
       <span class="mono" style="color:var(--muted)">${fmtDur(a.seconds)}</span>
       ${a.error ? `<pre>${aiEsc(a.error)}</pre>` : ''}
-    </div>`).join('') : '<p style="color:var(--muted)">Nenhuma tentativa registrada (cancelada ou interrompida antes da IA responder).</p>';
+    </div>`).join('') + now
+    : `<p style="color:var(--muted)">${it.status === 'processing' ? 'Preparando a leitura do arquivo…' : 'Nenhuma tentativa registrada (cancelada ou interrompida antes da IA responder).'}</p>`;
   const row = document.createElement('tr');
   row.className = 'err-detail-row';
   row.innerHTML = `<td colspan="6"><div class="err-detail">
@@ -110,7 +121,7 @@ function toggleImportDetail(tr) {
         <span><b>Início:</b> ${new Date(it.started_at).toLocaleString('pt-BR')}</span>
         ${it.finished_at ? `<span><b>Fim:</b> ${new Date(it.finished_at).toLocaleString('pt-BR')}</span>` : ''}
         ${it.applied_at ? `<span><b>Salva no perfil:</b> ${new Date(it.applied_at).toLocaleString('pt-BR')}</span>` : ''}
-        <span><b>A IA encontrou:</b> ${found}</span>
+        ${it.status === 'processing' ? '' : `<span><b>A IA encontrou:</b> ${found}</span>`}
       </div>
       ${it.status === 'interrupted' ? '<p class="imp-detail-note">O servidor reiniciou no meio da leitura (deploy ou restart).</p>' : ''}
       ${it.error ? `<div><b class="imp-detail-label">Erro</b><pre>${aiEsc(it.error)}</pre></div>` : ''}

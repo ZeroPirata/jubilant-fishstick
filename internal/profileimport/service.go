@@ -140,8 +140,11 @@ func (s *Service) run(ctx context.Context, cancel context.CancelFunc, userID, id
 		Start: func(p services.Provider, _ int) {
 			mu.Lock()
 			st.Current, st.CurrentAt = modelName(p.Model, p.Name), time.Now()
+			snap := append([]importlog.Attempt(nil), logged...)
+			cur := &importlog.Current{Model: st.Current, Provider: p.Name, Since: st.CurrentAt}
 			mu.Unlock()
 			save()
+			s.history("tentativa atual", func(ctx context.Context, l *importlog.Repository) error { return l.SetAttempts(ctx, id, snap, cur) })
 		},
 		Done: func(c services.AICall) {
 			mu.Lock()
@@ -156,7 +159,7 @@ func (s *Service) run(ctx context.Context, cancel context.CancelFunc, userID, id
 			snap := append([]importlog.Attempt(nil), logged...)
 			mu.Unlock()
 			save()
-			s.history("tentativa", func(ctx context.Context, l *importlog.Repository) error { return l.SetAttempts(ctx, id, snap) })
+			s.history("tentativa", func(ctx context.Context, l *importlog.Repository) error { return l.SetAttempts(ctx, id, snap, nil) })
 		},
 	})
 
