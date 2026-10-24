@@ -78,7 +78,7 @@ func (h *ProfileImportHandler) Status(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "falha ao consultar a importação")
 		return
 	}
-	writeJSON(w, http.StatusOK, st)
+	writeJSON(w, http.StatusOK, st.ForUser())
 }
 
 // Cancel interrompe a leitura em andamento (ou descarta o rascunho pronto).
@@ -131,6 +131,7 @@ func (h *ProfileImportHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ImportID != "" {
 		h.Service.Store.Delete(r.Context(), uid, req.ImportID)
+		h.Service.Applied(uid, req.ImportID)
 	}
 	writeJSON(w, http.StatusOK, sum)
 }

@@ -1,6 +1,5 @@
 // ── Metrics dashboard — faz parse do formato Prometheus texto ──
 
-let _metricsTimer = null;
 
 function parsePrometheus(text) {
   const m = {};
@@ -297,7 +296,7 @@ function renderMetrics(m) {
   set('m-http-5xx',          http5xx);
 
   // Timestamp
-  set('metrics-updated', 'Atualizado ' + new Date().toLocaleTimeString('pt-BR'));
+  liveMark('metrics');
   renderRouteTable(m);
 }
 
@@ -344,12 +343,11 @@ function refreshMetricsView() {
 
 function startMetricsRefresh() {
   refreshMetricsView();
-  _metricsTimer = setInterval(refreshMetricsView, 30_000);
+  liveStart('metrics', refreshMetricsView, 10_000);
 }
 
 function stopMetricsRefresh() {
-  clearInterval(_metricsTimer);
-  _metricsTimer = null;
+  liveStop('metrics');
 }
 
 // ── Banco: consultas (tracer do pgx) e pool de conexões ──
@@ -406,7 +404,7 @@ function renderDBQueryTable(rows) {
 
 const AI_STATUS_LABELS = {
   rate_limit: 'rate limit', timeout: 'timeout', truncated: 'cortada', empty: 'vazia',
-  parse_error: 'JSON inválido', http_error: 'erro HTTP', network_error: 'rede', error: 'outro',
+  parse_error: 'JSON inválido', http_error: 'erro HTTP', network_error: 'rede', error: 'outro', canceled: 'cancelada',
 };
 const AI_PURPOSE_LABELS = { main: 'Currículo', scrape: 'Scrape', import: 'Importação' };
 const AI_BUCKET_MS = { '24h': 3600e3, '7d': 6 * 3600e3, '30d': 24 * 3600e3 };
@@ -427,7 +425,7 @@ async function loadAIMetrics() {
     const d = (await res.json()).data;
     renderAIMetrics(d, range);
     set('metrics-error', '');
-    set('metrics-updated', 'Atualizado ' + new Date().toLocaleTimeString('pt-BR'));
+    liveMark('metrics');
   } catch (e) {
     set('metrics-error', 'Erro ao carregar métricas de IA: ' + e.message);
   }
@@ -462,6 +460,9 @@ function renderAIMetrics(d, range) {
   }).join('') : '<tr><td colspan="8" class="empty">Nenhuma chamada no período.</td></tr>';
 
   const failures = document.getElementById('ai-failures-body');
+  // A atualização automática redesenha a tabela: reabre as falhas que estavam expandidas.
+  const failKey = f => f.at + '|' + f.model + '|' + f.status;
+  const wasOpen = new Set([...failures.querySelectorAll('tr.err-row.open')].map(tr => failKey(_aiFailures[+tr.dataset.i])));
   _aiFailures = d.failures;
   failures.innerHTML = d.failures.length ? d.failures.map((f, i) => `<tr class="err-row" data-i="${i}" onclick="toggleAIFailure(this)" title="Clique para ver o erro completo">
       <td style="white-space:nowrap" data-label="Quando">${new Date(f.at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
@@ -471,6 +472,7 @@ function renderAIMetrics(d, range) {
       <td class="rt-num" data-label="Tempo">${fmtMs(f.ms)}</td>
       <td style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${aiEsc(f.error)}" data-label="Erro">${escHtml(f.error)}</td>
     </tr>`).join('') : '<tr><td colspan="6" class="empty">Nenhuma falha no período.</td></tr>';
+  failures.querySelectorAll('tr.err-row').forEach(tr => { if (wasOpen.has(failKey(_aiFailures[+tr.dataset.i]))) toggleAIFailure(tr); });
 }
 
 // Barras empilhadas por intervalo: sucesso embaixo, falha (hachurada) em cima.
@@ -536,7 +538,7 @@ async function loadGeneralMetrics() {
     renderGeneralMetrics(m, ai);
     renderUserStats((await usersRes.json()).data);
     set('metrics-error', '');
-    set('metrics-updated', 'Atualizado ' + new Date().toLocaleTimeString('pt-BR'));
+    liveMark('metrics');
   } catch (e) {
     set('metrics-error', 'Erro ao carregar métricas: ' + e.message);
   }

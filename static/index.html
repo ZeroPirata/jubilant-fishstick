@@ -192,7 +192,7 @@
             <button data-mview="ia" onclick="switchMetricsView('ia',this)">IA</button>
             <button data-mview="banco" onclick="switchMetricsView('banco',this)">Banco</button>
           </div>
-          <span id="metrics-updated" style="color:var(--muted);font-size:12px"></span>
+          <button class="live-badge" id="metrics-live" onclick="liveToggle('metrics')"></button>
           <button class="btn btn-ghost" onclick="refreshMetricsView()">↻ Atualizar</button>
         </div>
       </div>
@@ -909,6 +909,7 @@
         <div class="sub-nav" style="margin:0">
           <button class="active" data-admin="errors" onclick="switchAdminView('errors',this)">Log de Erros</button>
           <button               data-admin="users"  onclick="switchAdminView('users',this)">Usuários</button>
+          <button               data-admin="imports" onclick="switchAdminView('imports',this)">Importações</button>
           <button class="master-only hidden" data-admin="ai" onclick="switchAdminView('ai',this)">Configurações de IA</button>
         </div>
       </div>
@@ -951,6 +952,31 @@
             <span class="page-info" id="admin-err-page">—</span>
             <button class="btn-page" id="admin-err-next" onclick="adminErrorsNext()">›</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Importações de currículo -->
+      <div id="admin-imports" class="hidden">
+        <div class="list-controls" style="margin-bottom:12px">
+          <select id="imports-filter" onchange="renderAdminImports()" style="width:auto" aria-label="Filtrar por resultado">
+            <option value="">Todas</option>
+            <option value="fail">Com erro ou interrompidas</option>
+            <option value="done">Concluídas</option>
+            <option value="canceled">Canceladas</option>
+            <option value="processing">Em andamento</option>
+          </select>
+          <div class="imports-stats" id="imports-stats"></div>
+          <button class="live-badge" id="imports-live" onclick="liveToggle('imports')" style="margin-left:auto"></button>
+        </div>
+        <div class="table-wrap">
+          <table class="table-cards">
+            <thead>
+              <tr><th>Quando</th><th>Usuário</th><th>Arquivo</th><th>Resultado</th><th>Tentativas</th><th class="rt-num">Duração</th></tr>
+            </thead>
+            <tbody id="admin-imports-body">
+              <tr><td colspan="6" class="empty">Carregando...</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
 

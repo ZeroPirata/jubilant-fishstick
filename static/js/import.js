@@ -26,20 +26,20 @@ function impError(msg, attempts) {
   el.classList.toggle('hidden', !msg);
 }
 
-// Tentativas da cadeia de IA: o que aconteceu com cada modelo (e qual está tentando agora).
+// Tentativas da leitura, sem o nome dos modelos (isso fica no painel admin):
+// "1ª tentativa · serviço ocupado", "2ª tentativa · lendo agora · 1:12".
 const IMP_ATTEMPT_LABELS = {
-  ok: 'leu o currículo', rate_limit: 'no limite de uso', timeout: 'demorou demais', truncated: 'resposta cortada',
-  empty: 'resposta vazia', parse_error: 'resposta inválida', http_error: 'erro do provedor', network_error: 'falha de rede', error: 'falhou',
+  ok: 'leu o currículo', rate_limit: 'serviço ocupado', timeout: 'demorou demais',
 };
 const impSecs = s => s < 60 ? `${Math.round(s)}s` : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 
-function impAttemptsHTML(attempts, current, currentAt) {
-  const rows = attempts.map(a => `
+function impAttemptsHTML(attempts, trying, tryingSince) {
+  const rows = attempts.map((a, i) => `
     <li class="${a.status === 'ok' ? 'is-ok' : 'is-fail'}"><span class="imp-att-icon">${a.status === 'ok' ? '✓' : '✕'}</span>
-      <b>${escStr(a.model)}</b><span>${IMP_ATTEMPT_LABELS[a.status] || a.status} · ${impSecs(a.seconds)}</span></li>`);
-  if (current) {
-    const since = currentAt && !currentAt.startsWith('0001') ? (Date.now() - new Date(currentAt)) / 1000 : 0;
-    rows.push(`<li class="is-now"><span class="imp-att-icon"></span><b>${escStr(current)}</b><span>tentando agora${since > 0 ? ' · ' + impSecs(since) : ''}</span></li>`);
+      <b>${i + 1}ª tentativa</b><span>${IMP_ATTEMPT_LABELS[a.status] || 'não conseguiu ler'} · ${impSecs(a.seconds)}</span></li>`);
+  if (trying) {
+    const since = tryingSince ? (Date.now() - new Date(tryingSince)) / 1000 : 0;
+    rows.push(`<li class="is-now"><span class="imp-att-icon"></span><b>${attempts.length + 1}ª tentativa</b><span>lendo agora${since > 0 ? ' · ' + impSecs(since) : ''}</span></li>`);
   }
   return rows.join('');
 }
@@ -248,7 +248,7 @@ async function impPoll() {
 
   const st = await apiData(res);
   if (st.status === 'processing') {
-    document.getElementById('imp-attempts').innerHTML = impAttemptsHTML(st.attempts || [], st.current, st.current_at);
+    document.getElementById('imp-attempts').innerHTML = impAttemptsHTML(st.attempts || [], st.trying, st.trying_since);
     // Trava do navegador: o servidor sempre encerra antes disso; se não encerrou, algo morreu.
     if (Date.now() - _imp.started > IMP_GIVE_UP_MS) {
       api.delete(`/users/me/import/${_imp.id}`).catch(() => {});

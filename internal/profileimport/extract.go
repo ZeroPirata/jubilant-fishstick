@@ -31,18 +31,31 @@ var (
 	ErrNoText      = errors.New("não encontrei texto no arquivo. Se for um PDF escaneado (imagem), exporte o currículo de novo como PDF de texto")
 )
 
+// Kind identifica o formato pelo conteúdo (não pela extensão): pdf, docx, txt ou "".
+func Kind(data []byte) string {
+	switch {
+	case bytes.HasPrefix(data, []byte("%PDF-")):
+		return "pdf"
+	case bytes.HasPrefix(data, []byte("PK\x03\x04")):
+		return "docx"
+	case utf8.Valid(data) && !bytes.ContainsRune(data, 0):
+		return "txt"
+	}
+	return ""
+}
+
 // ExtractText identifica o formato pelo conteúdo (não pela extensão) e devolve o texto limpo.
 func ExtractText(ctx context.Context, data []byte) (string, error) {
 	var (
 		text string
 		err  error
 	)
-	switch {
-	case bytes.HasPrefix(data, []byte("%PDF-")):
+	switch Kind(data) {
+	case "pdf":
 		text, err = pdfText(ctx, data)
-	case bytes.HasPrefix(data, []byte("PK\x03\x04")):
+	case "docx":
 		text, err = docxText(data)
-	case utf8.Valid(data) && !bytes.ContainsRune(data, 0):
+	case "txt":
 		text = string(data)
 	default:
 		return "", ErrUnsupported

@@ -21,9 +21,9 @@ const (
 	quotaWindow = time.Hour
 	quotaMax    = 10 // envios por hora por usuário: cada um custa uma chamada de IA
 
-	// staleAfter: "processando" há mais que isso é uma leitura que morreu com o processo
+	// StaleAfter: "processando" há mais que isso é uma leitura que morreu com o processo
 	// (deploy, restart do air). Maior que o aiTimeout, que sempre encerra a leitura viva.
-	staleAfter = aiTimeout + 90*time.Second
+	StaleAfter = aiTimeout + 90*time.Second
 )
 
 var (
@@ -49,6 +49,36 @@ type State struct {
 	Current   string    `json:"current,omitempty"`    // modelo tentando agora
 	CurrentAt time.Time `json:"current_at,omitempty"` // desde quando
 	Attempts  []Attempt `json:"attempts,omitempty"`
+}
+
+// UserView é o que a própria pessoa vê do andamento: quantas tentativas e como foram,
+// sem o nome dos modelos (detalhe interno, só no painel admin).
+type UserView struct {
+	Status      string        `json:"status"`
+	Error       string        `json:"error,omitempty"`
+	Draft       *Draft        `json:"draft,omitempty"`
+	StartedAt   time.Time     `json:"started_at"`
+	Trying      bool          `json:"trying"`
+	TryingSince *time.Time    `json:"trying_since,omitempty"`
+	Attempts    []UserAttempt `json:"attempts"`
+}
+
+type UserAttempt struct {
+	Status  string  `json:"status"`
+	Seconds float64 `json:"seconds"`
+}
+
+func (st State) ForUser() UserView {
+	v := UserView{Status: st.Status, Error: st.Error, Draft: st.Draft, StartedAt: st.StartedAt, Trying: st.Current != "",
+		Attempts: make([]UserAttempt, 0, len(st.Attempts))}
+	if v.Trying && !st.CurrentAt.IsZero() {
+		at := st.CurrentAt
+		v.TryingSince = &at
+	}
+	for _, a := range st.Attempts {
+		v.Attempts = append(v.Attempts, UserAttempt{Status: a.Status, Seconds: a.Seconds})
+	}
+	return v
 }
 
 type Store struct {
@@ -117,7 +147,7 @@ func (s *Store) Get(ctx context.Context, userID, id string) (State, error) {
 		return State{}, err
 	}
 	// Leitura órfã (sem started_at = gravada antes desta versão, ou velha demais).
-	if st.Status == StatusProcessing && (st.StartedAt.IsZero() || s.now().Sub(st.StartedAt) > staleAfter) {
+	if st.Status == StatusProcessing && (st.StartedAt.IsZero() || s.now().Sub(st.StartedAt) > StaleAfter) {
 		st = State{Status: StatusError, Error: msgInterrupted, StartedAt: st.StartedAt, Attempts: st.Attempts}
 		_ = s.write(ctx, userID, id, st, true)
 		s.release(ctx, userID, id)

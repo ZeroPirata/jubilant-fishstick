@@ -12,9 +12,112 @@ function switchAdminView(view, btn) {
   document.getElementById('admin-errors').classList.toggle('hidden', view !== 'errors');
   document.getElementById('admin-users').classList.toggle('hidden',  view !== 'users');
   document.getElementById('admin-ai').classList.toggle('hidden',     view !== 'ai');
+  document.getElementById('admin-imports').classList.toggle('hidden', view !== 'imports');
   if (view === 'errors') loadAdminErrors();
   if (view === 'users')  loadAdminUsers();
   if (view === 'ai')     loadAISettings();
+  if (view === 'imports') {
+    loadAdminImports();
+    liveStart('imports', () => {
+      // Só recarrega com a aba visível; o intervalo continua barato quando não está.
+      if (_activeTab === 'admin' && !document.getElementById('admin-imports').classList.contains('hidden')) loadAdminImports();
+    }, 10_000);
+  }
+}
+
+// ── Importações de currículo: quem enviou, quais modelos tentou, quanto levou e por que falhou ──
+let _imports = [];
+const IMPORT_STATUS = {
+  processing:  ['chip-yellow', 'Em andamento'],
+  done:        ['chip-green',  'Concluída'],
+  error:       ['chip-red',    'Erro'],
+  canceled:    ['chip-muted',  'Cancelada'],
+  interrupted: ['chip-red',    'Interrompida'],
+};
+
+async function loadAdminImports() {
+  try {
+    const res = await api.get('/admin/imports?limit=200');
+    if (!res.ok) throw new Error('status ' + res.status);
+    _imports = (await res.json()).data || [];
+    renderAdminImports();
+    liveMark('imports');
+  } catch (e) {
+    document.getElementById('admin-imports-body').innerHTML =
+      `<tr><td colspan="6" class="empty">Erro ao carregar: ${aiEsc(e.message)}</td></tr>`;
+  }
+}
+
+const importSecs = it => {
+  const end = it.finished_at ? new Date(it.finished_at) : (it.status === 'processing' ? new Date() : null);
+  return end ? (end - new Date(it.started_at)) / 1000 : null;
+};
+
+function renderAdminImports() {
+  const f = document.getElementById('imports-filter').value;
+  const match = it => !f || (f === 'fail' ? ['error', 'interrupted'].includes(it.status) : it.status === f);
+  const list = _imports.filter(match);
+
+  // Resumo das últimas 24h (independe do filtro).
+  const day = _imports.filter(it => Date.now() - new Date(it.started_at) < 864e5);
+  const done = day.filter(it => it.status === 'done');
+  const failed = day.filter(it => ['error', 'interrupted'].includes(it.status));
+  const avg = done.length ? done.reduce((s, it) => s + importSecs(it), 0) / done.length : 0;
+  document.getElementById('imports-stats').innerHTML = `
+    <span class="metric-chip chip-muted">24h <b>${day.length}</b></span>
+    <span class="metric-chip chip-green">concluídas <b>${done.length}</b></span>
+    <span class="metric-chip chip-red">com erro <b>${failed.length}</b></span>
+    ${done.length ? `<span class="metric-chip chip-muted">tempo médio <b>${fmtDur(avg)}</b></span>` : ''}`;
+
+  const body = document.getElementById('admin-imports-body');
+  const wasOpen = new Set([...body.querySelectorAll('tr.err-row.open')].map(tr => tr.dataset.id));
+  body.innerHTML = list.length ? list.map(it => {
+    const [cls, label] = IMPORT_STATUS[it.status] || ['chip-muted', it.status];
+    const chain = it.attempts.map(a => `<span class="imp-chain-step ${a.status === 'ok' ? 'ok' : a.status === 'canceled' ? 'skip' : 'fail'}" title="${aiEsc(AI_STATUS_LABELS[a.status] || a.status)}">${aiEsc(a.model)}</span>`)
+      .join('<span class="imp-chain-arrow">→</span>') || '<span style="color:var(--muted)">—</span>';
+    const secs = importSecs(it);
+    return `<tr class="err-row" data-id="${aiEsc(it.id)}" onclick="toggleImportDetail(this)" title="Clique para ver as tentativas">
+      <td data-label="Quando">${new Date(it.started_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+      <td data-label="Usuário">${aiEsc(it.user_email || '—')}</td>
+      <td data-label="Arquivo"><span><span class="mono">${aiEsc((it.file_kind || '?').toUpperCase())}</span> · ${fmtBytes(it.file_size)}</span></td>
+      <td data-label="Resultado"><span class="metric-chip ${cls}">${label}</span>${it.applied_at ? ' <span class="metric-chip chip-green" title="A pessoa salvou no perfil">salva no perfil</span>' : ''}<span class="err-chevron">▶</span></td>
+      <td data-label="Tentativas"><div class="imp-chain">${chain}</div></td>
+      <td class="rt-num" data-label="Duração">${secs == null ? '—' : fmtDur(secs)}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" class="empty">Nenhuma importação.</td></tr>';
+  body.querySelectorAll('tr.err-row').forEach(tr => { if (wasOpen.has(tr.dataset.id)) toggleImportDetail(tr); });
+}
+
+function toggleImportDetail(tr) {
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains('err-detail-row')) { next.remove(); tr.classList.remove('open'); return; }
+  const it = _imports.find(x => x.id === tr.dataset.id);
+  if (!it) return;
+  const r = it.result;
+  const found = r ? `${r.experiences} experiências · ${r.academic} formações · ${r.skills} habilidades · ${r.projects} projetos · ${r.certificates} certificados` : '—';
+  const attempts = it.attempts.length ? it.attempts.map((a, i) => `
+    <div class="imp-att-row">
+      <span class="imp-att-n">${i + 1}º</span>
+      <span class="mono">${aiEsc(a.model)}</span><span style="color:var(--muted)">${aiEsc(a.provider)}</span>
+      <span class="metric-chip ${a.status === 'ok' ? 'chip-green' : a.status === 'canceled' ? 'chip-muted' : 'chip-red'}">${aiEsc(AI_STATUS_LABELS[a.status] || a.status)}</span>
+      <span class="mono" style="color:var(--muted)">${fmtDur(a.seconds)}</span>
+      ${a.error ? `<pre>${aiEsc(a.error)}</pre>` : ''}
+    </div>`).join('') : '<p style="color:var(--muted)">Nenhuma tentativa registrada (cancelada ou interrompida antes da IA responder).</p>';
+  const row = document.createElement('tr');
+  row.className = 'err-detail-row';
+  row.innerHTML = `<td colspan="6"><div class="err-detail">
+      <div class="err-meta">
+        <span><b>Início:</b> ${new Date(it.started_at).toLocaleString('pt-BR')}</span>
+        ${it.finished_at ? `<span><b>Fim:</b> ${new Date(it.finished_at).toLocaleString('pt-BR')}</span>` : ''}
+        ${it.applied_at ? `<span><b>Salva no perfil:</b> ${new Date(it.applied_at).toLocaleString('pt-BR')}</span>` : ''}
+        <span><b>A IA encontrou:</b> ${found}</span>
+      </div>
+      ${it.status === 'interrupted' ? '<p class="imp-detail-note">O servidor reiniciou no meio da leitura (deploy ou restart).</p>' : ''}
+      ${it.error ? `<div><b class="imp-detail-label">Erro</b><pre>${aiEsc(it.error)}</pre></div>` : ''}
+      <div><b class="imp-detail-label">Tentativas</b><div class="imp-att-list">${attempts}</div></div>
+    </div></td>`;
+  tr.after(row);
+  tr.classList.add('open');
 }
 
 // ── Error log ──

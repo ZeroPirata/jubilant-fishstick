@@ -8,7 +8,9 @@ import (
 	"hackton-treino/internal/handler"
 	"hackton-treino/internal/middleware"
 	adminRepo "hackton-treino/internal/repository/admin"
+	"hackton-treino/internal/profileimport"
 	"hackton-treino/internal/repository/aimetrics"
+	"hackton-treino/internal/repository/importlog"
 	"hackton-treino/internal/repository/usermetrics"
 	ucache "hackton-treino/internal/repository/cache"
 	"hackton-treino/internal/repository/secevents"
@@ -64,7 +66,8 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	protectedMux := http.NewServeMux()
 	jobHandler := setupJobRoutes(protectedMux, logger, db, bus, secLog)
 	setupUserRoutes(protectedMux, logger, db, rds)
-	setupProfileImportRoutes(protectedMux, logger, db, rds, llm)
+	importLog := importlog.New(db, profileimport.StaleAfter)
+	setupProfileImportRoutes(protectedMux, logger, db, rds, llm, importLog)
 	setupFilterRoutes(protectedMux, logger, db)
 	setupSecurityRoutes(protectedMux, logger, secLog)
 
@@ -86,6 +89,7 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	adminMux.Handle("GET /metrics/raw", promhttp.Handler())
 	adminMux.HandleFunc("GET /metrics/ai", metricsH.AI)
 	adminMux.HandleFunc("GET /metrics/users", metricsH.UserStats)
+	adminMux.HandleFunc("GET /imports", handler.NewImportLogHandler(logger, importLog).List)
 
 	// Só master: configurações de IA (contêm API keys) e promoção de masters
 	master := middleware.MasterMiddleware(adminR)

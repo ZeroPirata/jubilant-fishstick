@@ -165,3 +165,48 @@ window.addEventListener('DOMContentLoaded', () => {
     showAuth();
   }
 });
+
+// ── Atualização automática (métricas, importações) ──
+// Cada tela registra o que recarregar; o intervalo para quando a aba do navegador está em
+// segundo plano e recarrega na hora ao voltar. O selo "ao vivo" pausa/retoma com um clique.
+const _live = {};
+
+function liveStart(key, fn, ms) {
+  liveStop(key);
+  const paused = _live[key]?.paused ?? false;
+  _live[key] = { fn, paused, timer: setInterval(() => { if (!document.hidden && !_live[key].paused) fn(); }, ms) };
+  liveBadge(key);
+}
+
+function liveStop(key) {
+  if (_live[key]) clearInterval(_live[key].timer);
+}
+
+function liveToggle(key) {
+  const l = _live[key];
+  if (!l) return;
+  l.paused = !l.paused;
+  if (!l.paused) l.fn();
+  liveBadge(key);
+}
+
+// Chamado depois de cada carga bem-sucedida: mostra a hora da última atualização.
+function liveMark(key) {
+  if (_live[key]) _live[key].at = new Date();
+  liveBadge(key);
+}
+
+function liveBadge(key) {
+  const el = document.getElementById(`${key}-live`);
+  const l = _live[key];
+  if (!el || !l) return;
+  const at = l.at ? l.at.toLocaleTimeString('pt-BR') : '—';
+  el.classList.toggle('paused', l.paused);
+  el.innerHTML = l.paused ? `<i></i>pausado · ${at}` : `<i></i>ao vivo · ${at}`;
+  el.title = l.paused ? 'Atualização automática pausada. Clique para retomar.' : 'Atualiza sozinho a cada poucos segundos. Clique para pausar.';
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  for (const l of Object.values(_live)) if (l.timer && !l.paused) l.fn();
+});

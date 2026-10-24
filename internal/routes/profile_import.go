@@ -6,6 +6,7 @@ import (
 	"hackton-treino/internal/repository"
 	"hackton-treino/internal/repository/aliases"
 	ucache "hackton-treino/internal/repository/cache"
+	"hackton-treino/internal/repository/importlog"
 	"hackton-treino/internal/repository/users"
 	"hackton-treino/internal/services"
 	"net/http"
@@ -21,12 +22,13 @@ const (
 	ImportUploadLimit = profileimport.MaxFileSize + 64<<10
 )
 
-func setupProfileImportRoutes(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, rds *redis.Client, llm *services.AiService) {
+func setupProfileImportRoutes(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, rds *redis.Client, llm *services.AiService, log *importlog.Repository) {
 	svc := &profileimport.Service{
 		AI:      llm,
 		Store:   profileimport.NewStore(rds),
 		Users:   users.New(db),
 		Aliases: aliases.New(db),
+		Log:     log,
 		Logger:  logger,
 	}
 	h := handler.NewProfileImportHandler(logger, svc, repository.NewBase(db), ucache.New(rds))
