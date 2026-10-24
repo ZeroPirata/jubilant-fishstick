@@ -508,6 +508,9 @@ function renderAITimeline(timeline, since, bucketMs) {
     `<span>${label(buckets[0].start)}</span><span>${label(mid.start)}</span><span>${label(buckets[buckets.length - 1].start)}</span>`;
 
   const tip = document.getElementById('ai-tooltip');
+  // position:fixed dentro de um ancestral com transform/animação vira relativo a ele (o
+  // tooltip aparecia longe do mouse): no body ele fica preso à janela.
+  if (tip.parentElement !== document.body) document.body.appendChild(tip);
   el.onmousemove = e => {
     const col = e.target.closest('.ai-col');
     if (!col) { tip.classList.add('hidden'); return; }

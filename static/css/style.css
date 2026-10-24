@@ -1193,3 +1193,9 @@ nav button.nav-ready::after { background: var(--green); box-shadow: 0 0 0 0 rgba
 .imp-att-row pre { flex-basis: 100%; margin: 0 0 0 30px; }
 .imp-att-n { font: 600 12px var(--font-mono); color: var(--accent); min-width: 20px; }
 .imp-chain-step.skip { background: rgba(148,163,184,.1); color: var(--muted); }
+
+/* Nova vaga: lote de links */
+.bulk-url-row { display: flex; gap: 8px; align-items: stretch; }
+.bulk-url-row input { flex: 1; min-width: 0; }
+.bulk-url-row .btn { flex-shrink: 0; white-space: nowrap; }
+.bulk-note { margin: -4px 0 14px; }

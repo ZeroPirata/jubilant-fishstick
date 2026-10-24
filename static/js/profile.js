@@ -4,8 +4,9 @@ let _activePerfil = 'info';
 
 function showPerfilTab(id, btn) {
   _activePerfil = id;
-  document.querySelectorAll('.sub-section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.sub-nav button').forEach(b => b.classList.remove('active'));
+  // Só as sub-abas do Perfil: Métricas e Admin têm sub-nav própria.
+  document.querySelectorAll('#tab-perfil .sub-section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('#tab-perfil .sub-nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('perf-' + id)?.classList.add('active');
   btn.classList.add('active');
 
