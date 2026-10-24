@@ -641,7 +641,7 @@
             <div class="card-eyebrow imp-default-head">Importar currículo</div>
             <h3 class="imp-title imp-default-head">Envie seu currículo e o perfil se preenche sozinho</h3>
             <p class="imp-lead">Qualquer modelo de currículo em <b>PDF</b>, <b>DOCX</b> ou <b>TXT</b>, até 5 MB. Também funciona com o PDF do LinkedIn: no seu perfil, <b>Mais → Salvar como PDF</b>.</p>
-            <div id="imp-error" class="banner banner-error hidden"></div>
+            <div id="imp-error" class="banner banner-error imp-error hidden"><div><div id="imp-error-msg"></div><ol class="imp-attempts" id="imp-error-attempts"></ol></div></div>
             <label class="imp-dropzone" id="imp-drop" for="imp-file">
               <span class="imp-drop-icon" aria-hidden="true">⇪</span>
               <span><b>Arraste o arquivo aqui</b> ou <u>escolha no computador</u></span>
@@ -666,6 +666,8 @@
             <p class="imp-file-name" id="imp-file-name">—</p>
             <p class="imp-lead" id="imp-working-msg">Extraindo experiências, formação e habilidades…</p>
             <p class="imp-elapsed"><span id="imp-elapsed">0:00</span> · costuma levar menos de um minuto, mas pode levar alguns minutos quando o modelo principal está ocupado. Pode sair desta tela: a leitura continua.</p>
+            <ol class="imp-attempts" id="imp-attempts" aria-live="polite"></ol>
+            <button class="btn btn-ghost btn-sm imp-cancel" onclick="impCancel()">Cancelar leitura</button>
           </div>
         </div>
 

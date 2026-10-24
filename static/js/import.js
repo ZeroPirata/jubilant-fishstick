@@ -3,6 +3,7 @@
 // currículo" → a pessoa confere/ajusta → só então salva no perfil.
 
 const IMP_KEY = 'jp_import';
+const IMP_GIVE_UP_MS = 9 * 60 * 1000; // > tempo máximo da leitura no servidor (7 min + folga)
 const IMP_LEVELS = [
   ['basic', 'Básico'], ['intermediate', 'Intermediário'], ['advanced', 'Avançado'], ['expert', 'Expert'],
 ];
@@ -18,10 +19,29 @@ function impShow(stage) {
   }
 }
 
-function impError(msg) {
+function impError(msg, attempts) {
   const el = document.getElementById('imp-error');
-  el.textContent = msg || '';
+  document.getElementById('imp-error-msg').textContent = msg || '';
+  document.getElementById('imp-error-attempts').innerHTML = impAttemptsHTML(attempts || []);
   el.classList.toggle('hidden', !msg);
+}
+
+// Tentativas da cadeia de IA: o que aconteceu com cada modelo (e qual está tentando agora).
+const IMP_ATTEMPT_LABELS = {
+  ok: 'leu o currículo', rate_limit: 'no limite de uso', timeout: 'demorou demais', truncated: 'resposta cortada',
+  empty: 'resposta vazia', parse_error: 'resposta inválida', http_error: 'erro do provedor', network_error: 'falha de rede', error: 'falhou',
+};
+const impSecs = s => s < 60 ? `${Math.round(s)}s` : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+
+function impAttemptsHTML(attempts, current, currentAt) {
+  const rows = attempts.map(a => `
+    <li class="${a.status === 'ok' ? 'is-ok' : 'is-fail'}"><span class="imp-att-icon">${a.status === 'ok' ? '✓' : '✕'}</span>
+      <b>${escStr(a.model)}</b><span>${IMP_ATTEMPT_LABELS[a.status] || a.status} · ${impSecs(a.seconds)}</span></li>`);
+  if (current) {
+    const since = currentAt && !currentAt.startsWith('0001') ? (Date.now() - new Date(currentAt)) / 1000 : 0;
+    rows.push(`<li class="is-now"><span class="imp-att-icon"></span><b>${escStr(current)}</b><span>tentando agora${since > 0 ? ' · ' + impSecs(since) : ''}</span></li>`);
+  }
+  return rows.join('');
 }
 
 function impSaved() {
@@ -189,6 +209,7 @@ async function impUpload(file) {
 
 function impStartWaiting(name, started) {
   _imp.started = started || Date.now();
+  document.getElementById('imp-attempts').innerHTML = '';
   _imp.phase = 'processing';
   document.getElementById('imp-file-name').textContent = name || 'currículo';
   impShow('processing');
@@ -226,12 +247,23 @@ async function impPoll() {
   if (!res.ok) { _imp.poll = setTimeout(impPoll, 4000); return; }
 
   const st = await apiData(res);
-  if (st.status === 'processing') { _imp.poll = setTimeout(impPoll, 2500); return; }
+  if (st.status === 'processing') {
+    document.getElementById('imp-attempts').innerHTML = impAttemptsHTML(st.attempts || [], st.current, st.current_at);
+    // Trava do navegador: o servidor sempre encerra antes disso; se não encerrou, algo morreu.
+    if (Date.now() - _imp.started > IMP_GIVE_UP_MS) {
+      api.delete(`/users/me/import/${_imp.id}`).catch(() => {});
+      impForget(); impShow('upload');
+      impError('A leitura não respondeu a tempo e foi cancelada. Envie o arquivo de novo.', st.attempts);
+      return;
+    }
+    _imp.poll = setTimeout(impPoll, 2500);
+    return;
+  }
 
   clearInterval(_imp.clock);
   if (st.status === 'error') {
     impForget(); impShow('upload');
-    impError(st.error || 'Não consegui entender o currículo.');
+    impError(st.error || 'Não consegui entender o currículo.', st.attempts);
     _imp.phase = 'error';
     impNotify(false, 'Não consegui ler o currículo. Clique para ver o motivo.');
     return;
@@ -663,8 +695,19 @@ async function impApply() {
   }
 }
 
+async function impCancel() {
+  const id = _imp.id;
+  impForget();
+  impShow('upload');
+  impError('');
+  if (id) api.delete(`/users/me/import/${id}`).catch(() => {});
+  toast('Leitura cancelada.');
+}
+
 async function impDiscard() {
   if (!await confirmDialog('Descartar os dados lidos do currículo? Nada foi salvo no perfil.')) return;
+  // Apaga também no servidor: o rascunho tem dados pessoais e não precisa esperar expirar.
+  if (_imp.id) api.delete(`/users/me/import/${_imp.id}`).catch(() => {});
   impForget();
   impShow('upload');
 }

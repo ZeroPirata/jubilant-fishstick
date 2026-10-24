@@ -33,5 +33,6 @@ func setupProfileImportRoutes(mux *http.ServeMux, logger *zap.Logger, db *pgxpoo
 
 	mux.HandleFunc("POST /users/me/import", h.Upload)
 	mux.HandleFunc("GET /users/me/import/{id}", h.Status)
+	mux.HandleFunc("DELETE /users/me/import/{id}", h.Cancel)
 	mux.HandleFunc("POST /users/me/import/apply", h.Apply)
 }

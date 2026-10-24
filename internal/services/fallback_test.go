@@ -401,3 +401,25 @@ func TestResolveProviders_ImportUsaPrincipalEDepoisScrapeSemRepetir(t *testing.T
 		}
 	}
 }
+
+type recorderFunc func(AICall)
+
+func (f recorderFunc) RecordAICall(_ context.Context, c AICall) { f(c) }
+
+func TestFallback_CanceladaNaoEntraNasMetricasMasAvisaOObservador(t *testing.T) {
+	svc := newFallbackService(&config.Config{}, fakeSource{PurposeMain: {{Name: "openai", URL: "u", Model: "m"}}})
+	var recorded, observed int
+	svc.Recorder = recorderFunc(func(AICall) { recorded++ })
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = WithAttemptObserver(ctx, AttemptObserver{Done: func(AICall) { observed++ }})
+	err := svc.withFallback(ctx, PurposeMain, func(ctx context.Context, p Provider, last bool) (Usage, error) {
+		cancel()
+		return Usage{}, ctx.Err()
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if recorded != 0 || observed != 1 {
+		t.Errorf("recorded=%d observed=%d, want 0 e 1", recorded, observed)
+	}
+}

@@ -81,6 +81,17 @@ func (h *ProfileImportHandler) Status(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, st)
 }
 
+// Cancel interrompe a leitura em andamento (ou descarta o rascunho pronto).
+func (h *ProfileImportHandler) Cancel(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, ErrUserNotAllowed.Error())
+		return
+	}
+	h.Service.Cancel(r.Context(), userID.String(), r.PathValue("id"))
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *ProfileImportHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserID(r.Context())
 	if !ok {

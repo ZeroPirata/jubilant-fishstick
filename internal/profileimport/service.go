@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strings"
+	"sync"
 	"time"
 
 	"hackton-treino/internal/repository"
@@ -26,6 +28,9 @@ type Service struct {
 	Users   users.Repository
 	Aliases aliases.Repository
 	Logger  *zap.Logger
+
+	mu      sync.Mutex
+	running map[string]context.CancelFunc // leituras deste processo, para o Cancelar
 }
 
 // LoadAliases devolve os sinônimos de stack (golang → go). Sem eles a importação
@@ -63,26 +68,90 @@ func (s *Service) Start(ctx context.Context, userID string, data []byte) (string
 	if err := s.Store.Begin(ctx, userID, id); err != nil {
 		return "", err
 	}
-	go s.run(userID, id, text)
+	ctx, cancel := context.WithTimeout(context.Background(), aiTimeout)
+	s.mu.Lock()
+	if s.running == nil {
+		s.running = map[string]context.CancelFunc{}
+	}
+	s.running[id] = cancel
+	s.mu.Unlock()
+	go s.run(ctx, cancel, userID, id, text)
 	return id, nil
 }
 
-func (s *Service) run(userID, id, text string) {
-	ctx, cancel := context.WithTimeout(context.Background(), aiTimeout)
-	defer cancel()
+// Cancel interrompe a chamada de IA em andamento (se for deste processo) e apaga o estado.
+func (s *Service) Cancel(ctx context.Context, userID, id string) {
+	s.mu.Lock()
+	cancel := s.running[id]
+	s.mu.Unlock()
+	s.Store.Cancel(ctx, userID, id)
+	if cancel != nil {
+		cancel()
+	}
+}
 
-	st := State{Status: StatusDone}
+func (s *Service) run(ctx context.Context, cancel context.CancelFunc, userID, id, text string) {
+	defer func() {
+		cancel()
+		s.mu.Lock()
+		delete(s.running, id)
+		s.mu.Unlock()
+	}()
+
+	// Andamento ao vivo: qual modelo está tentando e como foram os anteriores.
+	st := State{Status: StatusProcessing, StartedAt: time.Now()}
+	var mu sync.Mutex
+	save := func() {
+		mu.Lock()
+		snap := st
+		snap.Attempts = append([]Attempt(nil), st.Attempts...)
+		mu.Unlock()
+		if err := s.Store.Update(context.Background(), userID, id, snap); err != nil {
+			s.Logger.Warn("importação de currículo: falha ao gravar o andamento", zap.Error(err))
+		}
+	}
+	ctx = services.WithAttemptObserver(ctx, services.AttemptObserver{
+		Start: func(p services.Provider, _ int) {
+			mu.Lock()
+			st.Current, st.CurrentAt = modelName(p.Model, p.Name), time.Now()
+			mu.Unlock()
+			save()
+		},
+		Done: func(c services.AICall) {
+			mu.Lock()
+			st.Current, st.CurrentAt = "", time.Time{}
+			st.Attempts = append(st.Attempts, Attempt{Model: modelName(c.Model, c.Provider), Status: c.Status, Seconds: c.Duration.Seconds()})
+			mu.Unlock()
+			save()
+		},
+	})
+
 	draft, err := s.read(ctx, userID, text)
+	mu.Lock()
+	final := State{Status: StatusDone, StartedAt: st.StartedAt, Attempts: st.Attempts, Draft: draft}
+	mu.Unlock()
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return // cancelada pela pessoa: o estado já foi apagado
+		}
 		// O texto do currículo nunca vai para o log, só o erro da IA.
 		s.Logger.Warn("importação de currículo falhou", zap.String("user_id", userID), zap.Error(err))
-		st = State{Status: StatusError, Error: friendlyError(err)}
-	} else {
-		st.Draft = draft
+		final.Status, final.Error, final.Draft = StatusError, friendlyError(err), nil
 	}
-	if err := s.Store.Finish(context.Background(), userID, id, st); err != nil {
+	if err := s.Store.Finish(context.Background(), userID, id, final); err != nil {
 		s.Logger.Error("importação de currículo: falha ao gravar o resultado", zap.Error(err))
 	}
+}
+
+// modelName mostra só o nome do modelo ("google/gemma-4-31b-it" → "gemma-4-31b-it").
+func modelName(model, provider string) string {
+	if model == "" {
+		return provider
+	}
+	if i := strings.LastIndex(model, "/"); i >= 0 {
+		return model[i+1:]
+	}
+	return model
 }
 
 func (s *Service) read(ctx context.Context, userID, text string) (*Draft, error) {

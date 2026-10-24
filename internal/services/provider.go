@@ -54,6 +54,25 @@ type CallRecorder interface {
 
 type jobIDKey struct{}
 
+type observerKey struct{}
+
+// AttemptObserver acompanha a cadeia ao vivo (ex.: a tela de importação mostra qual modelo
+// está tentando e por que os anteriores falharam). Os dois campos são opcionais.
+type AttemptObserver struct {
+	Start func(p Provider, position int)
+	Done  func(c AICall)
+}
+
+// WithAttemptObserver faz as chamadas feitas com este contexto avisarem o observador.
+func WithAttemptObserver(ctx context.Context, o AttemptObserver) context.Context {
+	return context.WithValue(ctx, observerKey{}, o)
+}
+
+func observerFrom(ctx context.Context) AttemptObserver {
+	o, _ := ctx.Value(observerKey{}).(AttemptObserver)
+	return o
+}
+
 // WithJobID associa as chamadas feitas com este contexto a um job (para as métricas).
 func WithJobID(ctx context.Context, jobID string) context.Context {
 	return context.WithValue(ctx, jobIDKey{}, jobID)
@@ -137,14 +156,26 @@ func (ai *AiService) withFallback(ctx context.Context, purpose Purpose, call fun
 			return err
 		}
 
+		obs := observerFrom(ctx)
+		if obs.Start != nil {
+			obs.Start(p, i)
+		}
 		start := time.Now()
 		usage, err := call(ctx, p, i == len(providers)-1)
-		ai.record(ctx, AICall{
+		c := AICall{
 			Purpose: purpose, Provider: p.Name, Model: p.Model, Position: i,
 			Status: ClassifyError(err), Duration: time.Since(start),
 			PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens,
 			JobID: jobIDFrom(ctx), Error: errorText(err),
-		})
+		}
+		// Cancelada por quem pediu (ex.: botão Cancelar da importação) não é falha do provider:
+		// fora das métricas para não derrubar a taxa de sucesso do modelo.
+		if !errors.Is(ctx.Err(), context.Canceled) {
+			ai.record(ctx, c)
+		}
+		if obs.Done != nil {
+			obs.Done(c)
+		}
 		if err == nil {
 			if i > 0 {
 				zap.L().Info("AiService: fallback usado",
