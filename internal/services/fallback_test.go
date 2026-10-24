@@ -381,3 +381,23 @@ func TestClassifyError(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveProviders_ImportUsaPrincipalEDepoisScrapeSemRepetir(t *testing.T) {
+	a := Provider{Name: "gemini", URL: "u1", Model: "flash"}
+	b := Provider{Name: "openai", URL: "u2", Model: "gemma"}
+	c := Provider{Name: "ollama", URL: "u3", Model: "local"}
+	svc := newFallbackService(&config.Config{}, fakeSource{
+		PurposeMain:   {a, b},
+		PurposeScrape: {a, c},
+	})
+	got := svc.resolveProviders(context.Background(), PurposeImport)
+	want := []Provider{a, b, c}
+	if len(got) != len(want) {
+		t.Fatalf("cadeia = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("posição %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}

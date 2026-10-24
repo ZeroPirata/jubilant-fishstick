@@ -15,6 +15,7 @@ type Purpose string
 const (
 	PurposeMain   Purpose = "main"   // geração do currículo
 	PurposeScrape Purpose = "scrape" // extração dos dados da vaga
+	PurposeImport Purpose = "import" // leitura do currículo enviado pelo usuário (usa a cadeia principal)
 )
 
 // Provider é uma entrada da cadeia de fallback.
@@ -71,6 +72,22 @@ type ProviderSource interface {
 // resolveProviders monta a cadeia na ordem de prioridade:
 // painel (banco) → .env do purpose → (scrape apenas) cadeia principal.
 func (ai *AiService) resolveProviders(ctx context.Context, purpose Purpose) []Provider {
+	if purpose == PurposeImport {
+		// Cadeia principal e, de reserva, a de scrape (sem repetir modelo): a pessoa confere
+		// tudo antes de salvar, então um modelo mais fraco é melhor do que nenhum resultado.
+		chain := ai.resolveProviders(ctx, PurposeMain)
+		seen := map[string]bool{}
+		for _, p := range chain {
+			seen[p.Name+"|"+p.URL+"|"+p.Model] = true
+		}
+		for _, p := range ai.resolveProviders(ctx, PurposeScrape) {
+			if k := p.Name + "|" + p.URL + "|" + p.Model; !seen[k] {
+				seen[k] = true
+				chain = append(chain, p)
+			}
+		}
+		return chain
+	}
 	if ai.Source != nil {
 		ps, err := ai.Source.Providers(ctx, purpose)
 		if err != nil {

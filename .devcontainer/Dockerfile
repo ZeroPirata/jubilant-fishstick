@@ -19,6 +19,7 @@ RUN apk add --no-cache \
     libffi-dev \
     jpeg-dev \
     zlib-dev \
+    poppler-utils \
     && pip install weasyprint --break-system-packages
 
 ARG UID=1000

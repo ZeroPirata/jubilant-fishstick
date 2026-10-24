@@ -479,3 +479,39 @@ func (ai *AiService) scrapSiteLLM(targetURL string) (string, error) {
 	}
 	return content, nil
 }
+
+// ExtractJSON percorre a cadeia do purpose pedindo um JSON e entrega o conteúdo limpo a
+// decode. Se decode falhar (JSON inválido ou vazio para o caller), o próximo provider tenta.
+// Temperatura baixa: aqui a IA só transcreve dados, não escreve texto novo.
+func (ai *AiService) ExtractJSON(ctx context.Context, purpose Purpose, perProvider time.Duration, systemPrompt, userPrompt string, decode func(content string) error) error {
+	return ai.withFallback(ctx, purpose, func(ctx context.Context, p Provider, last bool) (Usage, error) {
+		// Um modelo travado não pode consumir o tempo dos próximos da cadeia.
+		ctx, cancel := context.WithTimeout(ctx, perProvider)
+		defer cancel()
+
+		body := ai.buildBody(AIInput{SystemPrompt: systemPrompt, UserPrompt: userPrompt}, p)
+		if gc, ok := body["generationConfig"].(map[string]any); ok {
+			gc["temperature"] = 0.1
+		} else {
+			body["temperature"] = 0.1
+		}
+		payload, err := json.Marshal(body)
+		if err != nil {
+			return Usage{}, fmt.Errorf("AiService: error in generate a json for body: %w", err)
+		}
+
+		raw, err := ai.sendRequest(ctx, ai.httpClient, payload, p, last)
+		if err != nil {
+			return Usage{}, err
+		}
+		text, err := extractContent(raw)
+		if err != nil {
+			return raw.Usage, err
+		}
+		content := repairJSON(sanitizeJSONLiterals(stripMarkdownCode(text)))
+		if err := decode(content); err != nil {
+			return raw.Usage, fmt.Errorf("AiService: %w: %v", ErrParse, err)
+		}
+		return raw.Usage, nil
+	})
+}

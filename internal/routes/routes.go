@@ -13,6 +13,7 @@ import (
 	ucache "hackton-treino/internal/repository/cache"
 	"hackton-treino/internal/repository/secevents"
 	"hackton-treino/internal/security"
+	"hackton-treino/internal/services"
 	"hackton-treino/internal/sse"
 	"net/http"
 	"runtime"
@@ -26,7 +27,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.Config, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store) {
+func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.Config, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store, llm *services.AiService) {
 	timeout := config.GetConfigDurationOrDefault(cfg.Project.ContextTimeout, 60*time.Second)
 	hash := config.LoadHashConfig(cfg)
 	hasher := security.NewHasher(hash)
@@ -63,6 +64,7 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	protectedMux := http.NewServeMux()
 	jobHandler := setupJobRoutes(protectedMux, logger, db, bus, secLog)
 	setupUserRoutes(protectedMux, logger, db, rds)
+	setupProfileImportRoutes(protectedMux, logger, db, rds, llm)
 	setupFilterRoutes(protectedMux, logger, db)
 	setupSecurityRoutes(protectedMux, logger, secLog)
 

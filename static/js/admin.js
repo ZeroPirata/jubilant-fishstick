@@ -360,6 +360,7 @@ async function checkAdminStatus() {
     localStorage.setItem('jp_is_admin', isAdmin ? '1' : '0');
     applyAdminVisibility(isAdmin);
     document.querySelectorAll('.master-only').forEach(el => el.classList.toggle('hidden', !_isMaster));
+    if (d.data?.profile_empty) impWelcome();
   } catch (_) {}
 }
 

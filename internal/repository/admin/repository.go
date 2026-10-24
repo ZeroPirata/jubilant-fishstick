@@ -143,6 +143,20 @@ func (r *adminRepo) IsMaster(ctx context.Context, userID string) (bool, error) {
 	return isMaster, err
 }
 
+func (r *adminRepo) ProfileEmpty(ctx context.Context, userID string) (bool, error) {
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return false, err
+	}
+	var empty bool
+	err := r.db.QueryRow(ctx, `
+		SELECT NOT EXISTS (SELECT 1 FROM user_profiles    WHERE user_id = $1 AND deleted_at IS NULL AND btrim(full_name) <> '')
+		   AND NOT EXISTS (SELECT 1 FROM user_experiences WHERE user_id = $1 AND deleted_at IS NULL)
+		   AND NOT EXISTS (SELECT 1 FROM user_skills      WHERE user_id = $1 AND deleted_at IS NULL)`, uid,
+	).Scan(&empty)
+	return empty, err
+}
+
 func (r *adminRepo) SetMaster(ctx context.Context, userID string, isMaster bool) error {
 	var uid pgtype.UUID
 	if err := uid.Scan(userID); err != nil {

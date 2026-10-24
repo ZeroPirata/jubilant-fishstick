@@ -37,6 +37,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
         harfbuzz \
         fribidi \
         su-exec \
+        poppler-utils \
     && pip install --break-system-packages weasyprint \
     && fc-cache -fv \
     && chmod -R a+rX /etc/fonts /usr/share/fonts /usr/share/fontconfig 2>/dev/null || true \

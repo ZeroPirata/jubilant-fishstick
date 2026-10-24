@@ -35,7 +35,12 @@ func (h *AdminHandler) Me(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, ErrInternalServerError.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"is_admin": isAdmin, "is_master": isMaster})
+	// Falha aqui não pode travar o login: no pior caso a sugestão de importar não aparece.
+	empty, err := h.Admin.ProfileEmpty(r.Context(), userID.String())
+	if err != nil {
+		h.Logger.Warn("me: falha ao verificar perfil vazio", zap.Error(err))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"is_admin": isAdmin, "is_master": isMaster, "profile_empty": empty})
 }
 
 func (h *AdminHandler) ListErrorLogs(w http.ResponseWriter, r *http.Request) {

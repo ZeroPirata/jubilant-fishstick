@@ -118,6 +118,7 @@
     <span class="spacer"></span>
     <span class="crumbs" id="topbar-clock"></span>
   </header>
+  <button id="imp-pill" class="imp-pill hidden" onclick="impGoToImport()" aria-live="polite"></button>
 
   <main>
 
@@ -615,6 +616,7 @@
       <h2>Meu Perfil</h2>
 
       <div class="sub-nav">
+        <button                data-perf="import"       onclick="showPerfilTab('import',this)" class="sub-nav-cta">⇪ Importar currículo</button>
         <button class="active" data-perf="info"         onclick="showPerfilTab('info',this)">Info Básica</button>
         <button                data-perf="links"        onclick="showPerfilTab('links',this)">Links</button>
         <button                data-perf="experiences"  onclick="showPerfilTab('experiences',this)">Experiências</button>
@@ -624,8 +626,54 @@
         <button                data-perf="certificates" onclick="showPerfilTab('certificates',this)">Certificados</button>
       </div>
 
+      <!-- Importar currículo: envio → leitura pela IA → conferência → salvar -->
+      <div id="perf-import" class="sub-section">
+        <div id="imp-upload" class="imp-stage">
+          <div class="form-card imp-card">
+            <div class="imp-welcome hidden" id="imp-welcome">
+              <div class="card-eyebrow">Primeiro passo</div>
+              <h3 class="imp-title imp-title-xl">Boas-vindas! Comece pelo seu currículo</h3>
+              <p class="imp-lead">Os currículos personalizados para cada vaga são montados a partir do seu perfil. Em vez de digitar tudo, envie o currículo que você já tem ou o PDF do seu LinkedIn: a gente lê, você confere e pronto.</p>
+            </div>
+            <div class="card-eyebrow imp-default-head">Importar currículo</div>
+            <h3 class="imp-title imp-default-head">Envie seu currículo e o perfil se preenche sozinho</h3>
+            <p class="imp-lead">Qualquer modelo de currículo em <b>PDF</b>, <b>DOCX</b> ou <b>TXT</b>, até 5 MB. Também funciona com o PDF do LinkedIn: no seu perfil, <b>Mais → Salvar como PDF</b>.</p>
+            <div id="imp-error" class="banner banner-error hidden"></div>
+            <label class="imp-dropzone" id="imp-drop" for="imp-file">
+              <span class="imp-drop-icon" aria-hidden="true">⇪</span>
+              <span><b>Arraste o arquivo aqui</b> ou <u>escolha no computador</u></span>
+              <span class="imp-drop-sub">.pdf · .docx · .txt</span>
+            </label>
+            <input type="file" id="imp-file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" hidden onchange="impUpload(this.files[0]); this.value=''" />
+            <ol class="imp-steps">
+              <li><span>01</span>Você envia</li>
+              <li><span>02</span>A IA lê os dados</li>
+              <li><span>03</span>Você confere e ajusta</li>
+              <li><span>04</span>Salva no perfil</li>
+            </ol>
+            <p class="card-note imp-privacy">O arquivo não fica guardado. Só o texto dele é enviado ao modelo de IA, para extrair os dados, e nada vai para o perfil sem a sua confirmação.</p>
+            <button class="btn-more imp-skip hidden" id="imp-skip" onclick="impSkipWelcome()">Prefiro preencher à mão →</button>
+          </div>
+        </div>
+
+        <div id="imp-processing" class="imp-stage hidden">
+          <div class="form-card imp-card imp-working">
+            <div class="card-eyebrow">Lendo currículo</div>
+            <div class="imp-scan" aria-hidden="true"><span></span></div>
+            <p class="imp-file-name" id="imp-file-name">—</p>
+            <p class="imp-lead" id="imp-working-msg">Extraindo experiências, formação e habilidades…</p>
+            <p class="imp-elapsed"><span id="imp-elapsed">0:00</span> · costuma levar menos de um minuto, mas pode levar alguns minutos quando o modelo principal está ocupado. Pode sair desta tela: a leitura continua.</p>
+          </div>
+        </div>
+
+        <div id="imp-review" class="imp-stage hidden"></div>
+      </div>
+
       <!-- Info Básica -->
       <div id="perf-info" class="sub-section active">
+        <button class="imp-hint-cta" onclick="showPerfilTab('import', document.querySelector('.sub-nav button[data-perf=import]'))">
+          <span>⇪</span> Já tem um currículo pronto? <b>Importe e pule a digitação →</b>
+        </button>
         <div class="form-card">
           <div class="field"><label>Nome completo *</label><input type="text" id="info-nome" /></div>
           <div class="field"><label>Email (somente leitura)</label><input type="email" id="info-email" readonly /></div>
@@ -1248,6 +1296,7 @@
 <script src="/static/js/app.js"></script>
 <script src="/static/js/jobs.js"></script>
 <script src="/static/js/profile.js"></script>
+<script src="/static/js/import.js"></script>
 <script src="/static/js/metrics.js"></script>
 <script src="/static/js/admin.js"></script>
 </body>

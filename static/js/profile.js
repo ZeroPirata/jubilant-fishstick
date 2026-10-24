@@ -10,6 +10,7 @@ function showPerfilTab(id, btn) {
   btn.classList.add('active');
 
   const loaders = {
+    import:       loadImport,
     info:         loadProfileInfo,
     links:        loadProfileLinks,
     experiences:  loadExperiences,
@@ -19,6 +20,7 @@ function showPerfilTab(id, btn) {
     certificates: loadCertificates,
   };
   loaders[id]?.();
+  impSyncPill();
 }
 
 function loadProfile() {

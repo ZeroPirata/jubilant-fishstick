@@ -10,6 +10,7 @@ function showApp() {
   document.getElementById('app').classList.remove('hidden');
   checkAdminStatus();
   navigateTo('vagas');
+  impResume();
   connectSSE();
 }
 
@@ -42,6 +43,7 @@ function toast(msg, tipo = 'success') {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.className = `toast ${tipo}`;
+  el.onclick = null;
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => el.classList.add('hidden'), 3500);
 }
@@ -67,6 +69,7 @@ function navigateTo(id) {
   if (id === 'filtros')  loadFilters();
   if (id === 'metricas') startMetricsRefresh();
   if (id === 'admin')    loadAdminPanel();
+  impSyncPill();
 }
 
 // ── Auth: login / register ──

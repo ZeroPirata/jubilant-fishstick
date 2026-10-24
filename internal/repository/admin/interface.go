@@ -41,6 +41,8 @@ type Repository interface {
 	SetAdmin(ctx context.Context, userID string, isAdmin bool) error
 	IsAdmin(ctx context.Context, userID string) (bool, error)
 	IsMaster(ctx context.Context, userID string) (bool, error)
+	// ProfileEmpty: sem nome, experiências nem habilidades (o app sugere importar o currículo).
+	ProfileEmpty(ctx context.Context, userID string) (bool, error)
 	// SetMaster promove (também vira admin) ou rebaixa um master (continua admin).
 	SetMaster(ctx context.Context, userID string, isMaster bool) error
 }

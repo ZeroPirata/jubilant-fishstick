@@ -89,14 +89,15 @@ func run() error {
 	}
 	aiStore := aiconfig.NewStore(aisettings.New(db), secretBox)
 
-	serverDone := make(chan error, 1)
-	go func() {
-		serverDone <- startServer(ctx, *cfg, db, rds, bus, aiStore)
-	}()
-
 	llm := services.NewLLMService(cfg, aiStore)
 	aiCalls := aimetrics.New(db)
 	llm.Recorder = aiCalls
+
+	serverDone := make(chan error, 1)
+	go func() {
+		serverDone <- startServer(ctx, *cfg, db, rds, bus, aiStore, llm)
+	}()
+
 	go pruneAICalls(ctx, aiCalls)
 	go func() {
 		worker.NewWorker(zap.L(), db, *llm, cfg.ScrapeAi.Activate, rds, bus, cfg.Worker).Start(ctx)
@@ -112,20 +113,20 @@ func run() error {
 	return nil
 }
 
-func startServer(ctx context.Context, cfg config.Config, db *pgxpool.Pool, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store) error {
+func startServer(ctx context.Context, cfg config.Config, db *pgxpool.Pool, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store, llm *services.AiService) error {
 	port := ":8080"
 	if cfg.Server.Port != "" {
 		port = ":" + cfg.Server.Port
 	}
 
 	mux := http.NewServeMux()
-	routes.Setup(mux, zap.L(), db, cfg, rds, bus, aiStore)
+	routes.Setup(mux, zap.L(), db, cfg, rds, bus, aiStore, llm)
 
 	handler := middleware.MetricsMiddleware(
 		middleware.SecurityHeaders(
 			middleware.CORSMiddleware(cfg.Server.CORSAllowedOrigin)(
 				middleware.LoggingMiddleware(zap.L(),
-					middleware.BodyLimit(1<<20)(mux),
+					middleware.BodyLimit(1<<20, map[string]int64{routes.ImportUploadPath: routes.ImportUploadLimit})(mux),
 				),
 			),
 		),
