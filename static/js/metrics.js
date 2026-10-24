@@ -408,7 +408,7 @@ const AI_STATUS_LABELS = {
   rate_limit: 'rate limit', timeout: 'timeout', truncated: 'cortada', empty: 'vazia',
   parse_error: 'JSON inválido', http_error: 'erro HTTP', network_error: 'rede', error: 'outro',
 };
-const AI_PURPOSE_LABELS = { main: 'Currículo', scrape: 'Scrape' };
+const AI_PURPOSE_LABELS = { main: 'Currículo', scrape: 'Scrape', import: 'Importação' };
 const AI_BUCKET_MS = { '24h': 3600e3, '7d': 6 * 3600e3, '30d': 24 * 3600e3 };
 
 function fmtMs(ms) { return ms ? fmtDur(ms / 1000) : '—'; }
