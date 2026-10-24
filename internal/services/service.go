@@ -62,6 +62,9 @@ type AIInput struct {
 const (
 	scrapeMaxTokens = 4096
 	mainMaxTokens   = 8192
+	// ExtractJSON devolve um JSON grande (currículo inteiro) e modelos que raciocinam
+	// gastam parte do limite pensando: com 8192 a resposta saía cortada.
+	extractMaxTokens = 16384
 )
 
 // buildScrapeBody monta o body da extração de dados da vaga (stack, requisitos, resumo).
@@ -166,11 +169,11 @@ Nota: "Distributed systems knowledge" é conceito — omitido.`
 
 	// OpenAI-compatible (nvidia, groq, openai, etc.)
 	return map[string]any{
-		"model":  scrapeModel,
-		"stream": false,
+		"model":           scrapeModel,
+		"stream":          false,
 		"response_format": map[string]string{"type": "json_object"},
-		"temperature": 0.0,
-		"max_tokens":  scrapeMaxTokens,
+		"temperature":     0.0,
+		"max_tokens":      scrapeMaxTokens,
 		"messages": []map[string]any{
 			{"role": "system", "content": systemPrompt},
 			{"role": "user", "content": userMsg},
@@ -492,8 +495,10 @@ func (ai *AiService) ExtractJSON(ctx context.Context, purpose Purpose, perProvid
 		body := ai.buildBody(AIInput{SystemPrompt: systemPrompt, UserPrompt: userPrompt}, p)
 		if gc, ok := body["generationConfig"].(map[string]any); ok {
 			gc["temperature"] = 0.1
+			gc["maxOutputTokens"] = extractMaxTokens
 		} else {
 			body["temperature"] = 0.1
+			body["max_tokens"] = extractMaxTokens
 		}
 		payload, err := json.Marshal(body)
 		if err != nil {

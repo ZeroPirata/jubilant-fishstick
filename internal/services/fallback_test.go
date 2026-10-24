@@ -382,7 +382,7 @@ func TestClassifyError(t *testing.T) {
 	}
 }
 
-func TestResolveProviders_ImportUsaPrincipalEDepoisScrapeSemRepetir(t *testing.T) {
+func TestResolveProviders_ImportUsaScrapeEDepoisPrincipalSemRepetir(t *testing.T) {
 	a := Provider{Name: "gemini", URL: "u1", Model: "flash"}
 	b := Provider{Name: "openai", URL: "u2", Model: "gemma"}
 	c := Provider{Name: "ollama", URL: "u3", Model: "local"}
@@ -391,7 +391,7 @@ func TestResolveProviders_ImportUsaPrincipalEDepoisScrapeSemRepetir(t *testing.T
 		PurposeScrape: {a, c},
 	})
 	got := svc.resolveProviders(context.Background(), PurposeImport)
-	want := []Provider{a, b, c}
+	want := []Provider{a, c, b}
 	if len(got) != len(want) {
 		t.Fatalf("cadeia = %+v, want %+v", got, want)
 	}
