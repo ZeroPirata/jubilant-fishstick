@@ -3,11 +3,13 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/middleware"
 	"hackton-treino/internal/repository"
 	ucache "hackton-treino/internal/repository/cache"
 	"hackton-treino/internal/repository/users"
+	"hackton-treino/internal/resume"
 	"hackton-treino/internal/util"
 	"net/http"
 
@@ -370,6 +372,88 @@ func (h *UserHandler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
 			errR := h.Users.QueryDeleteSkill(ctx, p.ID.String(), p.UserID.String())
 			if errR == nil {
 				h.invalidate(ctx, p.UserID.String(), ucache.TopicSkills)
+			}
+			return errR
+		},
+	)(w, r)
+}
+
+// Languages
+
+// validLanguage normaliza o idioma (nome conhecido vira código: "Inglês" → "en") e
+// confere o nível; a lista é pequena, então volta inteira, sem paginação.
+func validLanguage(req *languageReq) error {
+	req.Language = resume.LanguageCode(req.Language)
+	if req.Language == "" || len([]rune(req.Language)) > 60 {
+		return errors.New("informe o idioma")
+	}
+	if !resume.ValidLanguageLevel(req.Proficiency) {
+		return errors.New("nível inválido: use basic, intermediate, advanced, fluent ou native")
+	}
+	return nil
+}
+
+func (h *UserHandler) ListLanguages(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, ErrNotAuthorized.Error())
+		return
+	}
+	rows, errR := h.Users.QuerySelectAllLanguages(r.Context(), userID.String())
+	if errR != nil {
+		writeRepositoryError(w, errR)
+		return
+	}
+	if rows == nil {
+		rows = []db.UserLanguage{}
+	}
+	writeJSON(w, http.StatusOK, rows)
+}
+
+func (h *UserHandler) InsertLanguage(w http.ResponseWriter, r *http.Request) {
+	GenericCreate(
+		func(ctx context.Context, userID pgtype.UUID, req languageReq) *repository.RepositoryError {
+			_ = validLanguage(&req) // já validado; aqui só normaliza o nome
+			_, errR := h.Users.QueryInsertLanguage(ctx, db.QueryInsertLanguageParams{
+				UserID: userID, Language: req.Language, Proficiency: req.Proficiency,
+			})
+			if errR == nil {
+				h.invalidate(ctx, userID.String(), ucache.TopicLanguages)
+			}
+			return errR
+		},
+		func(req languageReq) error { return validLanguage(&req) },
+	)(w, r)
+}
+
+func (h *UserHandler) UpdateLanguage(w http.ResponseWriter, r *http.Request) {
+	GenericUpdate(
+		func(userID pgtype.UUID, r *http.Request, req languageReq) (db.QueryUpdateLanguageParams, *repository.RepositoryError) {
+			id, appErr := util.ParseUUID(r.PathValue("id"))
+			_ = validLanguage(&req) // já validado; aqui só normaliza o nome
+			return db.QueryUpdateLanguageParams{ID: id, UserID: userID, Language: req.Language, Proficiency: req.Proficiency}, appErr
+		},
+		func(ctx context.Context, p db.QueryUpdateLanguageParams) *repository.RepositoryError {
+			errR := h.Users.QueryUpdateLanguage(ctx, p)
+			if errR == nil {
+				h.invalidate(ctx, p.UserID.String(), ucache.TopicLanguages)
+			}
+			return errR
+		},
+		func(req languageReq) error { return validLanguage(&req) },
+	)(w, r)
+}
+
+func (h *UserHandler) DeleteLanguage(w http.ResponseWriter, r *http.Request) {
+	GenericDelete(
+		func(userID pgtype.UUID, r *http.Request) (db.QueryDeleteLanguageParams, *repository.RepositoryError) {
+			id, appErr := util.ParseUUID(r.PathValue("id"))
+			return db.QueryDeleteLanguageParams{ID: id, UserID: userID}, appErr
+		},
+		func(ctx context.Context, p db.QueryDeleteLanguageParams) *repository.RepositoryError {
+			errR := h.Users.QueryDeleteLanguage(ctx, p.ID.String(), p.UserID.String())
+			if errR == nil {
+				h.invalidate(ctx, p.UserID.String(), ucache.TopicLanguages)
 			}
 			return errR
 		},

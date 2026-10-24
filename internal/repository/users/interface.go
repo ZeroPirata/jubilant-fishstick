@@ -60,6 +60,12 @@ type Repository interface {
 	QueryInsertCertificate(ctx context.Context, args db.QueryInsertCertificateParams) (db.UserCertificate, *repository.RepositoryError)
 	QueryUpdateCertificate(ctx context.Context, args db.QueryUpdateCertificateParams) *repository.RepositoryError
 	QueryDeleteCertificate(ctx context.Context, id, userID string) *repository.RepositoryError
+
+	// Languages
+	QuerySelectAllLanguages(ctx context.Context, userID string) ([]db.UserLanguage, *repository.RepositoryError)
+	QueryInsertLanguage(ctx context.Context, args db.QueryInsertLanguageParams) (db.UserLanguage, *repository.RepositoryError)
+	QueryUpdateLanguage(ctx context.Context, args db.QueryUpdateLanguageParams) *repository.RepositoryError
+	QueryDeleteLanguage(ctx context.Context, id, userID string) *repository.RepositoryError
 }
 
 func New(conn *pgxpool.Pool) Repository {

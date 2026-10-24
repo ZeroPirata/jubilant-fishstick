@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"hackton-treino/internal/db"
+	"hackton-treino/internal/resume"
 	"hackton-treino/internal/util"
 
 	"github.com/jackc/pgx/v5"
@@ -24,6 +25,7 @@ type ApplyRequest struct {
 	Skills       []Skill       `json:"skills"`
 	Projects     []Project     `json:"projects"`
 	Certificates []Certificate `json:"certificates"`
+	Languages    []Language    `json:"languages"`
 }
 
 type ApplyProfile struct {
@@ -48,6 +50,7 @@ type Summary struct {
 	SkillsUpdated int  `json:"skills_updated"`
 	Projects      int  `json:"projects"`
 	Certificates  int  `json:"certificates"`
+	Languages     int  `json:"languages"`
 }
 
 // ValidationError é um problema no que a pessoa mandou salvar (vira 400 com a mensagem).
@@ -61,8 +64,17 @@ func invalid(format string, args ...any) error {
 
 // Validate confere tudo antes de abrir a transação, para a mensagem apontar o item.
 func (r *ApplyRequest) Validate() error {
-	if len(r.Experiences)+len(r.Academic)+len(r.Projects)+len(r.Certificates) > 4*maxItems || len(r.Skills) > maxSkills {
+	if len(r.Experiences)+len(r.Academic)+len(r.Projects)+len(r.Certificates) > 4*maxItems || len(r.Skills) > maxSkills ||
+		len(r.Languages) > maxListEntries {
 		return invalid("itens demais para importar de uma vez")
+	}
+	for _, l := range r.Languages {
+		if strings.TrimSpace(l.Language) == "" {
+			return invalid("todo idioma precisa de nome")
+		}
+		if !resume.ValidLanguageLevel(l.Proficiency) {
+			return invalid("nível inválido no idioma %q", l.Language)
+		}
 	}
 	for _, e := range r.Experiences {
 		name := e.JobRole + " em " + e.CompanyName
@@ -264,6 +276,39 @@ func Apply(ctx context.Context, q *db.Queries, userID pgtype.UUID, r ApplyReques
 		}
 		sum.Certificates++
 	}
+
+	// Idioma que já está no perfil só tem o nível atualizado.
+	if len(r.Languages) > 0 {
+		existing, err := q.QuerySelectAllLanguages(ctx, userID)
+		if err != nil {
+			return sum, err
+		}
+		byCode := make(map[string]db.UserLanguage, len(existing))
+		for _, l := range existing {
+			byCode[strings.ToLower(l.Language)] = l
+		}
+		done := map[string]bool{}
+		for _, l := range r.Languages {
+			code := resume.LanguageCode(clip(l.Language, 60))
+			k := strings.ToLower(code)
+			if done[k] {
+				continue
+			}
+			done[k] = true
+			if cur, ok := byCode[k]; ok {
+				if cur.Proficiency == l.Proficiency {
+					continue
+				}
+				err = q.QueryUpdateLanguage(ctx, db.QueryUpdateLanguageParams{ID: cur.ID, UserID: userID, Language: cur.Language, Proficiency: l.Proficiency})
+			} else {
+				_, err = q.QueryInsertLanguage(ctx, db.QueryInsertLanguageParams{UserID: userID, Language: code, Proficiency: l.Proficiency})
+			}
+			if err != nil {
+				return sum, err
+			}
+			sum.Languages++
+		}
+	}
 	return sum, nil
 }
 
@@ -288,6 +333,7 @@ type Existing struct {
 	Skills       []db.UserSkill
 	Projects     []db.UserProject
 	Certificates []db.UserCertificate
+	Languages    []db.UserLanguage
 }
 
 // MarkExisting marca os itens do rascunho que já estão no perfil (a tela de conferência
@@ -347,5 +393,13 @@ func (d *Draft) MarkExisting(ex Existing, aliases map[string]string) {
 	}
 	for i, c := range d.Certificates {
 		d.Certificates[i].Exists = certs[key(c.CertificateName)]
+	}
+
+	langs := map[string]string{}
+	for _, l := range ex.Languages {
+		langs[strings.ToLower(l.Language)] = l.Proficiency
+	}
+	for i, l := range d.Languages {
+		d.Languages[i].ExistingLevel = langs[strings.ToLower(l.Language)]
 	}
 }

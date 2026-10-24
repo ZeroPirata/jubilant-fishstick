@@ -175,3 +175,22 @@ func TestDecode_RejeitaJSONVazio(t *testing.T) {
 		t.Errorf("JSON com nome deveria passar: %v", err)
 	}
 }
+
+func TestNormalize_IdiomasCodigoNivelEDuplicados(t *testing.T) {
+	d := Draft{Profile: Profile{FullName: "X"}, Languages: []Language{
+		{Language: "Inglês", Proficiency: "advanced"},
+		{Language: "English", Proficiency: "fluent"}, // mesmo idioma: fica o primeiro
+		{Language: "Espanhol", Proficiency: "conversação"},
+		{Language: " ", Proficiency: "basic"},
+	}}
+	d.Normalize(time.Now(), nil)
+	if len(d.Languages) != 2 {
+		t.Fatalf("idiomas = %+v", d.Languages)
+	}
+	if d.Languages[0] != (Language{Language: "en", Proficiency: "advanced"}) {
+		t.Errorf("0 = %+v", d.Languages[0])
+	}
+	if d.Languages[1] != (Language{Language: "es", Proficiency: "intermediate"}) {
+		t.Errorf("nível desconhecido vira intermediate: %+v", d.Languages[1])
+	}
+}

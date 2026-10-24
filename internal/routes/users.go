@@ -31,6 +31,11 @@ func setupUserRoutes(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, r
 	mux.HandleFunc("PUT /users/me/skills/{id}", h.UpdateSkill)
 	mux.HandleFunc("DELETE /users/me/skills/{id}", h.DeleteSkill)
 
+	mux.HandleFunc("GET /users/me/languages", h.ListLanguages)
+	mux.HandleFunc("POST /users/me/languages", h.InsertLanguage)
+	mux.HandleFunc("PUT /users/me/languages/{id}", h.UpdateLanguage)
+	mux.HandleFunc("DELETE /users/me/languages/{id}", h.DeleteLanguage)
+
 	mux.HandleFunc("GET /users/me/projects", h.ListProjects)
 	mux.HandleFunc("POST /users/me/projects", h.InsertProject)
 	mux.HandleFunc("PUT /users/me/projects/{id}", h.UpdateProject)

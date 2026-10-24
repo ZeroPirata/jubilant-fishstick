@@ -75,6 +75,11 @@ func (w *Worker) buildSource(job *db.Job, match *services.MatchResult, profile d
 		}
 		src.Certifications = append(src.Certifications, cert)
 	}
+	for _, l := range match.Idiomas {
+		src.Languages = append(src.Languages, resume.Language{
+			Name: resume.LanguageName(l.Language, lang), Level: resume.LanguageLevelName(l.Proficiency, lang),
+		})
+	}
 	return src
 }
 

@@ -2,6 +2,7 @@ package profileimport
 
 import (
 	"fmt"
+	"hackton-treino/internal/resume"
 	"regexp"
 	"sort"
 	"strconv"
@@ -21,6 +22,7 @@ type Draft struct {
 	Skills       []Skill       `json:"skills"`
 	Projects     []Project     `json:"projects"`
 	Certificates []Certificate `json:"certificates"`
+	Languages    []Language    `json:"languages"`
 }
 
 type Profile struct {
@@ -88,6 +90,13 @@ type Certificate struct {
 	IssueDate           string `json:"issue_date"`
 	CredentialURL       string `json:"credential_url"`
 	Exists              bool   `json:"exists,omitempty"`
+}
+
+// Language: idioma pelo código quando conhecido ("en"), ou o nome escrito.
+type Language struct {
+	Language      string `json:"language"`
+	Proficiency   string `json:"proficiency"`
+	ExistingLevel string `json:"existing_level,omitempty"` // nível que já está no perfil
 }
 
 var validLevels = map[string]bool{"basic": true, "intermediate": true, "advanced": true, "expert": true}
@@ -180,6 +189,22 @@ func (d *Draft) Normalize(now time.Time, aliases map[string]string) {
 		certs = append(certs, c)
 	}
 	d.Certificates = capSlice(certs, maxItems)
+
+	langs := make([]Language, 0, len(d.Languages))
+	seenLang := map[string]bool{}
+	for _, l := range d.Languages {
+		l.Language = resume.LanguageCode(clip(l.Language, 60))
+		if l.Language == "" || seenLang[strings.ToLower(l.Language)] {
+			continue
+		}
+		seenLang[strings.ToLower(l.Language)] = true
+		if !resume.ValidLanguageLevel(l.Proficiency) {
+			l.Proficiency = "intermediate"
+		}
+		l.ExistingLevel = ""
+		langs = append(langs, l)
+	}
+	d.Languages = capSlice(langs, maxListEntries)
 
 	// "Go" e "Golang" no mesmo cargo viram um só.
 	for i := range d.Experiences {

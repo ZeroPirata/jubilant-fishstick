@@ -1199,3 +1199,14 @@ nav button.nav-ready::after { background: var(--green); box-shadow: 0 0 0 0 rgba
 .bulk-url-row input { flex: 1; min-width: 0; }
 .bulk-url-row .btn { flex-shrink: 0; white-space: nowrap; }
 .bulk-note { margin: -4px 0 14px; }
+
+/* idiomas (perfil e importação) */
+.imp-levels .lvl-fluent.on { background: rgba(52,211,153,.14); color: var(--green); }
+.imp-levels .lvl-native.on { background: rgba(255,178,36,.16); color: var(--accent); }
+.imp-lang-name { font-weight: 600; font-size: 13.5px; color: var(--text); padding: 4px 0; }
+.imp-skill-add select { width: auto; flex: 1; max-width: 240px; }
+.lang-level { font: 500 11.5px var(--font-mono); padding: 2px 8px; border-radius: 4px; background: rgba(148,163,184,.12); color: var(--text-2); }
+.lang-intermediate { background: rgba(56,189,248,.12); color: var(--blue); }
+.lang-advanced { background: rgba(167,139,250,.14); color: var(--purple); }
+.lang-fluent { background: rgba(52,211,153,.12); color: var(--green); }
+.lang-native { background: var(--accent-soft); color: var(--accent); }

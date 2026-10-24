@@ -182,7 +182,8 @@ func (s *Service) run(ctx context.Context, cancel context.CancelFunc, userID, id
 	}
 	if draft != nil && err == nil {
 		counts = &importlog.Counts{Experiences: len(draft.Experiences), Academic: len(draft.Academic),
-			Skills: len(draft.Skills), Projects: len(draft.Projects), Certificates: len(draft.Certificates)}
+			Skills: len(draft.Skills), Projects: len(draft.Projects), Certificates: len(draft.Certificates),
+			Languages: len(draft.Languages)}
 	}
 	s.history("resultado", func(ctx context.Context, l *importlog.Repository) error {
 		return l.Finish(ctx, id, final.Status, adminErr, counts)
@@ -216,13 +217,14 @@ func (s *Service) read(ctx context.Context, userID, text string) (*Draft, error)
 	// O que já está no perfil: sem isso, confirmar tudo duplicaria as experiências.
 	var (
 		ex   Existing
-		errs [5]*repository.RepositoryError
+		errs [6]*repository.RepositoryError
 	)
 	ex.Experiences, errs[0] = s.Users.QuerySelectAllExperiences(ctx, userID)
 	ex.Academic, errs[1] = s.Users.QuerySelectAllAcademicHistories(ctx, userID)
 	ex.Skills, errs[2] = s.Users.QuerySelectAllSkills(ctx, userID)
 	ex.Projects, errs[3] = s.Users.QuerySelectAllProjects(ctx, userID)
 	ex.Certificates, errs[4] = s.Users.QuerySelectAllCertificates(ctx, userID)
+	ex.Languages, errs[5] = s.Users.QuerySelectAllLanguages(ctx, userID)
 	for _, e := range errs {
 		if e != nil {
 			return nil, errors.New("carregar o perfil atual: " + e.Message)

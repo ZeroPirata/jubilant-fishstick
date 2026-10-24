@@ -68,6 +68,7 @@ func Assemble(src Source, out LLMOutput) (Doc, []string) {
 		Summary:        strings.TrimSpace(out.Resumo),
 		Education:      src.Education,
 		Certifications: src.Certifications,
+		Languages:      src.Languages,
 	}
 
 	bulletsByID := map[int][]string{}

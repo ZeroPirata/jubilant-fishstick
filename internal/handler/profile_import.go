@@ -124,7 +124,7 @@ func (h *ProfileImportHandler) Apply(w http.ResponseWriter, r *http.Request) {
 
 	uid := userID.String()
 	for _, topic := range []string{ucache.TopicProfile, ucache.TopicExperiences, ucache.TopicAcademic,
-		ucache.TopicSkills, ucache.TopicProjects, ucache.TopicCertificates} {
+		ucache.TopicSkills, ucache.TopicProjects, ucache.TopicCertificates, ucache.TopicLanguages} {
 		if err := h.Cache.Delete(r.Context(), uid, topic); err != nil {
 			h.Logger.Warn("cache: falha ao invalidar", zap.String("topic", topic), zap.Error(err))
 		}

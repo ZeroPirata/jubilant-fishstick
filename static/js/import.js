@@ -360,6 +360,7 @@ async function impRenderReview() {
     ${impFieldsBlock('profile', 'Info básica', profileRows)}
     ${impFieldsBlock('links', 'Links', linkRows)}
     ${impSkillsBlock(d.skills)}
+    ${impLanguagesBlock(d.languages || [])}
     ${impListBlock('experiences', 'Experiências', d.experiences, impExperienceItem)}
     ${impListBlock('academic', 'Formação', d.academic, impAcademicItem)}
     ${impListBlock('projects', 'Projetos', d.projects, impProjectItem)}
@@ -446,6 +447,47 @@ function impSkillRow(s) {
         ${IMP_LEVELS.map(([v, l]) => `<button type="button" role="radio" aria-checked="${v === level}" class="lvl-${v} ${v === level ? 'on' : ''}" onclick="impSetLevel(this,'${v}')">${l}</button>`).join('')}
       </div>
     </div>`;
+}
+
+// Idiomas: mesma linha das habilidades (marcar, nome, nível em botões), com os 5 níveis padrão.
+function impLanguagesBlock(langs) {
+  return `
+    <div class="form-card imp-block imp-skills" data-sec="languages">
+      <div class="imp-block-head"><h4>Idiomas <span class="imp-count" data-count="languages"></span></h4></div>
+      <p class="card-note">${langs.length ? 'Confira o nível de cada idioma.' : 'Nenhum idioma encontrado no currículo. Adicione os que você fala: eles aparecem no currículo gerado.'}</p>
+      <div class="imp-skill-list" id="imp-lang-list">${langs.map(impLanguageRow).join('')}</div>
+      <div class="imp-skill-add">
+        <select id="imp-lang-new" aria-label="Idioma para adicionar">
+          ${LANGUAGES.map(([c, n]) => `<option value="${c}">${n}</option>`).join('')}
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="impAddLanguage()">+ Adicionar idioma</button>
+      </div>
+    </div>`;
+}
+
+function impLanguageRow(l) {
+  const exists = !!l.existing_level;
+  const level = l.proficiency;
+  return `
+    <div class="imp-skill imp-lang" data-item data-level="${level}" data-exists="${exists ? 1 : ''}" data-orig="${exists ? l.existing_level : ''}" data-lang="${escStr(l.language)}">
+      <input type="checkbox" class="imp-skill-check" ${exists && l.existing_level === level ? '' : 'checked'} aria-label="Incluir ${escStr(languageName(l.language))}" />
+      <div class="imp-skill-main">
+        <div class="imp-lang-name">${escStr(languageName(l.language))}</div>
+        <div class="imp-skill-hint">${l.added ? 'adicionado por você' : 'encontrado no currículo'}${exists ? ` <span class="imp-tag">no perfil: ${languageLevel(l.existing_level)}</span>` : ''}</div>
+      </div>
+      <div class="imp-levels imp-levels-5" role="radiogroup" aria-label="Nível">
+        ${LANGUAGE_LEVELS.map(([v, t]) => `<button type="button" role="radio" aria-checked="${v === level}" class="lvl-${v} ${v === level ? 'on' : ''}" onclick="impSetLevel(this,'${v}')">${t}</button>`).join('')}
+      </div>
+    </div>`;
+}
+
+function impAddLanguage() {
+  const code = document.getElementById('imp-lang-new').value;
+  const list = document.getElementById('imp-lang-list');
+  if (list.querySelector(`[data-lang="${code}"]`)) { toast(`${languageName(code)} já está na lista.`, 'error'); return; }
+  list.insertAdjacentHTML('beforeend', impLanguageRow({ language: code, proficiency: 'intermediate', added: true }));
+  list.closest('.imp-block').querySelector('.card-note').textContent = 'Confira o nível de cada idioma.';
+  impUpdateSummary();
 }
 
 function impSetLevel(btn, level) {
@@ -598,7 +640,7 @@ const impIsChecked = el => el.querySelector('.imp-item-head > input[type=checkbo
 
 function impCollect() {
   const root = document.getElementById('imp-review');
-  const req = { import_id: _imp.id, experiences: [], academic: [], skills: [], projects: [], certificates: [] };
+  const req = { import_id: _imp.id, experiences: [], academic: [], skills: [], projects: [], certificates: [], languages: [] };
 
   for (const sec of ['profile', 'links']) {
     const obj = {};
@@ -616,6 +658,9 @@ function impCollect() {
     if (!impIsChecked(el)) return;
     req.skills.push({ skill_name: el.querySelector('[data-f=skill_name]').value.trim(), proficiency_level: el.dataset.level });
   });
+  root.querySelectorAll('[data-sec="languages"] [data-item]').forEach(el => {
+    if (impIsChecked(el)) req.languages.push({ language: el.dataset.lang, proficiency: el.dataset.level });
+  });
   return req;
 }
 
@@ -623,7 +668,7 @@ function impUpdateSummary() {
   const root = document.getElementById('imp-review');
   if (!root || root.classList.contains('hidden')) return;
   const parts = [];
-  const names = { experiences: ['experiência', 'experiências'], academic: ['formação', 'formações'], skills: ['habilidade', 'habilidades'], projects: ['projeto', 'projetos'], certificates: ['certificado', 'certificados'] };
+  const names = { experiences: ['experiência', 'experiências'], academic: ['formação', 'formações'], skills: ['habilidade', 'habilidades'], projects: ['projeto', 'projetos'], certificates: ['certificado', 'certificados'], languages: ['idioma', 'idiomas'] };
   for (const sec of Object.keys(names)) {
     const all = root.querySelectorAll(`[data-sec="${sec}"] [data-item]`);
     const on = [...all].filter(impIsChecked).length;
@@ -681,6 +726,7 @@ async function impApply() {
       s.experiences && `${s.experiences} experiência(s)`, s.academic && `${s.academic} formação(ões)`,
       s.skills_added && `${s.skills_added} habilidade(s) nova(s)`, s.skills_updated && `${s.skills_updated} nível(is) atualizado(s)`,
       s.projects && `${s.projects} projeto(s)`, s.certificates && `${s.certificates} certificado(s)`,
+      s.languages && `${s.languages} idioma(s)`,
     ].filter(Boolean);
     impForget();
     impEndWelcome();

@@ -17,6 +17,7 @@ type MatchResult struct {
 	Projetos      []db.UserProject
 	Formacoes     []db.UserAcademicHistory
 	Certificacoes []db.UserCertificate
+	Idiomas       []db.UserLanguage
 	Excelentes    [][]byte
 	Feedbacks     []string
 }

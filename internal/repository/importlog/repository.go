@@ -26,6 +26,7 @@ type Counts struct {
 	Skills       int `json:"skills"`
 	Projects     int `json:"projects"`
 	Certificates int `json:"certificates"`
+	Languages    int `json:"languages"`
 }
 
 type Entry struct {

@@ -630,6 +630,7 @@
         <button                data-perf="skills"       onclick="showPerfilTab('skills',this)">Habilidades</button>
         <button                data-perf="projects"     onclick="showPerfilTab('projects',this)">Projetos</button>
         <button                data-perf="certificates" onclick="showPerfilTab('certificates',this)">Certificados</button>
+        <button                data-perf="languages"    onclick="showPerfilTab('languages',this)">Idiomas</button>
       </div>
 
       <!-- Importar currículo: envio → leitura pela IA → conferência → salvar -->
@@ -822,6 +823,32 @@
           <table class="table-cards">
             <thead><tr><th>Nome</th><th>Nível</th><th>Tags</th><th></th></tr></thead>
             <tbody id="skills-body"><tr><td colspan="5" class="empty">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Idiomas -->
+      <div id="perf-languages" class="sub-section">
+        <div class="form-card" style="margin-bottom:20px;max-width:420px">
+          <h2 id="lg-title">Novo idioma</h2>
+          <div class="field">
+            <label for="lg-lang">Idioma *</label>
+            <select id="lg-lang" onchange="document.getElementById('lg-other-wrap').classList.toggle('hidden', this.value !== '_other')"></select>
+          </div>
+          <div class="field hidden" id="lg-other-wrap"><label for="lg-other">Qual idioma? *</label><input type="text" id="lg-other" maxlength="60" /></div>
+          <div class="field">
+            <label for="lg-level">Nível * <span class="tip" data-tooltip="Básico: frases simples. Intermediário: conversa do dia a dia. Avançado: trabalha no idioma com algum esforço. Fluente: trabalha no idioma com naturalidade. Nativo: língua materna ou bilíngue.">ⓘ</span></label>
+            <select id="lg-level"></select>
+          </div>
+          <div class="form-actions">
+            <button id="lg-submit-btn" class="btn btn-primary" onclick="saveLanguage()">Adicionar</button>
+            <button id="lg-cancel" class="btn btn-ghost hidden" onclick="cancelEditLanguage()">Cancelar</button>
+          </div>
+        </div>
+        <div class="table-wrap" style="max-width:560px">
+          <table class="table-cards">
+            <thead><tr><th>Idioma</th><th>Nível</th><th></th></tr></thead>
+            <tbody id="languages-body"><tr><td colspan="3" class="empty">Carregando...</td></tr></tbody>
           </table>
         </div>
       </div>

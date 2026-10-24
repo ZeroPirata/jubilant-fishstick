@@ -94,7 +94,7 @@ function toggleImportDetail(tr) {
   const it = _imports.find(x => x.id === tr.dataset.id);
   if (!it) return;
   const r = it.result;
-  const found = r ? `${r.experiences} experiências · ${r.academic} formações · ${r.skills} habilidades · ${r.projects} projetos · ${r.certificates} certificados` : '—';
+  const found = r ? `${r.experiences} experiências · ${r.academic} formações · ${r.skills} habilidades · ${r.projects} projetos · ${r.certificates} certificados · ${r.languages || 0} idiomas` : '—';
   const attempts = it.attempts.length ? it.attempts.map((a, i) => `
     <div class="imp-att-row">
       <span class="imp-att-n">${i + 1}º</span>

@@ -126,6 +126,11 @@ type skillReq struct {
 	Tags             []string `json:"tags"`
 }
 
+type languageReq struct {
+	Language    string `json:"language"`
+	Proficiency string `json:"proficiency"`
+}
+
 type projectReq struct {
 	ProjectName string   `json:"project_name"`
 	Description string   `json:"description"`
