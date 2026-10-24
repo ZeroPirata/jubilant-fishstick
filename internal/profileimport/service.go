@@ -216,6 +216,7 @@ func (s *Service) read(ctx context.Context, userID, text string) (*Draft, error)
 	}
 	aliasMap := s.LoadAliases(ctx)
 	draft.Normalize(time.Now(), aliasMap)
+	draft.MergeLanguages(LanguagesFromText(text))
 
 	// O que já está no perfil: sem isso, confirmar tudo duplicaria as experiências.
 	var (

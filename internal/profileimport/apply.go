@@ -93,8 +93,9 @@ func (r *ApplyRequest) Validate() error {
 		if strings.TrimSpace(a.InstitutionName) == "" || strings.TrimSpace(a.CourseName) == "" {
 			return invalid("toda formação precisa de instituição e curso")
 		}
-		if NormMonth(a.StartDate) == "" {
-			return invalid("formação %q: informe o mês de início", a.CourseName)
+		// Início é opcional (currículo costuma trazer só a conclusão).
+		if s, e := NormMonth(a.StartDate), NormMonth(a.EndDate); s != "" && e != "" && e < s {
+			return invalid("formação %q: a conclusão é antes do início", a.CourseName)
 		}
 	}
 	for _, s := range r.Skills {

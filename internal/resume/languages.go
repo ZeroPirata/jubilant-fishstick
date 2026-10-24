@@ -92,3 +92,9 @@ func LanguageLevelName(level, lang string) string {
 	}
 	return n.pt
 }
+
+// IsKnownLanguage diz se o código é de um idioma da lista (en, es, ...).
+func IsKnownLanguage(code string) bool {
+	_, ok := knownLanguages[code]
+	return ok
+}

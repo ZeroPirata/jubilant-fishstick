@@ -194,3 +194,34 @@ func TestNormalize_IdiomasCodigoNivelEDuplicados(t *testing.T) {
 		t.Errorf("nível desconhecido vira intermediate: %+v", d.Languages[1])
 	}
 }
+
+func TestLanguagesFromText_LinhaDentroDeHabilidades(t *testing.T) {
+	text := "HABILIDADES\nFrameworks: React, Next.js\nIdiomas: Português (Nativo), Inglês (C1 - Avançado), Japonês (Básico).\nInglês é usado no dia a dia." +
+		"\nSpanish – B1\nFrench: fluent"
+	got := LanguagesFromText(text)
+	want := []Language{{"pt", "native", ""}, {"en", "advanced", ""}, {"ja", "basic", ""}, {"es", "intermediate", ""}, {"fr", "fluent", ""}}
+	if len(got) != len(want) {
+		t.Fatalf("got %+v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("%d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestMergeLanguages_SoAcrescentaOQueFaltou(t *testing.T) {
+	d := Draft{Languages: []Language{{Language: "en", Proficiency: "fluent"}}}
+	d.MergeLanguages([]Language{{Language: "en", Proficiency: "basic"}, {Language: "ja", Proficiency: "basic"}})
+	if len(d.Languages) != 2 || d.Languages[0].Proficiency != "fluent" || d.Languages[1].Language != "ja" {
+		t.Errorf("idiomas = %+v", d.Languages)
+	}
+}
+
+func TestNormalize_IdiomaNaoEntraComoHabilidade(t *testing.T) {
+	d := Draft{Profile: Profile{FullName: "X"}, Skills: []Skill{{SkillName: "Inglês"}, {SkillName: "Go"}, {SkillName: "English"}}}
+	d.Normalize(time.Now(), nil)
+	if len(d.Skills) != 1 || d.Skills[0].SkillName != "Go" {
+		t.Errorf("skills = %+v", d.Skills)
+	}
+}

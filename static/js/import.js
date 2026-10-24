@@ -583,13 +583,13 @@ function impExperienceItem(e) {
 function impAcademicItem(a) {
   return impItem({
     title: `${escStr(a.course_name)} <span class="imp-at">·</span> ${escStr(a.institution_name)}`,
-    meta: impPeriod(a.start_date, a.end_date, false).replace('– ?', '– em andamento'),
+    meta: !a.start_date && a.end_date ? `conclusão ${impMonth(a.end_date)}` : impPeriod(a.start_date, a.end_date, false).replace('– ?', '– em andamento'),
     exists: a.exists,
-    missing: !a.start_date ? 'falta a data de início' : '',
+    missing: '',
     body: `
       ${impInput('institution_name', 'Instituição', a.institution_name, { req: 1 })}
       ${impInput('course_name', 'Curso', a.course_name, { req: 1 })}
-      <div class="field-row">${impInput('start_date', 'Início', a.start_date, { type: 'month', req: 1 })}${impInput('end_date', 'Fim', a.end_date, { type: 'month' })}</div>`,
+      <div class="field-row">${impInput('start_date', 'Início (opcional)', a.start_date, { type: 'month' })}${impInput('end_date', 'Conclusão', a.end_date, { type: 'month' })}</div>`,
   });
 }
 

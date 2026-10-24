@@ -259,7 +259,7 @@ func (h *UserHandler) InsertAcademic(w http.ResponseWriter, r *http.Request) {
 			}
 			return errR
 		},
-		TypedValidate(TypedRequired[academicReq]("institution_name", "course_name", "start_date")),
+		TypedValidate(TypedRequired[academicReq]("institution_name", "course_name")),
 	)(w, r)
 }
 
@@ -284,7 +284,7 @@ func (h *UserHandler) UpdateAcademic(w http.ResponseWriter, r *http.Request) {
 			}
 			return errR
 		},
-		TypedValidate(TypedRequired[academicReq]("institution_name", "course_name", "start_date")),
+		TypedValidate(TypedRequired[academicReq]("institution_name", "course_name")),
 	)(w, r)
 }
 

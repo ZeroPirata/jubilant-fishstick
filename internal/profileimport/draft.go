@@ -229,8 +229,8 @@ func (d *Draft) normalizeSkills(now time.Time, aliases map[string]string) {
 	add := func(s Skill) {
 		s.SkillName = clip(s.SkillName, 80)
 		key := CanonKey(s.SkillName, aliases)
-		if key == "" {
-			return
+		if key == "" || resume.IsKnownLanguage(resume.LanguageCode(s.SkillName)) {
+			return // idioma não é habilidade técnica (vai em languages)
 		}
 		lvl := strings.ToLower(strings.TrimSpace(s.ProficiencyLevel))
 		if i, ok := seen[key]; ok {

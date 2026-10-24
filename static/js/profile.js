@@ -266,7 +266,7 @@ async function loadAcademic() {
       <tr>
         <td data-label="Instituição">${escStr(a.institution_name)}</td>
         <td data-label="Curso">${escStr(a.course_name)}</td>
-        <td style="color:var(--muted)" data-label="Período">${d2m(a.start_date)} → ${d2m(a.end_date)}</td>
+        <td style="color:var(--muted)" data-label="Período">${a.start_date ? `${d2m(a.start_date)} → ${d2m(a.end_date)}` : `conclusão ${d2m(a.end_date) || '—'}`}</td>
         <td>
           <button class="btn-edit" onclick="editAcademic('${a.id}')">✎</button>
           <button class="btn-delete" onclick="deleteAcademic('${a.id}',this)">✕</button>
@@ -303,8 +303,8 @@ async function addAcademic() {
     start_date:       m2d(document.getElementById('ac-inicio').value.trim()),
     end_date:         m2d(document.getElementById('ac-fim').value.trim()),
   };
-  if (!body.institution_name || !body.course_name || !body.start_date) {
-    toast('Instituição, curso e data início são obrigatórios.', 'error'); return;
+  if (!body.institution_name || !body.course_name) {
+    toast('Instituição e curso são obrigatórios.', 'error'); return;
   }
   try {
     const res = _editingAcId
