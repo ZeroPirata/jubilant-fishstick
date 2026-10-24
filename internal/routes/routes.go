@@ -91,7 +91,7 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	master := middleware.MasterMiddleware(adminR)
 	aiH := handler.NewAISettingsHandler(logger, aiStore, ucache.New(rds), adminR, cfg)
 	adminMux.Handle("GET /ai-settings",             master(http.HandlerFunc(aiH.Get)))
-	adminMux.Handle("PUT /ai-settings/{purpose}",   master(http.HandlerFunc(aiH.Save)))
+	adminMux.Handle("PUT /ai-settings",             master(http.HandlerFunc(aiH.Save)))
 	adminMux.Handle("POST /ai-settings/resume",     master(http.HandlerFunc(aiH.ResumeWorker)))
 	adminMux.Handle("PATCH /users/{id}/master",     master(http.HandlerFunc(aiH.SetMaster)))
 	adminHandler := middleware.AdminMiddleware(adminR)(adminMux)

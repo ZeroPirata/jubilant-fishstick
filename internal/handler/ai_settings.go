@@ -57,12 +57,8 @@ func (h *AISettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Save troca as duas cadeias de uma vez: no painel uma IA pode estar na principal e no scrape.
 func (h *AISettingsHandler) Save(w http.ResponseWriter, r *http.Request) {
-	purpose, ok := aiconfig.ParsePurpose(r.PathValue("purpose"))
-	if !ok {
-		writeError(w, http.StatusBadRequest, "purpose deve ser main ou scrape")
-		return
-	}
 	userID, ok := middleware.GetUserID(r.Context())
 	if !ok {
 		writeError(w, http.StatusUnauthorized, ErrNotAuthorized.Error())
@@ -70,20 +66,22 @@ func (h *AISettingsHandler) Save(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Providers []aiconfig.Input `json:"providers"`
+		Main   *[]aiconfig.Input `json:"main"`
+		Scrape *[]aiconfig.Input `json:"scrape"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Main == nil || body.Scrape == nil {
 		writeError(w, http.StatusBadRequest, ErrInvalidRequestBody.Error())
 		return
 	}
 
-	if err := h.Store.Save(r.Context(), purpose, body.Providers, userID.String()); err != nil {
+	chains := map[services.Purpose][]aiconfig.Input{services.PurposeMain: *body.Main, services.PurposeScrape: *body.Scrape}
+	if err := h.Store.SaveAll(r.Context(), chains, userID.String()); err != nil {
 		var verr *aiconfig.ValidationError
 		if errors.As(err, &verr) {
 			writeError(w, http.StatusBadRequest, verr.Msg)
 			return
 		}
-		h.Logger.Error("ai-settings: erro ao salvar", zap.String("purpose", string(purpose)), zap.Error(err))
+		h.Logger.Error("ai-settings: erro ao salvar", zap.Error(err))
 		writeError(w, http.StatusInternalServerError, ErrInternalServerError.Error())
 		return
 	}
@@ -93,18 +91,12 @@ func (h *AISettingsHandler) Save(w http.ResponseWriter, r *http.Request) {
 		h.Logger.Warn("ai-settings: não foi possível limpar a pausa do worker", zap.Error(err))
 	}
 
-	h.Logger.Info("ai-settings: cadeia atualizada",
-		zap.String("purpose", string(purpose)),
-		zap.Int("providers", len(body.Providers)),
+	h.Logger.Info("ai-settings: cadeias atualizadas",
+		zap.Int("main", len(*body.Main)),
+		zap.Int("scrape", len(*body.Scrape)),
 		zap.String("user_id", userID.String()),
 	)
-
-	chain, err := h.Store.List(r.Context(), purpose)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, ErrInternalServerError.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, chain)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // ResumeWorker tira o worker da pausa de rate limit sem mudar a configuração

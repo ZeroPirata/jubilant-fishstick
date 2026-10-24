@@ -975,27 +975,19 @@
       <div id="admin-ai" class="hidden">
         <div id="ai-status" style="margin-bottom:14px"></div>
 
-        <div class="grid-2 ai-chains">
-        <div class="form-card">
-          <p class="card-eyebrow">IA de Scrape · extração da vaga e do currículo importado</p>
-          <p class="card-note">Tenta na ordem da lista; só passa para o próximo se o anterior falhar. <span id="ai-env-scrape"></span></p>
-          <div id="ai-chain-scrape"></div>
-          <div class="list-controls">
-            <button class="btn btn-ghost" onclick="aiAdd('scrape')">+ Adicionar provider</button>
-            <button class="btn btn-primary" style="margin-left:auto" onclick="aiSave('scrape')">Salvar scrape</button>
+        <div class="form-card ai-panel">
+          <div class="ai-top">
+            <div class="sub-nav ai-views" id="ai-views" style="margin:0"></div>
+            <div class="ai-top-actions">
+              <span class="ai-dirty-note hidden" id="ai-dirty-note">alterações não salvas</span>
+              <button class="btn btn-ghost btn-sm hidden" id="ai-discard" onclick="aiDiscard()">Descartar</button>
+              <button class="btn btn-primary btn-sm hidden" id="ai-save" onclick="aiSave()">Salvar alterações</button>
+              <button class="btn btn-ghost btn-sm" onclick="aiAdd()">+ Nova IA</button>
+            </div>
           </div>
+          <p class="card-note ai-view-note" id="ai-view-note"></p>
+          <div class="ai-list" id="ai-list"></div>
         </div>
-
-        <div class="form-card">
-          <p class="card-eyebrow">IA Principal · geração do currículo</p>
-          <p class="card-note">Tenta na ordem da lista; só passa para o próximo se o anterior falhar. <span id="ai-env-main"></span></p>
-          <div id="ai-chain-main"></div>
-          <div class="list-controls">
-            <button class="btn btn-ghost" onclick="aiAdd('main')">+ Adicionar provider</button>
-            <button class="btn btn-primary" style="margin-left:auto" onclick="aiSave('main')">Salvar principal</button>
-          </div>
-        </div>
-        </div><!-- /ai-chains -->
       </div>
     </section>
 
