@@ -163,6 +163,7 @@ func NewService(conn *pgxpool.Pool, logger *zap.Logger) *Service {
 		Sources: []Source{
 			NewGupy(), NewProgramaThor(), NewGitHubVagas(),
 			NewGreenhouse(), NewLever(), NewHimalayas(),
+			NewAshby(), NewWorkable(), NewSmartRecruiters(), NewRecruitee(),
 		},
 		Logger:      logger,
 		wake:        make(chan struct{}, 1),

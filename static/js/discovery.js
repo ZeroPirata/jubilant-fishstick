@@ -11,7 +11,8 @@ let _discLoadSeq = 0;
 const _discWorkplace = { remote: 'Remoto', hybrid: 'Híbrido', onsite: 'Presencial' };
 const _discSourceNames = {
   gupy: 'Gupy', programathor: 'ProgramaThor', github: 'GitHub', greenhouse: 'Greenhouse',
-  lever: 'Lever', himalayas: 'Himalayas', linkedin: 'LinkedIn', catho: 'Catho',
+  lever: 'Lever', himalayas: 'Himalayas', ashby: 'Ashby', workable: 'Workable',
+  smartrecruiters: 'SmartRecruiters', recruitee: 'Recruitee', linkedin: 'LinkedIn', catho: 'Catho',
 };
 
 // Níveis na ordem da API; o filtro de nível é salvo nas preferências, como o local.

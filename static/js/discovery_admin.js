@@ -213,10 +213,10 @@ async function dadmFindBoards() {
 
 function renderDadmFound() {
   const box = document.getElementById('dadm-board-found');
-  if (_dadm.found === 'searching') { box.innerHTML = '<p class="disc-status">Procurando no Greenhouse e na Lever…</p>'; return; }
+  if (_dadm.found === 'searching') { box.innerHTML = '<p class="disc-status">Procurando nos ATS (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Recruitee)…</p>'; return; }
   if (!_dadm.foundQuery) { box.innerHTML = ''; return; }
   if (!_dadm.found.length) {
-    box.innerHTML = `<p class="card-note dadm-found-empty">Não achei “${escDisc(_dadm.foundQuery)}” no Greenhouse nem na Lever. A empresa pode usar outro sistema de vagas, ou o identificador é diferente do nome: abra a página de vagas dela e, se o link for de <code>greenhouse.io</code> ou <code>lever.co</code>, cole o link aqui.</p>`;
+    box.innerHTML = `<p class="card-note dadm-found-empty">Não achei “${escDisc(_dadm.foundQuery)}” em nenhum dos ATS. A empresa pode usar outro sistema de vagas, ou o identificador é diferente do nome: abra a página de vagas dela e, se o link for de <code>greenhouse.io</code>, <code>lever.co</code>, <code>ashbyhq.com</code>, <code>workable.com</code>, <code>smartrecruiters.com</code> ou <code>recruitee.com</code>, cole o link aqui.</p>`;
     return;
   }
   box.innerHTML = `<div class="dadm-found">${_dadm.found.map((r, i) => {
