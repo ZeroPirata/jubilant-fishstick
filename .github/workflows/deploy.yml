@@ -14,14 +14,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4.2.2
 
+      # O runner é o próprio servidor (um notebook): os testes rodam com no máximo 2
+      # núcleos e prioridade mínima (nice 19), para não esquentar a máquina nem
+      # disputar CPU com o app. Os volumes guardam módulos e cache de build entre
+      # execuções: só recompila o que mudou.
       - name: Run tests
         run: |
           GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
-          docker run --rm \
+          docker run --rm --cpus=2 \
             -v "$(pwd):/app" \
+            -v jubilant-ci-gomod:/go/pkg/mod \
+            -v jubilant-ci-gocache:/root/.cache/go-build \
             -w /app \
             "golang:${GO_VERSION}-alpine" \
-            go test ./... -count=1 -timeout 60s
+            nice -n 19 go test ./... -count=1 -timeout 120s
 
       # Passo separado: com -race a compilação é bem mais lenta, e a falha aqui
       # aponta direto para condição de corrida, não para teste quebrado.
@@ -29,12 +35,14 @@ jobs:
       - name: Race detector
         run: |
           GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
-          docker run --rm \
+          docker run --rm --cpus=2 \
             -v "$(pwd):/app" \
+            -v jubilant-ci-gomod:/go/pkg/mod \
+            -v jubilant-ci-gocache:/root/.cache/go-build \
             -w /app \
             -e CGO_ENABLED=1 \
             "golang:${GO_VERSION}-alpine" \
-            sh -c "apk add --no-cache gcc musl-dev && go test ./... -race -count=1 -timeout 600s"
+            sh -c "apk add --no-cache gcc musl-dev && nice -n 19 go test ./... -race -count=1 -timeout 900s"
 
   deploy:
     name: Deploy to server
