@@ -2,13 +2,16 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"hackton-treino/config"
 	"hackton-treino/internal/db"
+	"hackton-treino/internal/jobfit"
 	"hackton-treino/internal/metrics"
 	"hackton-treino/internal/repository/aliases"
 	"hackton-treino/internal/repository/feedbacks"
 	"hackton-treino/internal/repository/users"
+	"hackton-treino/internal/resume"
 	workerRepo "hackton-treino/internal/repository/worker"
 	"hackton-treino/internal/services"
 	"hackton-treino/internal/sse"
@@ -17,6 +20,7 @@ import (
 
 	ucache "hackton-treino/internal/repository/cache"
 	adminRepo "hackton-treino/internal/repository/admin"
+	discoveryRepo "hackton-treino/internal/repository/discovery"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,6 +40,7 @@ type Worker struct {
 	Feedbacks     feedbacks.Repository
 	Aliases       aliases.Repository
 	AdminRepo     adminRepo.Repository
+	Catalog       discoveryRepo.Repository
 	aliases       map[string]string
 	promptPTBR    string
 	promptEN      string
@@ -58,6 +63,7 @@ func NewWorker(logger *zap.Logger, conn *pgxpool.Pool, llm services.AiService, s
 		Feedbacks:     feedbacks.New(conn),
 		Aliases:       aliases.New(conn),
 		AdminRepo:     adminRepo.New(conn),
+		Catalog:       discoveryRepo.New(conn),
 		ScraperAi:     scraperAi,
 		Cache:         ucache.New(rds),
 		Bus:           bus,
@@ -76,11 +82,17 @@ func (w *Worker) failJob(ctx context.Context, job *db.Job) {
 	metrics.JobsProcessed.WithLabelValues("error").Inc()
 }
 
-func (w *Worker) completeJob(ctx context.Context, job *db.Job, quality db.JobQuality, gap sse.GapAnalysis) {
+func (w *Worker) completeJob(ctx context.Context, job *db.Job, fit jobfit.Fit, analysis *resume.FitAnalysis) {
+	quality := fit.Quality
 	_ = w.Pipeline.WorkerUpdateJobQuality(ctx, db.WorkerUpdateJobQualityParams{
 		Quality: db.NullJobQuality{JobQuality: quality, Valid: true},
 		ID:      job.ID,
 	})
+	if analysis != nil {
+		if raw, err := json.Marshal(analysis); err == nil {
+			_ = w.Pipeline.WorkerUpdateJobAnalysis(ctx, db.WorkerUpdateJobAnalysisParams{FitAnalysis: raw, ID: job.ID})
+		}
+	}
 	_ = w.Pipeline.WorkerUpdateJobStatus(ctx, db.WorkerUpdateJobStatusParams{Status: db.JobStatusCompleted, ID: job.ID})
 	if w.Bus != nil {
 		w.Bus.Publish(job.UserID.String(), sse.JobEvent{
@@ -89,7 +101,8 @@ func (w *Worker) completeJob(ctx context.Context, job *db.Job, quality db.JobQua
 			Quality:     string(quality),
 			CompanyName: job.CompanyName.String,
 			JobTitle:    job.JobTitle.String,
-			Gap:         &gap,
+			Fit:         &fit,
+			Analysis:    analysis,
 		})
 	}
 	metrics.JobsProcessed.WithLabelValues("completed").Inc()

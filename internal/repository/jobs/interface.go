@@ -18,6 +18,8 @@ type Repository interface {
 	QuerySelectJobsForUser(ctx context.Context, args db.QuerySelectJobsForUserParams) ([]db.QuerySelectJobsForUserRow, *repository.RepositoryError)
 	QueryReprocessJob(ctx context.Context, args db.QueryReprocessJobParams) *repository.RepositoryError
 	QueryUpdateJob(ctx context.Context, args db.QueryUpdateJobParams) *repository.RepositoryError
+	QuerySelectJobForUser(ctx context.Context, args db.QuerySelectJobForUserParams) (db.Job, *repository.RepositoryError)
+	QueryUpdateJobQuality(ctx context.Context, args db.QueryUpdateJobQualityParams) *repository.RepositoryError
 	QueryDeleteJob(ctx context.Context, args db.QueryDeleteJobParams) *repository.RepositoryError
 	QuerySelectResumeJob(ctx context.Context, args db.QuerySelectResumeJobParams) (db.QuerySelectResumeJobRow, *repository.RepositoryError)
 	QueryUpdateResumePaths(ctx context.Context, args db.QueryUpdateResumePathsParams) *repository.RepositoryError

@@ -31,6 +31,15 @@ func (r *jobRepository) QueryUpdateJob(ctx context.Context, args db.QueryUpdateJ
 	return repository.HandleDatabaseError(err)
 }
 
+func (r *jobRepository) QuerySelectJobForUser(ctx context.Context, args db.QuerySelectJobForUserParams) (db.Job, *repository.RepositoryError) {
+	j, err := r.Q.QuerySelectJobForUser(ctx, args)
+	return j, repository.HandleDatabaseError(err)
+}
+
+func (r *jobRepository) QueryUpdateJobQuality(ctx context.Context, args db.QueryUpdateJobQualityParams) *repository.RepositoryError {
+	return repository.HandleDatabaseError(r.Q.QueryUpdateJobQuality(ctx, args))
+}
+
 func (r *jobRepository) QueryDeleteJob(ctx context.Context, args db.QueryDeleteJobParams) *repository.RepositoryError {
 	err := r.Q.QueryDeleteJob(ctx, args)
 	return repository.HandleDatabaseError(err)
@@ -57,6 +66,6 @@ func (r *jobRepository) QueryListResumesForUser(ctx context.Context, args db.Que
 }
 
 func (r *jobRepository) QueryDeleteResume(ctx context.Context, args db.QueryDeleteResumeParams) *repository.RepositoryError {
-	err := r.Q.QueryDeleteResume(ctx, args)
+	_, err := r.Q.QueryDeleteResume(ctx, args)
 	return repository.HandleDatabaseError(err)
 }

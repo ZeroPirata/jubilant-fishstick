@@ -53,7 +53,7 @@ func (q *Queries) WorkerRecoverStuckJobs(ctx context.Context, cutoff pgtype.Time
 const workerSelectPendingJobs = `-- name: WorkerSelectPendingJobs :many
 
 
-SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at
+SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description
 FROM jobs j
 INNER JOIN user_accounts acc ON acc.id = j.user_id
 WHERE
@@ -95,6 +95,9 @@ func (q *Queries) WorkerSelectPendingJobs(ctx context.Context, maxCount int32) (
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.FitAnalysis,
+			&i.SourceDescription,
+			&i.ScrapedDescription,
 		); err != nil {
 			return nil, err
 		}
@@ -112,21 +115,23 @@ SET
     company_name = $1,
     job_title    = $2,
     description  = $3,
-    tech_stack   = $4,
-    requirements = $5,
-    language     = $6,
+    scraped_description = $4,
+    tech_stack   = $5,
+    requirements = $6,
+    language     = $7,
     updated_at   = now()
-WHERE id = $7
+WHERE id = $8
 `
 
 type WorkerUpdateJobParams struct {
-	CompanyName  pgtype.Text `json:"company_name"`
-	JobTitle     pgtype.Text `json:"job_title"`
-	Description  pgtype.Text `json:"description"`
-	TechStack    []string    `json:"tech_stack"`
-	Requirements []string    `json:"requirements"`
-	Language     pgtype.Text `json:"language"`
-	ID           pgtype.UUID `json:"id"`
+	CompanyName        pgtype.Text `json:"company_name"`
+	JobTitle           pgtype.Text `json:"job_title"`
+	Description        pgtype.Text `json:"description"`
+	ScrapedDescription pgtype.Text `json:"scraped_description"`
+	TechStack          []string    `json:"tech_stack"`
+	Requirements       []string    `json:"requirements"`
+	Language           pgtype.Text `json:"language"`
+	ID                 pgtype.UUID `json:"id"`
 }
 
 func (q *Queries) WorkerUpdateJob(ctx context.Context, arg WorkerUpdateJobParams) error {
@@ -134,11 +139,30 @@ func (q *Queries) WorkerUpdateJob(ctx context.Context, arg WorkerUpdateJobParams
 		arg.CompanyName,
 		arg.JobTitle,
 		arg.Description,
+		arg.ScrapedDescription,
 		arg.TechStack,
 		arg.Requirements,
 		arg.Language,
 		arg.ID,
 	)
+	return err
+}
+
+const workerUpdateJobAnalysis = `-- name: WorkerUpdateJobAnalysis :exec
+UPDATE jobs
+SET
+    fit_analysis = $1,
+    updated_at   = now()
+WHERE id = $2
+`
+
+type WorkerUpdateJobAnalysisParams struct {
+	FitAnalysis []byte      `json:"fit_analysis"`
+	ID          pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) WorkerUpdateJobAnalysis(ctx context.Context, arg WorkerUpdateJobAnalysisParams) error {
+	_, err := q.db.Exec(ctx, workerUpdateJobAnalysis, arg.FitAnalysis, arg.ID)
 	return err
 }
 
@@ -152,7 +176,7 @@ WHERE id = $2
 
 type WorkerUpdateJobQualityParams struct {
 	Quality NullJobQuality `json:"quality"`
-	ID      pgtype.UUID `json:"id"`
+	ID      pgtype.UUID    `json:"id"`
 }
 
 func (q *Queries) WorkerUpdateJobQuality(ctx context.Context, arg WorkerUpdateJobQualityParams) error {
@@ -169,7 +193,7 @@ WHERE id = $2
 `
 
 type WorkerUpdateJobStatusParams struct {
-	Status JobStatus `json:"status"`
+	Status JobStatus   `json:"status"`
 	ID     pgtype.UUID `json:"id"`
 }
 

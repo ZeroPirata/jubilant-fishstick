@@ -44,25 +44,46 @@ func NewScraper(url string, logger *zap.Logger) Scraper {
 	}
 }
 
+// Sites que não deixam ler a vaga sem um navegador de verdade (a API recusa acesso
+// automatizado). Responde na hora, com a saída: colar a descrição.
+var blockedHosts = map[string]string{
+	"eightfold": "Eightfold",
+	"indeed":    "Indeed",
+	"glassdoor": "Glassdoor",
+}
+
+// Scrape escolhe o leitor pelo endereço: leitor próprio para os sites e ATS
+// conhecidos e o leitor genérico (JSON-LD ou texto da página) para os demais.
 func (s *Scraper) Scrape() (BasicScraperResult, error) {
-	domain, err := url.Parse(s.Url)
+	u, err := url.Parse(s.Url)
 	if err != nil {
 		return BasicScraperResult{}, err
 	}
-	s.Logger.Info("Iniciando scrape", zap.String("url", s.Url), zap.String("domain", domain.Hostname()))
-	parts := strings.Split(domain.Hostname(), ".")
-	hostname := parts[len(parts)-2]
+	host := strings.ToLower(u.Hostname())
+	s.Logger.Info("Iniciando scrape", zap.String("url", s.Url), zap.String("domain", host))
+	parts := strings.Split(host, ".")
+	if len(parts) < 2 {
+		return BasicScraperResult{}, fmt.Errorf("%w: %s", ErrUnsupportedDomain, host)
+	}
+	site := parts[len(parts)-2]
+
+	if name, ok := blockedHosts[site]; ok {
+		return BasicScraperResult{}, fmt.Errorf("%w: %s — %w", ErrUnsupportedDomain, name, ErrNeedsBrowser)
+	}
+
 	scraps := map[string]func() (BasicScraperResult, error){
-		"linkedin":   s.scrapLinkedIn,
-		"amazon":     s.scrapAmazon,
-		"geekhunter": s.scrapGeekHunter,
-		"jobright":   s.scrapJobRight,
+		"linkedin":        s.scrapLinkedIn,
+		"amazon":          s.scrapAmazon,
+		"geekhunter":      s.scrapGeekHunter,
+		"jobright":        s.scrapJobRight,
+		"gupy":            s.scrapGupy,
+		"programathor":    s.scrapProgramaThor,
+		"greenhouse":      func() (BasicScraperResult, error) { return s.scrapGreenhouse(u) },
+		"smartrecruiters": func() (BasicScraperResult, error) { return s.scrapSmartRecruiters(u) },
+		"workable":        func() (BasicScraperResult, error) { return s.scrapWorkable(u) },
 	}
-
-	scraper, ok := scraps[hostname]
-	if !ok {
-		return BasicScraperResult{}, fmt.Errorf("%w: %s", ErrUnsupportedDomain, hostname)
+	if scraper, ok := scraps[site]; ok {
+		return scraper()
 	}
-
-	return scraper()
+	return s.scrapGeneric()
 }

@@ -18,6 +18,7 @@ type Repository interface {
 	WorkerUpdateJobStatus(ctx context.Context, args db.WorkerUpdateJobStatusParams) *repository.RepositoryError
 	WorkerUpdateJob(ctx context.Context, args db.WorkerUpdateJobParams) *repository.RepositoryError
 	WorkerUpdateJobQuality(ctx context.Context, args db.WorkerUpdateJobQualityParams) *repository.RepositoryError
+	WorkerUpdateJobAnalysis(ctx context.Context, args db.WorkerUpdateJobAnalysisParams) *repository.RepositoryError
 	WorkerInsertGeneratedResume(ctx context.Context, args db.WorkerInsertGeneratedResumeParams) (string, *repository.RepositoryError)
 	WorkerRecoverStuckJobs(ctx context.Context, cutoff pgtype.Timestamptz) (int64, *repository.RepositoryError)
 }

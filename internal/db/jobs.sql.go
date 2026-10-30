@@ -27,19 +27,24 @@ func (q *Queries) QueryDeleteJob(ctx context.Context, arg QueryDeleteJobParams) 
 	return err
 }
 
-const queryDeleteResume = `-- name: QueryDeleteResume :exec
+const queryDeleteResume = `-- name: QueryDeleteResume :one
 DELETE FROM generated_resumes
-WHERE id = $1 AND user_id = $2
+WHERE id = $1 AND job_id = $2 AND user_id = $3
+RETURNING id
 `
 
 type QueryDeleteResumeParams struct {
 	ID     pgtype.UUID `json:"id"`
+	JobID  pgtype.UUID `json:"job_id"`
 	UserID pgtype.UUID `json:"user_id"`
 }
 
-func (q *Queries) QueryDeleteResume(ctx context.Context, arg QueryDeleteResumeParams) error {
-	_, err := q.db.Exec(ctx, queryDeleteResume, arg.ID, arg.UserID)
-	return err
+// RETURNING para o handler responder 404 quando nada foi apagado, em vez de 204.
+func (q *Queries) QueryDeleteResume(ctx context.Context, arg QueryDeleteResumeParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, queryDeleteResume, arg.ID, arg.JobID, arg.UserID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const queryFindJobByUrl = `-- name: QueryFindJobByUrl :one
@@ -61,10 +66,10 @@ func (q *Queries) QueryFindJobByUrl(ctx context.Context, arg QueryFindJobByUrlPa
 
 const queryInsertFullJob = `-- name: QueryInsertFullJob :one
 INSERT INTO jobs(external_url, user_id, company_name, job_title, description,
-    tech_stack, requirements, language, mode)
+    source_description, tech_stack, requirements, language, mode)
 VALUES (
     $1, $2, $3, $4, $5,
-    $6, $7, $8, $9
+    $5, $6, $7, $8, $9
 ) RETURNING id
 `
 
@@ -187,24 +192,68 @@ const queryReprocessJob = `-- name: QueryReprocessJob :exec
 UPDATE jobs
 SET
     status     = 'pending',
-    mode       = COALESCE(NULLIF($3, ''), jobs.mode),
+    mode       = COALESCE(NULLIF($1::text, ''), jobs.mode),
+    language   = COALESCE(NULLIF($2::text, ''), jobs.language),
     updated_at = now()
-WHERE id = $1 AND user_id = $2
+WHERE id = $3 AND user_id = $4
 `
 
 type QueryReprocessJobParams struct {
-	ID     pgtype.UUID `json:"id"`
-	UserID pgtype.UUID `json:"user_id"`
-	Mode   string      `json:"mode"`
+	Mode     string      `json:"mode"`
+	Language string      `json:"language"`
+	ID       pgtype.UUID `json:"id"`
+	UserID   pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) QueryReprocessJob(ctx context.Context, arg QueryReprocessJobParams) error {
-	_, err := q.db.Exec(ctx, queryReprocessJob, arg.ID, arg.UserID, arg.Mode)
+	_, err := q.db.Exec(ctx, queryReprocessJob,
+		arg.Mode,
+		arg.Language,
+		arg.ID,
+		arg.UserID,
+	)
 	return err
 }
 
+const querySelectJobForUser = `-- name: QuerySelectJobForUser :one
+SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description
+FROM jobs j
+WHERE j.id = $1 AND j.user_id = $2 AND j.deleted_at IS NULL
+`
+
+type QuerySelectJobForUserParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) QuerySelectJobForUser(ctx context.Context, arg QuerySelectJobForUserParams) (Job, error) {
+	row := q.db.QueryRow(ctx, querySelectJobForUser, arg.ID, arg.UserID)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ExternalUrl,
+		&i.CompanyName,
+		&i.JobTitle,
+		&i.Description,
+		&i.TechStack,
+		&i.Requirements,
+		&i.Status,
+		&i.Quality,
+		&i.Language,
+		&i.Mode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.FitAnalysis,
+		&i.SourceDescription,
+		&i.ScrapedDescription,
+	)
+	return i, err
+}
+
 const querySelectJobsForUser = `-- name: QuerySelectJobsForUser :many
-SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, COUNT(*) OVER() AS total_count
+SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, COUNT(*) OVER() AS total_count
 FROM jobs j
 INNER JOIN user_accounts acc ON acc.id = j.user_id
 WHERE
@@ -226,22 +275,25 @@ type QuerySelectJobsForUserParams struct {
 }
 
 type QuerySelectJobsForUserRow struct {
-	ID           pgtype.UUID        `json:"id"`
-	UserID       pgtype.UUID        `json:"user_id"`
-	ExternalUrl  string             `json:"external_url"`
-	CompanyName  pgtype.Text        `json:"company_name"`
-	JobTitle     pgtype.Text        `json:"job_title"`
-	Description  pgtype.Text        `json:"description"`
-	TechStack    []string           `json:"tech_stack"`
-	Requirements []string           `json:"requirements"`
-	Status       JobStatus          `json:"status"`
-	Quality      NullJobQuality     `json:"quality"`
-	Language     pgtype.Text        `json:"language"`
-	Mode         string             `json:"mode"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
-	TotalCount   int64              `json:"total_count"`
+	ID                 pgtype.UUID        `json:"id"`
+	UserID             pgtype.UUID        `json:"user_id"`
+	ExternalUrl        string             `json:"external_url"`
+	CompanyName        pgtype.Text        `json:"company_name"`
+	JobTitle           pgtype.Text        `json:"job_title"`
+	Description        pgtype.Text        `json:"description"`
+	TechStack          []string           `json:"tech_stack"`
+	Requirements       []string           `json:"requirements"`
+	Status             JobStatus          `json:"status"`
+	Quality            NullJobQuality     `json:"quality"`
+	Language           pgtype.Text        `json:"language"`
+	Mode               string             `json:"mode"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	FitAnalysis        []byte             `json:"fit_analysis"`
+	SourceDescription  pgtype.Text        `json:"source_description"`
+	ScrapedDescription pgtype.Text        `json:"scraped_description"`
+	TotalCount         int64              `json:"total_count"`
 }
 
 func (q *Queries) QuerySelectJobsForUser(ctx context.Context, arg QuerySelectJobsForUserParams) ([]QuerySelectJobsForUserRow, error) {
@@ -275,6 +327,9 @@ func (q *Queries) QuerySelectJobsForUser(ctx context.Context, arg QuerySelectJob
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.FitAnalysis,
+			&i.SourceDescription,
+			&i.ScrapedDescription,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err
@@ -334,6 +389,8 @@ SET
     company_name = COALESCE($1, company_name),
     job_title = COALESCE($2, job_title),
     description = COALESCE($3, description),
+    -- Descrição editada pelo usuário passa a ser a vaga no próximo processamento.
+    source_description = COALESCE($3, source_description),
     tech_stack = COALESCE($4, tech_stack),
     requirements = COALESCE($5, requirements),
     language = COALESCE($6, language)
@@ -363,6 +420,25 @@ func (q *Queries) QueryUpdateJob(ctx context.Context, arg QueryUpdateJobParams) 
 		arg.ID,
 		arg.UserID,
 	)
+	return err
+}
+
+const queryUpdateJobQuality = `-- name: QueryUpdateJobQuality :exec
+UPDATE jobs
+SET quality = $1
+WHERE id = $2 AND user_id = $3
+`
+
+type QueryUpdateJobQualityParams struct {
+	Quality NullJobQuality `json:"quality"`
+	ID      pgtype.UUID    `json:"id"`
+	UserID  pgtype.UUID    `json:"user_id"`
+}
+
+// A listagem recalcula a compatibilidade com o perfil atual; grava quando mudou para o
+// filtro de qualidade continuar batendo com o que a tela mostra.
+func (q *Queries) QueryUpdateJobQuality(ctx context.Context, arg QueryUpdateJobQualityParams) error {
+	_, err := q.db.Exec(ctx, queryUpdateJobQuality, arg.Quality, arg.ID, arg.UserID)
 	return err
 }
 

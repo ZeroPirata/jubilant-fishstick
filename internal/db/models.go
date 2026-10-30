@@ -34,9 +34,10 @@ func (e *FeedbackStatus) Scan(src interface{}) error {
 
 type NullFeedbackStatus struct {
 	FeedbackStatus FeedbackStatus `json:"feedback_status"`
-	Valid          bool           `json:"valid"`
+	Valid          bool           `json:"valid"` // Valid is true if FeedbackStatus is not NULL
 }
 
+// Scan implements the Scanner interface.
 func (ns *NullFeedbackStatus) Scan(value interface{}) error {
 	if value == nil {
 		ns.FeedbackStatus, ns.Valid = "", false
@@ -46,6 +47,7 @@ func (ns *NullFeedbackStatus) Scan(value interface{}) error {
 	return ns.FeedbackStatus.Scan(value)
 }
 
+// Value implements the driver Valuer interface.
 func (ns NullFeedbackStatus) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
@@ -75,9 +77,10 @@ func (e *JobQuality) Scan(src interface{}) error {
 
 type NullJobQuality struct {
 	JobQuality JobQuality `json:"job_quality"`
-	Valid      bool       `json:"valid"`
+	Valid      bool       `json:"valid"` // Valid is true if JobQuality is not NULL
 }
 
+// Scan implements the Scanner interface.
 func (ns *NullJobQuality) Scan(value interface{}) error {
 	if value == nil {
 		ns.JobQuality, ns.Valid = "", false
@@ -87,6 +90,7 @@ func (ns *NullJobQuality) Scan(value interface{}) error {
 	return ns.JobQuality.Scan(value)
 }
 
+// Value implements the driver Valuer interface.
 func (ns NullJobQuality) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
@@ -117,6 +121,29 @@ func (e *JobStatus) Scan(src interface{}) error {
 	return nil
 }
 
+type NullJobStatus struct {
+	JobStatus JobStatus `json:"job_status"`
+	Valid     bool      `json:"valid"` // Valid is true if JobStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullJobStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.JobStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.JobStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullJobStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.JobStatus), nil
+}
+
 type SecurityEventType string
 
 const (
@@ -135,6 +162,29 @@ func (e *SecurityEventType) Scan(src interface{}) error {
 		return fmt.Errorf("unsupported scan type for SecurityEventType: %T", src)
 	}
 	return nil
+}
+
+type NullSecurityEventType struct {
+	SecurityEventType SecurityEventType `json:"security_event_type"`
+	Valid             bool              `json:"valid"` // Valid is true if SecurityEventType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullSecurityEventType) Scan(value interface{}) error {
+	if value == nil {
+		ns.SecurityEventType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.SecurityEventType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullSecurityEventType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.SecurityEventType), nil
 }
 
 type SkillLevel string
@@ -156,6 +206,117 @@ func (e *SkillLevel) Scan(src interface{}) error {
 		return fmt.Errorf("unsupported scan type for SkillLevel: %T", src)
 	}
 	return nil
+}
+
+type NullSkillLevel struct {
+	SkillLevel SkillLevel `json:"skill_level"`
+	Valid      bool       `json:"valid"` // Valid is true if SkillLevel is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullSkillLevel) Scan(value interface{}) error {
+	if value == nil {
+		ns.SkillLevel, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.SkillLevel.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullSkillLevel) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.SkillLevel), nil
+}
+
+type AiCall struct {
+	ID               int64              `json:"id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	Purpose          string             `json:"purpose"`
+	Provider         string             `json:"provider"`
+	Model            string             `json:"model"`
+	Position         int32              `json:"position"`
+	Status           string             `json:"status"`
+	DurationMs       int32              `json:"duration_ms"`
+	PromptTokens     pgtype.Int4        `json:"prompt_tokens"`
+	CompletionTokens pgtype.Int4        `json:"completion_tokens"`
+	JobID            pgtype.UUID        `json:"job_id"`
+	Error            pgtype.Text        `json:"error"`
+}
+
+type AiProvider struct {
+	ID        pgtype.UUID        `json:"id"`
+	Purpose   string             `json:"purpose"`
+	Position  int32              `json:"position"`
+	Provider  string             `json:"provider"`
+	Url       string             `json:"url"`
+	Model     string             `json:"model"`
+	ApiKeyEnc []byte             `json:"api_key_enc"`
+	Enabled   bool               `json:"enabled"`
+	UpdatedBy pgtype.UUID        `json:"updated_by"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type DiscoveredJob struct {
+	ID            pgtype.UUID        `json:"id"`
+	Source        string             `json:"source"`
+	ExternalID    string             `json:"external_id"`
+	Title         string             `json:"title"`
+	Company       string             `json:"company"`
+	Location      string             `json:"location"`
+	WorkplaceType string             `json:"workplace_type"`
+	Url           string             `json:"url"`
+	Description   string             `json:"description"`
+	PublishedAt   pgtype.Timestamptz `json:"published_at"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	FirstSeenAt   pgtype.Timestamptz `json:"first_seen_at"`
+	LastSeenAt    pgtype.Timestamptz `json:"last_seen_at"`
+	International bool               `json:"international"`
+	Seniority     []string           `json:"seniority"`
+}
+
+type DiscoveredJobKeyword struct {
+	JobID   pgtype.UUID `json:"job_id"`
+	Keyword string      `json:"keyword"`
+}
+
+type DiscoveryRun struct {
+	ID          pgtype.UUID        `json:"id"`
+	Trigger     string             `json:"trigger"`
+	Status      string             `json:"status"`
+	Keywords    int32              `json:"keywords"`
+	JobsSaved   int32              `json:"jobs_saved"`
+	JobsRemoved int32              `json:"jobs_removed"`
+	StartedAt   pgtype.Timestamptz `json:"started_at"`
+	FinishedAt  pgtype.Timestamptz `json:"finished_at"`
+	Partial     bool               `json:"partial"`
+	Sources     []string           `json:"sources"`
+	JobsNew     int32              `json:"jobs_new"`
+}
+
+type DiscoveryRunSource struct {
+	RunID          pgtype.UUID `json:"run_id"`
+	Source         string      `json:"source"`
+	KeywordsOk     int32       `json:"keywords_ok"`
+	KeywordsFailed int32       `json:"keywords_failed"`
+	JobsSaved      int32       `json:"jobs_saved"`
+	LastError      string      `json:"last_error"`
+	DurationMs     int32       `json:"duration_ms"`
+	Kind           string      `json:"kind"`
+	JobsNew        int32       `json:"jobs_new"`
+}
+
+type DiscoverySetting struct {
+	ID              bool               `json:"id"`
+	Enabled         bool               `json:"enabled"`
+	IntervalMinutes int32              `json:"interval_minutes"`
+	CatalogTerms    []string           `json:"catalog_terms"`
+	DisabledSources []string           `json:"disabled_sources"`
+	UpdatedBy       pgtype.UUID        `json:"updated_by"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	Boards          []byte             `json:"boards"`
 }
 
 type ErrorLog struct {
@@ -181,21 +342,39 @@ type GeneratedResume struct {
 }
 
 type Job struct {
-	ID           pgtype.UUID        `json:"id"`
-	UserID       pgtype.UUID        `json:"user_id"`
-	ExternalUrl  string             `json:"external_url"`
-	CompanyName  pgtype.Text        `json:"company_name"`
-	JobTitle     pgtype.Text        `json:"job_title"`
-	Description  pgtype.Text        `json:"description"`
-	TechStack    []string           `json:"tech_stack"`
-	Requirements []string           `json:"requirements"`
-	Status       JobStatus          `json:"status"`
-	Quality      NullJobQuality     `json:"quality"`
-	Language     pgtype.Text        `json:"language"`
-	Mode         string             `json:"mode"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	UserID             pgtype.UUID        `json:"user_id"`
+	ExternalUrl        string             `json:"external_url"`
+	CompanyName        pgtype.Text        `json:"company_name"`
+	JobTitle           pgtype.Text        `json:"job_title"`
+	Description        pgtype.Text        `json:"description"`
+	TechStack          []string           `json:"tech_stack"`
+	Requirements       []string           `json:"requirements"`
+	Status             JobStatus          `json:"status"`
+	Quality            NullJobQuality     `json:"quality"`
+	Language           pgtype.Text        `json:"language"`
+	Mode               string             `json:"mode"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	FitAnalysis        []byte             `json:"fit_analysis"`
+	SourceDescription  pgtype.Text        `json:"source_description"`
+	ScrapedDescription pgtype.Text        `json:"scraped_description"`
+}
+
+type ProfileImport struct {
+	ID         string             `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	FileKind   string             `json:"file_kind"`
+	FileSize   int32              `json:"file_size"`
+	Status     string             `json:"status"`
+	Error      pgtype.Text        `json:"error"`
+	Attempts   []byte             `json:"attempts"`
+	Result     []byte             `json:"result"`
+	StartedAt  pgtype.Timestamptz `json:"started_at"`
+	FinishedAt pgtype.Timestamptz `json:"finished_at"`
+	AppliedAt  pgtype.Timestamptz `json:"applied_at"`
+	Current    []byte             `json:"current"`
 }
 
 type ResumesFeedback struct {
@@ -244,6 +423,8 @@ type UserAccount struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
 	IsAdmin      bool               `json:"is_admin"`
+	IsMaster     bool               `json:"is_master"`
+	LastSeenAt   pgtype.Timestamptz `json:"last_seen_at"`
 }
 
 type UserCertificate struct {
@@ -257,6 +438,16 @@ type UserCertificate struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type UserDiscoveryPreference struct {
+	UserID           pgtype.UUID        `json:"user_id"`
+	WorkplaceTypes   []string           `json:"workplace_types"`
+	Cities           []string           `json:"cities"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Technologies     []string           `json:"technologies"`
+	Seniorities      []string           `json:"seniorities"`
+	SeniorityUnknown bool               `json:"seniority_unknown"`
 }
 
 type UserExperience struct {

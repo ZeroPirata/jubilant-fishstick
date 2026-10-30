@@ -26,18 +26,34 @@ func (w *Worker) doScraper(ctx context.Context, job *db.Job) (*scraper.ResultScr
 		w.Logger.Warn("Erro ao atualizar status para scraping_basic", zap.String("job_id", job.ID.String()), zap.Error(err))
 	}
 
-	newScraper := scraper.NewScraper(job.ExternalUrl, w.Logger)
-	basicScraper, err := newScraper.Scrape()
+	// Descrição colada (ou editada) pelo usuário: é a vaga. Não abre o site, que pode nem
+	// ser legível (é para isso que o campo existe). Não é job.Description: essa o worker
+	// sobrescreve com o resumo da IA.
+	var basicScraper scraper.BasicScraperResult
+	var err error
+	if manual := strings.TrimSpace(job.SourceDescription.String); job.SourceDescription.Valid && manual != "" {
+		w.Logger.Info("doScraper: usando a descrição colada no cadastro", zap.String("job_id", job.ID.String()))
+		basicScraper = scraper.BasicScraperResult{Title: job.JobTitle.String, Company: job.CompanyName.String, BasicDescription: manual}
+	} else {
+		newScraper := scraper.NewScraper(job.ExternalUrl, w.Logger)
+		basicScraper, err = newScraper.Scrape()
+	}
+	if err == nil && strings.TrimSpace(basicScraper.BasicDescription) == "" {
+		err = scraper.ErrEmptyDescription
+	}
 	if err != nil {
-		w.Logger.Error("doScraper: Erro ao fazer scrape da vaga", zap.String("job_id", job.ID.String()), zap.Error(err))
-		return nil, fmt.Errorf("não foi possivel realizar o scraper: %w", err)
+		// Vaga vinda do Descobrir: o catálogo já tem a descrição. Cobre os sites sem
+		// leitor próprio (GitHub, Himalayas) e os que bloqueiam acesso automatizado.
+		fromCatalog, ok := w.catalogDescription(ctx, job.ExternalUrl)
+		if !ok {
+			w.Logger.Error("doScraper: Erro ao fazer scrape da vaga", zap.String("job_id", job.ID.String()), zap.String("url", job.ExternalUrl), zap.Error(err))
+			return nil, fmt.Errorf("não foi possivel realizar o scraper: %w", err)
+		}
+		w.Logger.Info("doScraper: usando a descrição do catálogo de vagas", zap.String("job_id", job.ID.String()), zap.NamedError("scrape", err))
+		basicScraper = fromCatalog
 	}
 
 	basicDescription = basicScraper.BasicDescription
-	if strings.TrimSpace(basicDescription) == "" {
-		w.Logger.Warn("doScraper: descrição vazia", zap.String("job_id", job.ID.String()), zap.String("url", job.ExternalUrl))
-		return nil, fmt.Errorf("não foi possivel realizar o scraper: %w", scraper.ErrEmptyDescription)
-	}
 	result.Company = basicScraper.Company
 	result.Title = basicScraper.Title
 	result.BasicDescription = basicScraper.BasicDescription
@@ -62,4 +78,19 @@ func (w *Worker) doScraper(ctx context.Context, job *db.Job) (*scraper.ResultScr
 	result.Stack = util.NormalizeStack(nlScraper.Stack, w.aliases)
 	result.Requirements = nlScraper.Requirements
 	return result, nil
+}
+
+func (w *Worker) catalogDescription(ctx context.Context, url string) (scraper.BasicScraperResult, bool) {
+	if w.Catalog == nil {
+		return scraper.BasicScraperResult{}, false
+	}
+	row, found, errR := w.Catalog.SelectByURL(ctx, url)
+	if errR != nil {
+		w.Logger.Warn("doScraper: erro ao consultar o catálogo de vagas", zap.String("url", url), zap.String("erro", errR.Message))
+		return scraper.BasicScraperResult{}, false
+	}
+	if !found {
+		return scraper.BasicScraperResult{}, false
+	}
+	return scraper.BasicScraperResult{Title: row.Title, Company: row.Company, BasicDescription: row.Description}, true
 }

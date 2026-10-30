@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"hackton-treino/internal/db"
+	"hackton-treino/internal/discovery"
+	"hackton-treino/internal/jobfit"
 	"hackton-treino/internal/metrics"
 	"hackton-treino/internal/repository/admin"
 	"hackton-treino/internal/resume"
@@ -123,13 +125,14 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 	result := sOut.result
 
 	if err := w.Pipeline.WorkerUpdateJob(ctx, db.WorkerUpdateJobParams{
-		CompanyName:  util.ConvertToPgText(result.Company),
-		JobTitle:     util.ConvertToPgText(result.Title),
-		Description:  util.ConvertToPgText(result.CompressedDescription),
-		TechStack:    result.Stack,
-		Requirements: result.Requirements,
-		Language:     job.Language,
-		ID:           job.ID,
+		CompanyName:        util.ConvertToPgText(result.Company),
+		JobTitle:           util.ConvertToPgText(result.Title),
+		Description:        util.ConvertToPgText(result.CompressedDescription),
+		ScrapedDescription: util.ConvertToPgText(result.BasicDescription),
+		TechStack:          result.Stack,
+		Requirements:       result.Requirements,
+		Language:           job.Language,
+		ID:                 job.ID,
 	}); err != nil {
 		w.Logger.Error("Erro ao salvar dados do scrape", zap.String("job_id", jobID), zap.Error(err))
 		w.failJob(ctx, job)
@@ -138,6 +141,9 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 	// Atualiza campos do job em memória para o evento SSE de completed ter company/title
 	job.CompanyName = util.ConvertToPgText(result.Company)
 	job.JobTitle = util.ConvertToPgText(result.Title)
+	// A stack nova vale para as verificações do currículo (resume.Source.JobStack).
+	job.TechStack = result.Stack
+	job.Requirements = result.Requirements
 
 	if mOut.err != nil {
 		w.Logger.Error("Erro ao fazer match com banco pessoal", zap.String("job_id", jobID), zap.Error(mOut.err))
@@ -162,8 +168,9 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		return
 	}
 
-	quality := calcularQualidade(result, mOut.matches.Habilidades, w.aliases)
-	gap := analisarGap(result.Stack, mOut.matches.Habilidades, w.aliases)
+	// A qualidade só informa: o currículo é gerado em qualquer nível, quem decide se
+	// vale se candidatar é o usuário.
+	fit := jobfit.Evaluate(result.Stack, mOut.matches.Habilidades, w.aliases)
 
 	str, errJ := w.buildUserPrompt(job, &mOut.matches)
 	if errJ != nil {
@@ -260,10 +267,25 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 		return
 	}
 
-	w.completeJob(ctx, job, quality, gap)
+	analysis := llmResponse.Analise.Clean()
+	if dropped := analysis.VerifyStrengths(src, analysisTechTerms); len(dropped) > 0 {
+		w.Logger.Warn("Análise: ponto forte com tecnologia fora do perfil removido", zap.String("job_id", jobID), zap.Strings("removidos", dropped))
+	}
+
+	w.completeJob(ctx, job, fit, analysis)
 
 	w.Logger.Info("Vaga processada com sucesso", zap.String("url", job.ExternalUrl), zap.String("job_id", jobID))
 }
+
+// analysisTechTerms são as tecnologias do catálogo (com variações de nome) que a
+// verificação da análise procura nos pontos fortes.
+var analysisTechTerms = func() [][]string {
+	out := make([][]string, 0, len(discovery.Technologies))
+	for _, t := range discovery.Technologies {
+		out = append(out, append([]string{t.Name}, t.Terms...))
+	}
+	return out
+}()
 
 // handleIfRateLimit verifica se o erro é um ErrRateLimit. Se sim, seta a flag no Redis,
 // volta o job para pending e retorna true. Caso contrário retorna false.

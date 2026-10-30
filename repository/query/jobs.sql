@@ -4,10 +4,10 @@ VALUES (@external_url, @user_id, @mode) RETURNING id;
 
 -- name: QueryInsertFullJob :one
 INSERT INTO jobs(external_url, user_id, company_name, job_title, description,
-    tech_stack, requirements, language, mode)
+    source_description, tech_stack, requirements, language, mode)
 VALUES (
     @external_url, @user_id, @company_name, @job_title, @description,
-    @tech_stack, @requirements, @language, @mode
+    @description, @tech_stack, @requirements, @language, @mode
 ) RETURNING id;
 
 
@@ -25,12 +25,27 @@ ORDER BY j.created_at DESC
 LIMIT @size OFFSET @cursor;
 
 
+-- name: QuerySelectJobForUser :one
+SELECT j.*
+FROM jobs j
+WHERE j.id = @id AND j.user_id = @user_id AND j.deleted_at IS NULL;
+
+
 -- name: QueryReprocessJob :exec
 UPDATE jobs
 SET
     status     = 'pending',
-    mode       = COALESCE(NULLIF(@mode, ''), jobs.mode),
+    mode       = COALESCE(NULLIF(@mode::text, ''), jobs.mode),
+    language   = COALESCE(NULLIF(@language::text, ''), jobs.language),
     updated_at = now()
+WHERE id = @id AND user_id = @user_id;
+
+
+-- name: QueryUpdateJobQuality :exec
+-- A listagem recalcula a compatibilidade com o perfil atual; grava quando mudou para o
+-- filtro de qualidade continuar batendo com o que a tela mostra.
+UPDATE jobs
+SET quality = @quality
 WHERE id = @id AND user_id = @user_id;
 
 
@@ -40,6 +55,8 @@ SET
     company_name = COALESCE(sqlc.narg('company_name'), company_name),
     job_title = COALESCE(sqlc.narg('job_title'), job_title),
     description = COALESCE(sqlc.narg('description'), description),
+    -- Descrição editada pelo usuário passa a ser a vaga no próximo processamento.
+    source_description = COALESCE(sqlc.narg('description'), source_description),
     tech_stack = COALESCE(sqlc.narg('tech_stack'), tech_stack),
     requirements = COALESCE(sqlc.narg('requirements'), requirements),
     language = COALESCE(sqlc.narg('language'), language)
@@ -83,6 +100,8 @@ WHERE gr.user_id = @user_id AND j.id = @job_id
 ORDER BY gr.created_at DESC
 LIMIT @size OFFSET @cursor;
 
--- name: QueryDeleteResume :exec
+-- name: QueryDeleteResume :one
+-- RETURNING para o handler responder 404 quando nada foi apagado, em vez de 204.
 DELETE FROM generated_resumes
-WHERE id = @id AND user_id = @user_id;
+WHERE id = @id AND job_id = @job_id AND user_id = @user_id
+RETURNING id;

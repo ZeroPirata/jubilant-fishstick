@@ -329,7 +329,7 @@ function toggleAIFailure(tr) {
 function switchMetricsView(view, btn) {
   _metricsView = view;
   document.querySelectorAll('[data-mview]').forEach(b => b.classList.toggle('active', b === btn));
-  for (const v of ['geral', 'sistema', 'ia', 'banco']) {
+  for (const v of ['geral', 'sistema', 'ia', 'banco', 'busca']) {
     document.getElementById(`metrics-view-${v}`).classList.toggle('hidden', v !== view);
   }
   refreshMetricsView();
@@ -338,6 +338,7 @@ function switchMetricsView(view, btn) {
 function refreshMetricsView() {
   if (_metricsView === 'geral') loadGeneralMetrics();
   else if (_metricsView === 'ia') loadAIMetrics();
+  else if (_metricsView === 'busca') loadDiscoveryMetrics();
   else loadMetrics();
 }
 

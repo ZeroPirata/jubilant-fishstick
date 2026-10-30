@@ -1,56 +1,5 @@
 // ── Jobs + Resumes + PDF + Feedback ──
 
-// Cache de skills do usuário para o matching visual da stack
-let _userSkillsCache = null;
-
-async function getUserSkills() {
-  if (_userSkillsCache !== null) return _userSkillsCache;
-  try {
-    const res = await api.get('/users/me/skills?size=500&offset=0');
-    if (!res.ok) { _userSkillsCache = []; return _userSkillsCache; }
-    const { data: rows } = await apiList(res);
-    // Inclui skill_name + todas as tags para matching mais preciso
-    _userSkillsCache = rows.flatMap(s => {
-      const name = (s.skill_name || '').toLowerCase().trim();
-      const tags = (s.tags || []).map(t => (t || '').toLowerCase().trim()).filter(Boolean);
-      return name ? [name, ...tags] : tags;
-    }).filter(Boolean);
-  } catch (_) {
-    _userSkillsCache = [];
-  }
-  return _userSkillsCache;
-}
-
-function clearSkillsCache() { _userSkillsCache = null; }
-
-// Matching bidirecional com word-boundary:
-// "go"      bate em skill "go"         ✓   mas NÃO em "django" / "golang"  ✓
-// "aws"     bate em skill "aws sqs"    ✓   (item é prefixo da skill)
-// "aws sqs" bate em skill "sqs"        ✓   (skill é token do item)
-// "ec2"     bate em skill "aws ec2"    ✓   (item é token da skill)
-function techMatchFront(stackItem, skillName) {
-  const item  = stackItem.toLowerCase().trim();
-  const skill = skillName.toLowerCase().trim();
-  if (!item || !skill) return false;
-  if (item === skill) return true;
-
-  function hasWordBoundary(haystack, needle) {
-    try {
-      const esc = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return new RegExp(`(?<![a-z0-9])${esc}(?![a-z0-9])`).test(haystack);
-    } catch (_) {
-      return haystack.includes(needle);
-    }
-  }
-
-  // Skill aparece como palavra dentro do item  (ex: skill="go",   item="node.js go sdk")
-  if (hasWordBoundary(item, skill)) return true;
-  // Item  aparece como palavra dentro da skill (ex: item="aws",   skill="aws sqs")
-  if (hasWordBoundary(skill, item)) return true;
-
-  return false;
-}
-
 const statusLabels = {
   pending:        'Pendente',
   processing:     'Processando',
@@ -62,16 +11,17 @@ const statusLabels = {
 
 const qualityLabels = { low: 'Baixa', mid: 'Média', high: 'Alta' };
 
-function badge(status, quality) {
+// A qualidade não muda o status: vaga concluída com compatibilidade baixa gerou o
+// currículo normalmente (o usuário decide se vale se candidatar).
+function badge(status) {
   const label = statusLabels[status] || status;
-  const cls   = (status === 'completed' && quality === 'low') ? 'badge-error' : `badge-${status}`;
-  return `<span class="badge ${cls}">${label}</span>`;
+  return `<span class="badge badge-${status}">${label}</span>`;
 }
 
 function qualityBadge(jobId, q) {
   if (!q) return '<span style="color:var(--muted)">—</span>';
   const label = qualityLabels[q] || q;
-  return `<button class="badge badge-${q} badge-quality-btn" id="quality-btn-${jobId}" onclick="toggleQualityDetails('${jobId}')" title="Ver detalhes da compatibilidade">${label}<span class="quality-chevron">▾</span></button>`;
+  return `<button class="badge badge-${q} badge-quality-btn" id="quality-btn-${jobId}" onclick="openJobDetail('${jobId}', { focus: 'fit' })" title="Ver a compatibilidade na tela da vaga">${label}<span class="quality-chevron">›</span></button>`;
 }
 
 // ── Jobs pagination state ──
@@ -154,119 +104,157 @@ function disconnectSSE() {
 }
 
 function applyJobEvent(ev) {
+  // Vagas mandadas pelo Descobrir mostram o andamento lá também; a tela da vaga aberta
+  // se atualiza sozinha.
+  if (typeof discOnJobEvent === 'function') discOnJobEvent(ev);
+  if (typeof jdOnJobEvent === 'function') jdOnJobEvent(ev);
   const row = document.getElementById(`job-row-${ev.id}`);
   if (!row) { loadJobs(); return; }
 
   // Quality + gap (atualiza meta antes do badge para que badge() leia correto)
-  if (ev.quality || ev.gap) {
+  if (ev.quality || ev.fit || ev.analysis) {
     const meta = _jobMeta.get(ev.id) || {};
     _jobMeta.set(ev.id, {
       ...meta,
-      ...(ev.quality ? { quality: ev.quality } : {}),
-      ...(ev.gap     ? { gap: ev.gap }         : {}),
+      ...(ev.quality  ? { quality: ev.quality }   : {}),
+      ...(ev.fit      ? { fit: ev.fit }           : {}),
+      ...(ev.analysis ? { analysis: ev.analysis } : {}),
     });
     if (ev.quality) row.cells[4].innerHTML = qualityBadge(ev.id, ev.quality);
   }
 
   // Status (usa quality já atualizado acima)
-  const q = (_jobMeta.get(ev.id) || {}).quality;
-  row.cells[3].innerHTML = badge(ev.status, q);
+  row.cells[3].innerHTML = badge(ev.status);
 
   // Company / title (preenchidos após scrape)
   if (ev.company_name) row.cells[1].textContent = ev.company_name;
-  if (ev.job_title)    row.cells[2].textContent = ev.job_title;
+  if (ev.job_title)    row.cells[2].querySelector('.job-title-link')?.replaceChildren(ev.job_title);
 
   // Botões de ação
-  const isDone = ev.status === 'completed';
-  const isEnd  = isDone || ev.status === 'error';
-  row.cells[7].querySelector('div').innerHTML = `
-    ${isDone ? `<button class="btn-expand btn-sm" onclick="toggleResumes('${ev.id}', this)">Currículos</button>` : ''}
-    ${isEnd  ? `<button class="btn btn-ghost btn-sm" onclick="retryJob('${ev.id}', this)">Refazer</button>` : ''}
-    <button class="btn-delete" onclick="deleteJob('${ev.id}', this)">✕</button>
-  `;
+  row.cells[7].dataset.status = ev.status;
+  row.cells[7].innerHTML = jobActions(ev.id, ev.status);
+}
+
+// jobActions: Currículos · Refazer · ✕ numa linha só, com altura igual. Usada na lista
+// e na atualização ao vivo (SSE) para as duas nunca divergirem.
+function jobActions(id, status) {
+  const isDone = status === 'completed';
+  const isEnd  = isDone || status === 'error';
+  return `<div class="job-actions">
+    ${isDone ? `<button class="btn-expand" onclick="openJobDetail('${id}', { focus: 'resumes' })">Currículos</button>` : ''}
+    ${isEnd  ? `<button class="btn btn-ghost btn-sm" onclick="retryJob('${id}', this)">Refazer</button>` : ''}
+    <button class="btn-delete" onclick="deleteJob('${id}', this)" title="Excluir vaga" aria-label="Excluir vaga">✕</button>
+  </div>`;
 }
 
 // ── Quality details toggle ──
-async function toggleQualityDetails(jobId) {
-  const existing = document.getElementById(`quality-row-${jobId}`);
-  const btn = document.getElementById(`quality-btn-${jobId}`);
-  if (existing) { existing.remove(); btn?.classList.remove('expanded'); return; }
-  btn?.classList.add('expanded');
+// Tudo vem calculado do servidor (jobfit): a tela só desenha. Assim a nota, as
+// etiquetas e a cobertura nunca discordam.
 
-  const { stack = [], reqs = [], quality = null, gap = null } = _jobMeta.get(jobId) || {};
+const _fitLevelLabels = { expert: 'expert', advanced: 'avançado', intermediate: 'intermediário', basic: 'básico' };
+const _fitRecommendation = {
+  candidatar:               { label: 'Vale se candidatar', cls: 'high' },
+  candidatar_com_ressalvas: { label: 'Candidatar com ressalvas', cls: 'mid' },
+  baixa_aderencia:          { label: 'Baixa aderência', cls: 'low' },
+};
 
-  const qualityLabelsMap = { low: 'Baixa', mid: 'Média', high: 'Alta' };
-  const qualityCls       = quality || 'mid';
-  const qualityLbl       = qualityLabelsMap[quality] || '—';
+function fitTag(it) {
+  const level = _fitLevelLabels[it.level] || it.level || '';
+  if (it.status === 'missing') {
+    return `<span class="fit-tag fit-missing" title="Não encontrado no seu perfil">${escHtml(it.name)}</span>`;
+  }
+  const via = it.skill && it.skill.toLowerCase() !== it.name.toLowerCase() ? ` (via ${it.skill})` : '';
+  const title = `Você tem${via}${level ? `, nível ${level}` : ''}`;
+  return `<span class="fit-tag fit-${it.status}" title="${escHtml(title)}">${escHtml(it.name)}${level ? `<small>${escHtml(level)}</small>` : ''}</span>`;
+}
 
-  const userSkills = await getUserSkills();
+function fitSummaryText(fit) {
+  const total = fit.items.length;
+  const parts = [`${fit.strong + fit.partial} de ${total} tecnologias no seu perfil`];
+  if (fit.partial) parts.push(`${fit.partial} em nível básico/intermediário`);
+  if (fit.missing) parts.push(`${fit.missing} faltando`);
+  return parts.join(' · ');
+}
 
-  console.log(stack, reqs, quality, gap)
+// renderFitDetails: compatibilidade (análise da IA, stack × perfil, requisitos) de uma
+// vaga. Usada na tela da vaga (job_detail.js).
+function renderFitDetails({ stack = [], reqs = [], quality = null, fit = null, analysis = null } = {}) {
+  const qualityLbl = qualityLabels[quality] || '—';
 
-  const stackSection = stack.length ? `
-    <div style="margin-bottom:10px">
-      <div class="quality-group-label" style="margin-bottom:4px">Stack tecnológico detectado</div>
-      <div style="display:flex;flex-wrap:wrap;gap:4px">
-        ${stack.map(t => {
-          const matched = userSkills.some(skill => techMatchFront(t, skill));
-          return `<span class="${matched ? 'match-tag' : 'miss-tag'}" title="${matched ? 'Você tem esta habilidade' : 'Não encontrado no seu perfil'}">${escHtml(t)}</span>`;
-        }).join('')}
-      </div>
-      ${userSkills.length === 0 ? '<div style="font-size:11px;color:var(--muted);margin-top:6px">Cadastre habilidades no perfil para ver o matching.</div>' : ''}
-    </div>` : '';
+  const summary = quality
+    ? `Compatibilidade técnica:
+       <span class="badge badge-${quality}" style="padding:1px 6px;font-size:10px">${qualityLbl}</span>
+       <span style="color:var(--muted);font-size:11px">— pela stack da vaga e o nível das suas habilidades. O currículo é gerado em qualquer nível.</span>`
+    : '<span style="color:var(--muted)">Qualidade ainda não calculada — aguarde o processamento.</span>';
+
+  let analysisSection = '';
+  if (analysis) {
+    const rec = _fitRecommendation[analysis.recomendacao];
+    const list = (title, items, cls) => items && items.length ? `
+      <div class="fit-analysis-col">
+        <div class="quality-group-label" style="margin-bottom:4px">${title}</div>
+        <ul class="fit-list ${cls}">${items.map(i => `<li>${escHtml(i)}</li>`).join('')}</ul>
+      </div>` : '';
+    analysisSection = `
+      <div class="fit-analysis">
+        <div class="fit-analysis-head">
+          <span class="quality-group-label">Análise da IA</span>
+          ${rec ? `<span class="badge badge-${rec.cls}" style="padding:1px 6px;font-size:10px">${rec.label}</span>` : ''}
+        </div>
+        ${analysis.resumo ? `<p class="fit-analysis-text">${escHtml(analysis.resumo)}</p>` : ''}
+        <div class="fit-analysis-cols">
+          ${list('Pontos fortes', analysis.pontos_fortes, 'fit-list-good')}
+          ${list('Lacunas', analysis.lacunas, 'fit-list-gap')}
+        </div>
+      </div>`;
+  } else if (quality) {
+    analysisSection = '<div class="fit-analysis-empty">Sem análise da IA para esta vaga (processada antes da análise existir). Use “Refazer” para gerar.</div>';
+  }
+
+  let stackSection = '';
+  if (fit && fit.items.length) {
+    const pct = fit.coverage_pct;
+    stackSection = `
+      <div style="margin-bottom:12px">
+        <div class="quality-group-label" style="margin-bottom:6px">Stack da vaga × seu perfil</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <div style="background:var(--border);border-radius:4px;height:8px;flex:1;max-width:320px;overflow:hidden">
+            <div style="background:${pct >= 70 ? 'var(--green)' : pct >= 30 ? 'var(--yellow)' : 'var(--red)'};height:100%;width:${pct}%;transition:width .4s"></div>
+          </div>
+          <div style="font-size:12px;font-weight:600;color:var(--text)">${pct}%</div>
+          <div style="font-size:11px;color:var(--muted)">${escHtml(fitSummaryText(fit))}</div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">${fit.items.map(fitTag).join('')}</div>
+        <div class="fit-legend">
+          <span><i class="fit-dot fit-strong"></i>avançado/expert</span>
+          <span><i class="fit-dot fit-partial"></i>básico/intermediário (conta parcialmente)</span>
+          <span><i class="fit-dot fit-missing"></i>não está no perfil</span>
+        </div>
+      </div>`;
+  } else if (stack.length) {
+    stackSection = `
+      <div style="margin-bottom:12px">
+        <div class="quality-group-label" style="margin-bottom:4px">Stack da vaga</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">${stack.map(t => `<span class="fit-tag fit-missing">${escHtml(t)}</span>`).join('')}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Cadastre habilidades no perfil para ver a compatibilidade.</div>
+      </div>`;
+  }
 
   const reqSection = reqs.length ? `
-    <div style="margin-bottom:10px">
-      <div class="quality-group-label" style="margin-bottom:4px">Requisitos (não contam no score)</div>
-      <div style="display:flex;flex-direction:column;gap:3px">
-        ${reqs.map(r => `<div class="quality-req" style="color:var(--muted)">${escHtml(r)}</div>`).join('')}
-      </div>
+    <div class="fit-reqs">
+      <div class="quality-group-label" style="margin-bottom:4px">⚠ Outros requisitos — confira você mesmo</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">A porcentagem considera só a stack; ${analysis ? 'a análise da IA acima já leva estes requisitos em conta.' : 'estes requisitos não entram nela.'}</div>
+      ${reqs.map(r => `<div class="quality-req">• ${escHtml(r)}</div>`).join('')}
     </div>` : '';
 
-  const hasGap = gap !== null;
-  const coverPct  = hasGap ? gap.coverage_pct ?? 0 : null;
-  const missing   = hasGap ? (gap.missing_skills || []) : [];
-  const gapSection = hasGap ? `
-    <div style="padding-top:10px;border-top:1px solid var(--border)">
-      <div class="quality-group-label" style="margin-bottom:6px">Análise de gap de habilidades</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <div style="font-size:12px;color:var(--muted)">Cobertura do stack:</div>
-        <div style="background:var(--border);border-radius:4px;height:8px;flex:1;overflow:hidden">
-          <div style="background:${coverPct >= 70 ? 'var(--green)' : coverPct >= 30 ? 'var(--yellow)' : 'var(--red)'};height:100%;width:${coverPct}%;transition:width .4s"></div>
-        </div>
-        <div style="font-size:12px;font-weight:600;color:var(--text);min-width:32px;text-align:right">${coverPct}%</div>
-      </div>
-      ${missing.length ? `
-        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Habilidades em falta no seu perfil:</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px">
-          ${missing.map(s => `<span class="miss-tag" title="Você não tem esta habilidade cadastrada">${escHtml(s)}</span>`).join('')}
-        </div>` : `<div style="font-size:12px;color:var(--green)">Nenhuma habilidade faltando — ótima cobertura!</div>`
-      }
-    </div>` : '';
+  const hasAnyData = analysisSection || stackSection || reqSection;
 
-  const hasStack = stack.length > 0;
-  const hasReqs = reqs.length > 0;
-  const hasAnyData = hasStack || hasReqs || hasGap;
-
-  const tr = document.createElement('tr');
-  tr.id = `quality-row-${jobId}`;
-  tr.className = 'quality-details-row';
-  tr.innerHTML = `<td colspan="8"><div class="quality-details-panel">
-    <div class="quality-summary" style="margin-bottom:10px">
-      ${quality
-        ? `Compatibilidade calculada pelo sistema:
-           <span class="badge badge-${qualityCls}" style="padding:1px 6px;font-size:10px">${qualityLbl}</span>
-           &nbsp;<span style="color:var(--muted);font-size:11px">baseada nas suas habilidades cadastradas</span>`
-        : '<span style="color:var(--muted)">Qualidade ainda não calculada — aguarde o processamento.</span>'
-      }
-    </div>
+  return `
+    <div class="quality-summary" style="margin-bottom:10px">${summary}</div>
+    ${analysisSection}
     ${stackSection}
     ${reqSection}
-    ${gapSection}
-    ${!hasAnyData ? '<span style="color:var(--muted)">Nenhum dado de stack extraído desta vaga.</span>' : ''}
-  </div></td>`;
-
-  document.getElementById(`job-row-${jobId}`)?.insertAdjacentElement('afterend', tr);
+    ${!hasAnyData ? '<span style="color:var(--muted)">Nenhum dado de stack extraído desta vaga.</span>' : ''}`;
 }
 
 // ── VAGAS ──
@@ -292,40 +280,37 @@ async function loadJobs() {
     }
 
     jobs.forEach(j => {
-      _jobMeta.set(j.id, { stack: j.stacks || [], reqs: j.requirements || [], quality: j.quality });
+      _jobMeta.set(j.id, {
+        stack: j.stacks || [], reqs: j.requirements || [], quality: j.quality,
+        fit: j.fit || null, analysis: j.analysis || null,
+      });
     });
 
     tbody.innerHTML = jobs.map(j => {
       const { quality } = _jobMeta.get(j.id);
       return `
-      <tr id="job-row-${j.id}">
+      <tr id="job-row-${j.id}" class="job-row-link" onclick="jobRowClick(event, '${j.id}')" title="Abrir a vaga">
         <td style="color:var(--muted);font-size:11px" class="truncate" title="${j.id}" data-label="ID">${j.id.slice(0,8)}…</td>
-        <td data-label="Empresa">${j.company_name || '<span style="color:var(--muted)">—</span>'}</td>
-        <td class="truncate" title="${j.job_title||''}" data-label="Título">${j.job_title || '<span style="color:var(--muted)">—</span>'}</td>
-        <td data-label="Status">${badge(j.status, j.quality)}</td>
+        <td data-label="Empresa">${j.company_name ? escHtml(j.company_name) : '<span style="color:var(--muted)">—</span>'}</td>
+        <td class="truncate" title="${escHtml(j.job_title || '')}" data-label="Título"><span class="job-title-link">${j.job_title ? escHtml(j.job_title) : '<span style="color:var(--muted)">—</span>'}</span></td>
+        <td data-label="Status">${badge(j.status)}</td>
         <td data-label="Qualidade">${qualityBadge(j.id, quality)}</td>
         <td style="color:var(--muted)" data-label="Cadastrada">${fmtDate(j.created_at)}</td>
         <td data-label="URL">
           ${j.url ? `<a class="link" href="${j.url}" target="_blank" rel="noopener">↗ abrir</a>` : '—'}
         </td>
-        <td>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-            ${j.status === 'completed'
-              ? `<button class="btn-expand btn-sm" onclick="toggleResumes('${j.id}', this)">Currículos</button>`
-              : ''
-            }
-            ${j.status === 'error' || j.status === 'completed'
-              ? `<button class="btn btn-ghost btn-sm" onclick="retryJob('${j.id}', this)">Refazer</button>`
-              : ''
-            }
-            <button class="btn-delete" onclick="deleteJob('${j.id}', this)">✕</button>
-          </div>
-        </td>
+        <td class="job-actions-cell" data-status="${j.status}" data-lang="${j.language === 'en' ? 'en' : 'pt-br'}">${jobActions(j.id, j.status)}</td>
       </tr>
     `; }).join('');
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="8" class="empty">Erro: ${e.message}</td></tr>`;
   }
+}
+
+// Clique na linha abre a tela da vaga; botões, links e seletores fazem o próprio trabalho.
+function jobRowClick(ev, id) {
+  if (ev.target.closest('button, a, select, input, textarea, label')) return;
+  openJobDetail(id);
 }
 
 async function deleteJob(id, btn) {
@@ -341,65 +326,53 @@ async function deleteJob(id, btn) {
   } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
 }
 
-function retryJob(id, btn) {
-  const div = btn.closest('div');
-  const hasResumes = !!div.querySelector('.btn-expand');
-  div.innerHTML = `
-    ${hasResumes ? `<button class="btn-expand btn-sm" onclick="toggleResumes('${id}', this)">Currículos</button>` : ''}
-    <span style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap">
-      <span style="font-size:11px;color:var(--muted);white-space:nowrap">Gerar:</span>
-      <button class="btn btn-ghost btn-sm" onclick="doRetryWithMode('${id}','full',this)">Tudo</button>
-      <button class="btn btn-ghost btn-sm" onclick="doRetryWithMode('${id}','resume_only',this)">Currículo</button>
-      <button class="btn btn-ghost btn-sm" onclick="doRetryWithMode('${id}','cover_only',this)">Cover</button>
-      <button class="btn btn-ghost btn-sm" style="color:var(--muted)" onclick="loadJobs()" title="Cancelar">✕</button>
-    </span>
-    <button class="btn-delete" onclick="deleteJob('${id}', this)">✕</button>
-  `;
+// O Refazer troca as ações pela escolha do que gerar; "Cancelar" volta aos botões
+// sem recarregar a lista. O ✕ de excluir sai enquanto isso, para não ficar ao lado
+// do cancelar.
+// ── Como gerar ──
+// Idioma e o que gerar, escolhidos a cada geração: no Refazer (Vagas e tela da vaga) e
+// no "Gerar currículo" do Descobrir. Vaga em inglês pede currículo em inglês, mas quem
+// decide é o usuário. onGo é o nome da função chamada como onGo(mode, botão, ...args);
+// o idioma ela lê com genLanguage(botão).
+const _genModes = [['full', 'Tudo', 'Currículo e cover letter'], ['resume_only', 'Currículo', 'Só o currículo'], ['cover_only', 'Cover', 'Só a cover letter']];
+
+function genChooser({ label = 'Gerar:', lang = 'pt-br', onGo, args = [], onCancel }) {
+  const extra = args.map(a => `, '${a}'`).join('');
+  const langOpt = (v, name) => `<option value="${v}"${lang === v ? ' selected' : ''}>${name}</option>`;
+  return `<div class="job-actions gen-chooser">
+    <span class="job-actions-label">${label}</span>
+    <select class="gen-lang" aria-label="Idioma do currículo" title="Idioma do currículo e da cover letter">
+      ${langOpt('pt-br', 'PT-BR')}${langOpt('en', 'EN')}
+    </select>
+    ${_genModes.map(([m, name, tip]) => `<button class="btn btn-ghost btn-sm" title="${tip}" onclick="${onGo}('${m}', this${extra})">${name}</button>`).join('')}
+    <button class="btn btn-ghost btn-sm job-actions-cancel" onclick="${onCancel}">Cancelar</button>
+  </div>`;
 }
 
-async function doRetryWithMode(id, mode, btn) {
+function genLanguage(btn) {
+  return btn.closest('.gen-chooser')?.querySelector('.gen-lang')?.value || 'pt-br';
+}
+
+function retryJob(id, btn) {
+  const td = btn.closest('td');
+  td.innerHTML = genChooser({ lang: td.dataset.lang, onGo: 'doRetryWithMode', args: [id], onCancel: `cancelRetry('${id}', this)` });
+}
+
+function cancelRetry(id, btn) {
+  const td = btn.closest('td');
+  td.innerHTML = jobActions(id, td.dataset.status);
+}
+
+async function doRetryWithMode(mode, btn, id) {
+  const language = genLanguage(btn);
   const div = btn.closest('div');
-  div.querySelectorAll('button').forEach(b => b.disabled = true);
+  div.querySelectorAll('button, select').forEach(b => b.disabled = true);
   try {
-    const res = await api.put(`/jobs/${id}/retry`, { mode });
+    const res = await api.put(`/jobs/${id}/retry`, { mode, language });
     if (!res.ok) { toast('Erro ao reprocessar.', 'error'); loadJobs(); return; }
-    toast('Vaga enviada para reprocessamento.');
+    toast(`Vaga enviada para reprocessamento (${language === 'en' ? 'inglês' : 'português'}).`);
     loadJobs();
   } catch (e) { toast(e.message, 'error'); loadJobs(); }
-}
-
-// ── Toggle resumes panel per job row ──
-async function toggleResumes(jobId, btn) {
-  const existingRow = document.getElementById(`resumes-row-${jobId}`);
-  if (existingRow) {
-    existingRow.remove();
-    btn.textContent = 'Currículos';
-    return;
-  }
-
-  btn.textContent = '⏳ Carregando...';
-  btn.disabled = true;
-
-  try {
-    const res = await api.get(`/jobs/${jobId}/resumes?cursor=0&size=20`);
-    const { data: resumes } = await apiList(res);
-
-    const jobRow = document.getElementById(`job-row-${jobId}`);
-    const tr = document.createElement('tr');
-    tr.id = `resumes-row-${jobId}`;
-    tr.className = 'job-resumes-row';
-    tr.innerHTML = `<td colspan="8"><div class="job-resumes-panel">
-      ${renderResumes(jobId, resumes)}
-    </div></td>`;
-    jobRow.insertAdjacentElement('afterend', tr);
-
-    btn.textContent = '▲ Fechar';
-    btn.disabled = false;
-  } catch (e) {
-    toast(e.message, 'error');
-    btn.textContent = 'Currículos';
-    btn.disabled = false;
-  }
 }
 
 // Modelos de PDF (iguais a TEMPLATES em scripts/gerar_pdf.py). Trocar de modelo
@@ -421,7 +394,8 @@ function templateSelect(resumeId) {
   return `<select id="tpl-${resumeId}" class="tpl-select" aria-label="Modelo do PDF" title="Modelo do PDF">${opts}</select>`;
 }
 
-function renderResumes(jobId, resumes) {
+// selectable: checkbox em cada card para apagar vários (tela da vaga).
+function renderResumes(jobId, resumes, { selectable = false } = {}) {
   if (!resumes.length) return '<p style="color:var(--muted);font-size:13px">Nenhum currículo gerado ainda.</p>';
   return resumes.map((r, i) => {
     const key = `r-${jobId}-${i}`;
@@ -432,8 +406,9 @@ function renderResumes(jobId, resumes) {
     return `
       <div class="resume-card" id="rc-${r.id}">
         <div class="resume-card-header">
-          <div>
-            <h4>${r.job?.company_name || 'Empresa'} — ${r.job?.job_title || 'Vaga'}</h4>
+          ${selectable ? `<input type="checkbox" class="resume-check" value="${r.id}" onchange="jdSelChanged()" aria-label="Selecionar este currículo">` : ''}
+          <div class="resume-card-title">
+            <h4>${escHtml(r.job?.company_name || 'Empresa')} — ${escHtml(r.job?.job_title || 'Vaga')}</h4>
             <div class="meta">Gerado em ${fmtDate(r.created_at)}${r.job?.quality ? ` · qualidade: ${r.job.quality}` : ''}</div>
           </div>
           <div class="resume-card-actions">
@@ -550,6 +525,8 @@ async function deleteResume(jobId, resumeId, btn) {
     if (!res.ok) { toast('Erro ao deletar currículo.', 'error'); btn.disabled = false; return; }
     document.getElementById(`rc-${resumeId}`)?.remove();
     toast('Currículo deletado.');
+    // Na tela da vaga, recarrega para o contador "Currículos (N)" e o estado vazio.
+    if (_activeTab === 'vaga' && _jd.id === jobId) loadJobDetail();
   } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
 }
 

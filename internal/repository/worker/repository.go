@@ -23,6 +23,10 @@ func (r *workerRepository) WorkerUpdateJob(ctx context.Context, args db.WorkerUp
 	return repository.HandleDatabaseError(err)
 }
 
+func (r *workerRepository) WorkerUpdateJobAnalysis(ctx context.Context, args db.WorkerUpdateJobAnalysisParams) *repository.RepositoryError {
+	return repository.HandleDatabaseError(r.Q.WorkerUpdateJobAnalysis(ctx, args))
+}
+
 func (r *workerRepository) WorkerUpdateJobQuality(ctx context.Context, args db.WorkerUpdateJobQualityParams) *repository.RepositoryError {
 	err := r.Q.WorkerUpdateJobQuality(ctx, args)
 	return repository.HandleDatabaseError(err)

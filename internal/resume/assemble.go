@@ -72,8 +72,10 @@ func Assemble(src Source, out LLMOutput) (Doc, []string) {
 	}
 
 	bulletsByID := map[int][]string{}
+	rolesByID := map[int]string{}
 	for _, e := range out.Experiencias {
 		bulletsByID[e.ID] = e.Bullets
+		rolesByID[e.ID] = e.Cargo
 	}
 	evidences := make([]experienceEvidence, len(src.Experiences))
 	for i, e := range src.Experiences {
@@ -86,8 +88,12 @@ func Assemble(src Source, out LLMOutput) (Doc, []string) {
 			// A IA não escreveu (ou só inventou): usa as conquistas cadastradas.
 			bullets = cleanList(e.Achievements)
 		}
+		role, warn := src.translatedRole(e.Role, rolesByID[i])
+		if warn != "" {
+			warnings = append(warnings, warn)
+		}
 		exp := Experience{
-			Company: e.Company, Role: e.Role,
+			Company: e.Company, Role: role,
 			Start: MonthYear(e.Start), Current: e.Current, Bullets: bullets,
 		}
 		if !e.Current {
@@ -97,11 +103,15 @@ func Assemble(src Source, out LLMOutput) (Doc, []string) {
 	}
 
 	idx := newProfileIndex(src)
+	tr := src.newSkillTranslations(out.Traducoes)
+	warnings = append(warnings, tr.rejected...)
+	shown := map[string]bool{}
 	for _, g := range out.Habilidades {
 		var items []string
 		seen := map[string]bool{}
 		for _, it := range g.Itens {
-			it = strings.TrimSpace(it)
+			// A IA às vezes já põe a tradução na lista: volta para o nome do perfil.
+			it = tr.original(strings.TrimSpace(it))
 			c := src.canonical(it)
 			if it == "" || seen[c] {
 				continue
@@ -111,7 +121,14 @@ func Assemble(src Source, out LLMOutput) (Doc, []string) {
 				continue
 			}
 			seen[c] = true
-			items = append(items, it)
+			// Traduções diferentes podem dar o mesmo nome ("Otimização de Performance" e
+			// "Otimização de Performance (BD)"): mostra uma vez só.
+			name := tr.display(it)
+			if shown[strings.ToLower(name)] {
+				continue
+			}
+			shown[strings.ToLower(name)] = true
+			items = append(items, name)
 		}
 		if len(items) > 0 {
 			doc.Skills = append(doc.Skills, SkillGroup{Category: strings.TrimSpace(g.Categoria), Items: items})

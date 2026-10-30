@@ -17,6 +17,7 @@ func setupJobRoutes(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, bu
 	// Job
 	mux.HandleFunc("POST /jobs", h.CreateJob)
 	mux.HandleFunc("GET /jobs", h.ListJobs)
+	mux.HandleFunc("GET /jobs/{id}", h.GetJob)
 	mux.HandleFunc("DELETE /jobs/{id}", h.DeleteJob)
 	mux.HandleFunc("PUT /jobs/{id}", h.UpdateFullJob)
 	mux.HandleFunc("PUT /jobs/{id}/retry", h.RetryJobProcessing)

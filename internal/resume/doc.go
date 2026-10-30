@@ -76,21 +76,33 @@ type Language struct {
 
 // LLMOutput é o JSON que a IA devolve (schema descrito no system prompt).
 type LLMOutput struct {
-	Resumo       string `json:"resumo"`
-	Experiencias []struct {
-		ID      int      `json:"id"`
-		Bullets []string `json:"bullets"`
-	} `json:"experiencias"`
-	Habilidades []struct {
-		Categoria string   `json:"categoria"`
-		Itens     []string `json:"itens"`
-	} `json:"habilidades"`
-	Projetos []struct {
+	Resumo       string          `json:"resumo"`
+	Experiencias []LLMExperience `json:"experiencias"`
+	Habilidades  []LLMSkillGroup `json:"habilidades"`
+	// Traducoes: nome da skill como está no perfil → nome em inglês. Só no currículo em
+	// inglês; a skill é validada pelo nome original (ver translate.go).
+	Traducoes map[string]string `json:"traducoes,omitempty"`
+	Projetos  []struct {
 		ID        int    `json:"id"`
 		Descricao string `json:"descricao"`
 	} `json:"projetos"`
 	CoverLetter string `json:"cover_letter"`
-	Error       string `json:"error,omitempty"`
+	// Analise é a avaliação honesta da aderência, para o candidato (não vai no currículo).
+	Analise *FitAnalysis `json:"analise,omitempty"`
+	Error   string       `json:"error,omitempty"`
+}
+
+type LLMExperience struct {
+	ID int `json:"id"`
+	// Cargo: o cargo do perfil traduzido para o inglês, só no currículo em inglês. Só
+	// entra se não promover o candidato (ver roleTranslationOK).
+	Cargo   string   `json:"cargo,omitempty"`
+	Bullets []string `json:"bullets"`
+}
+
+type LLMSkillGroup struct {
+	Categoria string   `json:"categoria"`
+	Itens     []string `json:"itens"`
 }
 
 // Source é o que o banco sabe do candidato, na mesma ordem (ids) enviada à IA.

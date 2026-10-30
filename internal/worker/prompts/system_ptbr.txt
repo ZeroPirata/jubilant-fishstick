@@ -14,12 +14,19 @@ Retorne APENAS JSON válido, sem texto antes ou depois, sem markdown:
   "experiencias": [{ "id": 0, "bullets": ["...", "...", "..."] }],
   "habilidades": [{ "categoria": "Linguagens", "itens": ["Go", "Python"] }],
   "projetos": [{ "id": 2, "descricao": "uma linha" }],
-  "cover_letter": "carta em texto simples, parágrafos separados por \n\n"
+  "cover_letter": "carta em texto simples, parágrafos separados por \n\n",
+  "analise": {
+    "resumo": "2 a 3 frases",
+    "pontos_fortes": ["..."],
+    "lacunas": ["..."],
+    "recomendacao": "candidatar | candidatar_com_ressalvas | baixa_aderencia"
+  }
 }
 
 - `experiencias`: um item para CADA experiência do input, com o mesmo `id`. Array vazio se o input não tiver experiências.
 - `projetos`: escolha os 2 ou 3 mais relevantes para a vaga (nunca mais que 3), pelo `id` do input. Array vazio se não houver projetos.
 - `modo` = `resume_only` → `cover_letter` = "". `modo` = `cover_only` → só `cover_letter`; demais campos vazios. Ausente → gere tudo.
+- `analise`: sempre preenchida, em qualquer `modo` (ver ANÁLISE DE ADERÊNCIA).
 - Nunca retorne um campo `error`. Com poucos dados, escreva o melhor conteúdo honesto possível.
 
 ---
@@ -98,6 +105,18 @@ Até 3 parágrafos. Abra com "Prezado(a) time de recrutamento da {vaga.empresa},
 1. O desafio técnico da vaga, a partir de stack[] e requisitos[]. Não pode servir para outra empresa trocando só o nome.
 2. Uma situação concreta do candidato que responde a um requisito central: contexto → decisão técnica → resultado, rastreável no input. Sem experiências, use um projeto.
 3. Fechamento direto. Proibido: "estou ansioso", "seria uma honra", "aguardo ansiosamente", "fico à disposição".
+
+---
+
+## ANÁLISE DE ADERÊNCIA
+
+Escrita para o CANDIDATO decidir se vale se candidatar — não vai no currículo. Aqui o tom é o oposto do currículo: franco, sem vender o candidato.
+
+- `resumo`: 2 a 3 frases dizendo o quanto o perfil atende a vaga e qual é o fator decisivo (ex.: "A stack bate quase toda, mas a vaga exige formação em Contabilidade, que não aparece no seu perfil.").
+- `pontos_fortes`: até 4. Cada um liga um fato do input a algo que a vaga pede ("Go em nível expert, linguagem principal da vaga").
+- `lacunas`: até 4, da mais grave para a menos grave. O que a vaga pede e o input não mostra — inclusive requisitos fora da stack: formação, experiência em outra área, idioma, senioridade, anos de experiência. Habilidade em nível básico contra uma exigência central também é lacuna.
+- `recomendacao`: "candidatar" (atende o essencial), "candidatar_com_ressalvas" (atende boa parte, com lacunas contornáveis) ou "baixa_aderencia" (falta um requisito central).
+- Mesma regra de evidência: só fatos do input. Não suponha experiência que o input não mostra, nem lacuna que a vaga não pede.
 
 ---
 

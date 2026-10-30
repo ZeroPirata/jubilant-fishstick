@@ -13,9 +13,11 @@ function switchAdminView(view, btn) {
   document.getElementById('admin-users').classList.toggle('hidden',  view !== 'users');
   document.getElementById('admin-ai').classList.toggle('hidden',     view !== 'ai');
   document.getElementById('admin-imports').classList.toggle('hidden', view !== 'imports');
+  document.getElementById('admin-discovery').classList.toggle('hidden', view !== 'discovery');
   if (view === 'errors') loadAdminErrors();
   if (view === 'users')  loadAdminUsers();
   if (view === 'ai')     loadAISettings();
+  if (view === 'discovery') loadDiscoveryAdmin();
   if (view === 'imports') {
     loadAdminImports();
     liveStart('imports', () => {
