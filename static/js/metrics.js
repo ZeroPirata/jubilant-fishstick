@@ -88,7 +88,7 @@ async function triggerGC() {
   if (btn) { btn.disabled = true; btn.textContent = 'Aguardando…'; }
   try {
     const token = localStorage.getItem('jp_token');
-    const res = await fetch('/api/v1/debug/gc', {
+    const res = await fetch('/api/v1/admin/debug/gc', {
       method: 'POST',
       headers: token ? { Authorization: 'Bearer ' + token } : {},
     });

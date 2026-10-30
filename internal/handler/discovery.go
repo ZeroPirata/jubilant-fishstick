@@ -1,12 +1,16 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/discovery"
+	"hackton-treino/internal/jobfit"
 	"hackton-treino/internal/middleware"
+	"hackton-treino/internal/repository"
+	"hackton-treino/internal/repository/aliases"
 	discoveryRepo "hackton-treino/internal/repository/discovery"
 	"hackton-treino/internal/repository/users"
 	"net/http"
@@ -21,15 +25,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// Vagas do catálogo carregadas por requisição para ordenar pelas skills. A ordenação
-// precisa ver todas antes de paginar; acima disso ficam só as mais recentes.
-const discoveryRankLimit = 2000
+// Teto de segurança das candidatas por requisição. Elas vêm sem a descrição (linhas
+// leves) e todas entram no ranking e nas contagens dos filtros; o teto só existe para
+// um perfil que case com o catálogo inteiro não pesar demais.
+const discoveryRankLimit = 20000
 
 type DiscoveryHandler struct {
 	*BaseHandler
 	Service *discovery.Service
 	Repo    discoveryRepo.Repository
 	Users   users.Repository
+	Aliases aliases.Repository
 }
 
 func NewDiscoveryHandler(logger *zap.Logger, conn *pgxpool.Pool, svc *discovery.Service) *DiscoveryHandler {
@@ -38,6 +44,7 @@ func NewDiscoveryHandler(logger *zap.Logger, conn *pgxpool.Pool, svc *discovery.
 		Service:     svc,
 		Repo:        discoveryRepo.New(conn),
 		Users:       users.New(conn),
+		Aliases:     aliases.New(conn),
 	}
 }
 
@@ -66,14 +73,22 @@ type DiscoveredJob struct {
 	// para a página devolvida.
 	Stack []string `json:"stack"`
 	// Language: idioma estimado da vaga ("en" ou "pt-br"), padrão do seletor de idioma
-	// ao gerar o currículo. Só é calculado para a página devolvida.
+	// ao gerar o currículo. Calculado na varredura.
 	Language string `json:"language,omitempty"`
-	text     string
+	// Fit: compatibilidade da stack da vaga com o perfil (o mesmo JobFit da aba Vagas),
+	// que ordena a lista. Só vai na resposta para as vagas da página.
+	Fit   *jobfit.Fit `json:"fit,omitempty"`
+	techs []string
+	fit   jobfit.Fit
 }
 
 // ListJobs devolve as vagas do catálogo que citam skills em que o usuário é forte
-// (avançado ou expert), das que citam mais para as que citam menos. Quem ainda não
+// (avançado ou expert), das mais compatíveis (JobFit) para as menos. Quem ainda não
 // marcou nenhuma skill como avançada/expert vê o casamento com todas as skills.
+//
+// O texto das vagas não é lido aqui: a varredura grava as tecnologias de cada vaga
+// (techs, índice GIN) e as skills fora do catálogo usam a busca de texto do Postgres
+// (search_vec, índice GIN). Vêm só linhas leves; a descrição, só das vagas da página.
 //
 // Filtros: o local de interesse e o nível salvos (/discovery/preferences) e, na query string,
 // ?source= (plataformas) e ?skill= (a vaga precisa citar todas), ambos repetíveis.
@@ -83,14 +98,15 @@ func (h *DiscoveryHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, ErrNotAuthorized.Error())
 		return
 	}
+	ctx := r.Context()
 	cursor, size := getPaginationParams(r)
 
-	skills, errR := h.Users.QuerySelectAllSkills(r.Context(), userID.String())
+	skills, errR := h.Users.QuerySelectAllSkills(ctx, userID.String())
 	if errR != nil {
 		writeRepositoryError(w, errR)
 		return
 	}
-	prefs, errR := h.Repo.SelectPreferences(r.Context(), userID)
+	prefs, errR := h.Repo.SelectPreferences(ctx, userID)
 	if errR != nil {
 		writeRepositoryError(w, errR)
 		return
@@ -101,32 +117,47 @@ func (h *DiscoveryHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	matchSkills, onlyStrong := strongSkills(skills)
-	techs := prefs.Technologies
-	if len(matchSkills) == 0 && len(techs) == 0 {
+	interest := prefs.Technologies
+	if len(matchSkills) == 0 && len(interest) == 0 {
 		writeDiscoveryList(w, discoveryResult{Jobs: []DiscoveredJob{}, Facets: emptyFacets()}, size, cursor, onlyStrong)
 		return
 	}
-	// Com tecnologias escolhidas, elas decidem quais vagas entram (mesmo sem skill do
-	// perfil); as skills só ordenam. Sem tecnologias, entram as que citam as skills.
-	pattern := discovery.RegexPattern(matchSkills)
-	if len(techs) > 0 {
-		pattern = discovery.RegexPattern(discovery.TechSkills(techs))
+	plan := discovery.PlanSkills(matchSkills)
+	activeSince := pgtype.Timestamptz{Time: time.Now().Add(-discovery.ActiveFor), Valid: true}
+
+	hitRows, errR := h.Repo.SkillHits(ctx, db.DiscoverySkillHitsParams{Terms: plan.Terms, ActiveSince: activeSince})
+	if errR != nil {
+		writeRepositoryError(w, errR)
+		return
+	}
+	hits := map[[16]byte][]string{}
+	for _, hr := range hitRows {
+		hits[hr.ID.Bytes] = append(hits[hr.ID.Bytes], hr.Term)
 	}
 
-	rows, errR := h.Repo.ListForUser(r.Context(), db.DiscoveryListForUserParams{
-		UserID:      userID,
-		ActiveSince: pgtype.Timestamptz{Time: time.Now().Add(-discovery.ActiveFor), Valid: true},
-		Pattern:     pattern,
-		MaxCount:    discoveryRankLimit,
-	})
+	// Com tecnologias de interesse, elas decidem quais vagas entram (mesmo sem skill do
+	// perfil); as skills só ordenam. Sem elas, entram as que citam as skills.
+	params := db.DiscoveryListCandidatesParams{ActiveSince: activeSince, Techs: interest, ExtraIds: []pgtype.UUID{}, MaxCount: discoveryRankLimit}
+	if len(interest) == 0 {
+		params.Techs = plan.AllTechs
+		for _, hr := range hitRows {
+			params.ExtraIds = append(params.ExtraIds, hr.ID)
+		}
+	}
+	rows, errR := h.Repo.ListCandidates(ctx, params)
 	if errR != nil {
 		writeRepositoryError(w, errR)
 		return
 	}
 
-	// O regex do banco ainda deixa passar o "c" de "c#"; aqui só fica quem casa por
-	// palavra inteira.
-	// A mesma vaga costuma ser publicada uma vez por cidade: fica a mais recente.
+	aliasMap, errA := h.Aliases.QuerySelectAllStackAliases(ctx)
+	if errA != nil {
+		aliasMap = map[string]string{}
+	}
+	eval := jobfit.NewEvaluator(skills, aliasMap)
+
+	// A mesma vaga costuma ser publicada uma vez por cidade: fica a mais recente (a
+	// query vem da mais recente para a mais antiga).
 	jobs := make([]DiscoveredJob, 0, len(rows))
 	seen := map[string]bool{}
 	for _, row := range rows {
@@ -139,29 +170,118 @@ func (h *DiscoveryHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		seen[key] = true
-		text := row.Title + "\n" + row.Description
-		matched := discovery.MatchSkills(text, matchSkills)
-		matchedTechs := discovery.MatchTechs(text, techs)
-		if (len(techs) > 0 && len(matchedTechs) == 0) || (len(techs) == 0 && len(matched) == 0) {
+		matched := plan.Matched(row.Techs, hits[row.ID.Bytes])
+		matchedTechs := intersect(interest, row.Techs)
+		if (len(interest) > 0 && len(matchedTechs) == 0) || (len(interest) == 0 && len(matched) == 0) {
 			continue
 		}
 		job := toDiscoveredJob(row, matched)
-		job.MatchedTechs = nonNil(matchedTechs)
-		job.text = text
+		job.MatchedTechs = matchedTechs
+		job.fit = eval.Evaluate(row.Techs)
 		jobs = append(jobs, job)
 	}
-	// Estável: empate mantém a ordem da query (mais recente primeiro).
+	rankDiscovered(jobs)
+
+	q := r.URL.Query()
+	f.Sources, f.Skills = q["source"], q["skill"]
+	result := filterDiscovered(jobs, f)
+	if errR := h.fillPage(ctx, userID, result.Jobs, cursor, size); errR != nil {
+		writeRepositoryError(w, errR)
+		return
+	}
+	writeDiscoveryList(w, result, size, cursor, onlyStrong)
+}
+
+// rankDiscovered ordena pela compatibilidade (JobFit): primeiro a faixa (alta, média,
+// baixa; sem stack conhecida por último), depois quantas tecnologias da vaga o perfil
+// cobre (forte vale o dobro de parcial, para uma vaga que só cita Go não passar na
+// frente de uma com Go, PostgreSQL e Docker), a cobertura e as skills citadas.
+// Estável: no empate fica a mais recente.
+func rankDiscovered(jobs []DiscoveredJob) {
+	tier := func(f jobfit.Fit) int {
+		if len(f.Items) == 0 {
+			return 0
+		}
+		switch f.Quality {
+		case db.JobQualityHigh:
+			return 3
+		case db.JobQualityMid:
+			return 2
+		}
+		return 1
+	}
 	sort.SliceStable(jobs, func(a, b int) bool {
+		fa, fb := jobs[a].fit, jobs[b].fit
+		if ta, tb := tier(fa), tier(fb); ta != tb {
+			return ta > tb
+		}
+		if ca, cb := 2*fa.Strong+fa.Partial, 2*fb.Strong+fb.Partial; ca != cb {
+			return ca > cb
+		}
+		if fa.CoveragePct != fb.CoveragePct {
+			return fa.CoveragePct > fb.CoveragePct
+		}
 		if len(jobs[a].MatchedSkills) != len(jobs[b].MatchedSkills) {
 			return len(jobs[a].MatchedSkills) > len(jobs[b].MatchedSkills)
 		}
 		return len(jobs[a].MatchedTechs) > len(jobs[b].MatchedTechs)
 	})
+}
 
-	q := r.URL.Query()
-	f.Sources, f.Skills = q["source"], q["skill"]
-	result := filterDiscovered(jobs, f)
-	writeDiscoveryList(w, result, size, cursor, onlyStrong)
+// fillPage completa as vagas da página com o que precisa da descrição (trecho) ou da
+// pipeline do usuário, e expõe a compatibilidade e a stack restante.
+func (h *DiscoveryHandler) fillPage(ctx context.Context, userID pgtype.UUID, jobs []DiscoveredJob, cursor, size int32) *repository.RepositoryError {
+	start, end := pageBounds(int32(len(jobs)), cursor, size)
+	page := jobs[start:end]
+	ids := make([]pgtype.UUID, 0, len(page))
+	for _, j := range page {
+		var id pgtype.UUID
+		if err := id.Scan(j.ID); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	details, errR := h.Repo.PageDetails(ctx, db.DiscoveryPageDetailsParams{UserID: userID, Ids: ids})
+	if errR != nil {
+		return errR
+	}
+	byID := make(map[string]db.DiscoveryPageDetailsRow, len(details))
+	for _, d := range details {
+		byID[d.ID.String()] = d
+	}
+	for i := range page {
+		j := &page[i]
+		if d, ok := byID[j.ID]; ok {
+			j.Snippet = snippet(d.Description, 280)
+			if j.Language == "" {
+				j.Language = discovery.GuessLanguage(j.Title + "\n" + d.Description)
+			}
+			if d.PipelineJobID.Valid {
+				j.AlreadyAdded = true
+				j.PipelineJobID = d.PipelineJobID.String()
+				j.PipelineStatus = d.PipelineStatus
+			}
+		}
+		j.Stack = otherStack(*j)
+		fit := j.fit
+		j.Fit = &fit
+	}
+	return nil
+}
+
+func pageBounds(total, cursor, size int32) (int32, int32) {
+	start := min(max(cursor, 0), total)
+	return start, min(start+max(size, 1), total)
+}
+
+// intersect devolve os itens de want que estão em have, na ordem de want.
+func intersect(want, have []string) []string {
+	out := []string{}
+	for _, w := range want {
+		if slices.Contains(have, w) {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 type facetCount struct {
@@ -178,18 +298,15 @@ type discoveryFacets struct {
 
 const unknownLevel = "unknown"
 
-// otherStack devolve as tecnologias citadas na vaga que não são as já destacadas
-// (skills do perfil e tecnologias de interesse).
+// otherStack devolve as tecnologias citadas na vaga (techs, da varredura) que não são
+// as já destacadas (skills do perfil e tecnologias de interesse).
 func otherStack(j DiscoveredJob) []string {
 	out := []string{}
-	if j.text == "" {
-		return out
-	}
 	skills := make([]discovery.Skill, len(j.MatchedSkills))
 	for i, s := range j.MatchedSkills {
 		skills[i] = discovery.NewSkill(s)
 	}
-	for _, t := range discovery.MatchTechs(j.text, discovery.TechNames) {
+	for _, t := range j.techs {
 		if slices.Contains(j.MatchedTechs, t) || slices.ContainsFunc(skills, func(s discovery.Skill) bool {
 			return discovery.TechCoveredBy(t, s)
 		}) {
@@ -300,12 +417,7 @@ func sortedFacets(counts map[string]int) []facetCount {
 // casamento caiu para todas as skills) e as contagens dos filtros.
 func writeDiscoveryList(w http.ResponseWriter, res discoveryResult, size, cursor int32, onlyStrong bool) {
 	total := int32(len(res.Jobs))
-	start := min(max(cursor, 0), total)
-	end := min(start+max(size, 1), total)
-	for i := start; i < end; i++ {
-		res.Jobs[i].Stack = otherStack(res.Jobs[i])
-		res.Jobs[i].Language = discovery.GuessLanguage(res.Jobs[i].text)
-	}
+	start, end := pageBounds(total, cursor, size)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -490,7 +602,7 @@ func (h *DiscoveryHandler) Status(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.Service.UserStatus(userID))
 }
 
-func toDiscoveredJob(row db.DiscoveryListForUserRow, matched []string) DiscoveredJob {
+func toDiscoveredJob(row db.DiscoveryListCandidatesRow, matched []string) DiscoveredJob {
 	job := DiscoveredJob{
 		ID:            row.ID.String(),
 		Source:        row.Source,
@@ -499,16 +611,13 @@ func toDiscoveredJob(row db.DiscoveryListForUserRow, matched []string) Discovere
 		Location:      row.Location,
 		WorkplaceType: row.WorkplaceType,
 		Url:           row.Url,
-		Snippet:       snippet(row.Description, 280),
 		MatchedSkills: matched,
-		AlreadyAdded:  row.PipelineJobID.Valid,
+		MatchedTechs:  []string{},
 		International: row.International,
 		Seniority:     nonNil(row.Seniority),
 		Stack:         []string{},
-	}
-	if row.PipelineJobID.Valid {
-		job.PipelineJobID = row.PipelineJobID.String()
-		job.PipelineStatus = row.PipelineStatus
+		Language:      row.Language,
+		techs:         row.Techs,
 	}
 	if job.MatchedSkills == nil {
 		job.MatchedSkills = []string{}

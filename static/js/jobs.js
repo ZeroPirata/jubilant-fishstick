@@ -336,7 +336,10 @@ async function deleteJob(id, btn) {
 // o idioma ela lê com genLanguage(botão).
 const _genModes = [['full', 'Tudo', 'Currículo e cover letter'], ['resume_only', 'Currículo', 'Só o currículo'], ['cover_only', 'Cover', 'Só a cover letter']];
 
-function genChooser({ label = 'Gerar:', lang = 'pt-br', onGo, args = [], onCancel }) {
+// retry: mostra "Nova versão da IA". Marcada (padrão), a IA escreve de novo; sem
+// marcar, se vaga, perfil, idioma e modo não mudaram, a última resposta é reaproveitada
+// sem gastar cota.
+function genChooser({ label = 'Gerar:', lang = 'pt-br', onGo, args = [], onCancel, retry = false }) {
   const extra = args.map(a => `, '${a}'`).join('');
   const langOpt = (v, name) => `<option value="${v}"${lang === v ? ' selected' : ''}>${name}</option>`;
   return `<div class="job-actions gen-chooser">
@@ -344,6 +347,7 @@ function genChooser({ label = 'Gerar:', lang = 'pt-br', onGo, args = [], onCance
     <select class="gen-lang" aria-label="Idioma do currículo" title="Idioma do currículo e da cover letter">
       ${langOpt('pt-br', 'PT-BR')}${langOpt('en', 'EN')}
     </select>
+    ${retry ? `<label class="gen-fresh" title="Desmarcada: se nada mudou (vaga, perfil, idioma e modo), reaproveita a última resposta da IA sem gastar cota"><input type="checkbox" class="gen-fresh-check" checked> Nova versão da IA</label>` : ''}
     ${_genModes.map(([m, name, tip]) => `<button class="btn btn-ghost btn-sm" title="${tip}" onclick="${onGo}('${m}', this${extra})">${name}</button>`).join('')}
     <button class="btn btn-ghost btn-sm job-actions-cancel" onclick="${onCancel}">Cancelar</button>
   </div>`;
@@ -353,9 +357,15 @@ function genLanguage(btn) {
   return btn.closest('.gen-chooser')?.querySelector('.gen-lang')?.value || 'pt-br';
 }
 
+// genFresh: "Nova versão da IA" marcada (true quando o seletor não tem a opção).
+function genFresh(btn) {
+  const c = btn.closest('.gen-chooser')?.querySelector('.gen-fresh-check');
+  return c ? c.checked : true;
+}
+
 function retryJob(id, btn) {
   const td = btn.closest('td');
-  td.innerHTML = genChooser({ lang: td.dataset.lang, onGo: 'doRetryWithMode', args: [id], onCancel: `cancelRetry('${id}', this)` });
+  td.innerHTML = genChooser({ lang: td.dataset.lang, onGo: 'doRetryWithMode', args: [id], onCancel: `cancelRetry('${id}', this)`, retry: true });
 }
 
 function cancelRetry(id, btn) {
@@ -364,11 +374,11 @@ function cancelRetry(id, btn) {
 }
 
 async function doRetryWithMode(mode, btn, id) {
-  const language = genLanguage(btn);
+  const language = genLanguage(btn), fresh = genFresh(btn);
   const div = btn.closest('div');
-  div.querySelectorAll('button, select').forEach(b => b.disabled = true);
+  div.querySelectorAll('button, select, input').forEach(b => b.disabled = true);
   try {
-    const res = await api.put(`/jobs/${id}/retry`, { mode, language });
+    const res = await api.put(`/jobs/${id}/retry`, { mode, language, fresh });
     if (!res.ok) { toast('Erro ao reprocessar.', 'error'); loadJobs(); return; }
     toast(`Vaga enviada para reprocessamento (${language === 'en' ? 'inglês' : 'português'}).`);
     loadJobs();

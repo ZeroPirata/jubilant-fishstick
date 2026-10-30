@@ -22,6 +22,9 @@ const (
 	TopicLanguages    = "languages"
 
 	keyLLMRateLimit = "worker:llm_rate_limited"
+
+	// Respostas da IA guardadas por hash do prompt (worker.generationKey).
+	generationTTL = 30 * 24 * time.Hour
 )
 
 // ErrCacheMiss is returned by Get when the key does not exist in Redis.
@@ -40,6 +43,10 @@ type Cache interface {
 	// RateLimitRemaining devolve quanto falta para a pausa do worker acabar (0 = não pausado).
 	RateLimitRemaining(ctx context.Context) time.Duration
 	ClearRateLimit(ctx context.Context) error
+	// GetGeneration/SetGeneration guardam a resposta da IA de uma geração, por usuário
+	// e hash do prompt, por generationTTL. Get devolve ErrCacheMiss quando não há.
+	GetGeneration(ctx context.Context, userId, key string) ([]byte, error)
+	SetGeneration(ctx context.Context, userId, key string, body []byte) error
 }
 
 func New(rds *redis.Client) Cache {
@@ -83,6 +90,22 @@ func (c *cache) RateLimitRemaining(ctx context.Context) time.Duration {
 
 func (c *cache) ClearRateLimit(ctx context.Context) error {
 	return c.r.Del(ctx, keyLLMRateLimit).Err()
+}
+
+func generationKey(userId, key string) string {
+	return fmt.Sprintf("user:%s:generation:%s", userId, key)
+}
+
+func (c *cache) GetGeneration(ctx context.Context, userId, key string) ([]byte, error) {
+	b, err := c.r.Get(ctx, generationKey(userId, key)).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, ErrCacheMiss
+	}
+	return b, err
+}
+
+func (c *cache) SetGeneration(ctx context.Context, userId, key string, body []byte) error {
+	return c.r.Set(ctx, generationKey(userId, key), body, generationTTL).Err()
 }
 
 func (c *cache) IsRateLimited(ctx context.Context) bool {

@@ -573,6 +573,9 @@ func (h *JobHandler) RetryJobProcessing(w http.ResponseWriter, r *http.Request) 
 		Mode string `json:"mode"`
 		// Language: idioma do currículo e da cover letter ("pt-br" ou "en"); vazio mantém.
 		Language string `json:"language"`
+		// Fresh: pede uma resposta nova à IA em vez de reaproveitar a guardada para o
+		// mesmo pedido (mesma vaga, perfil, idioma e modo).
+		Fresh bool `json:"fresh"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	if !validJobLanguage(body.Language) {
@@ -583,8 +586,9 @@ func (h *JobHandler) RetryJobProcessing(w http.ResponseWriter, r *http.Request) 
 	errR = h.Jobs.QueryReprocessJob(r.Context(), db.QueryReprocessJobParams{
 		ID:       pgJobId,
 		UserID:   userId,
-		Mode:     body.Mode,
-		Language: body.Language,
+		Mode:            body.Mode,
+		Language:        body.Language,
+		FreshGeneration: body.Fresh,
 	})
 
 	if errR != nil {

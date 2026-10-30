@@ -39,6 +39,10 @@ const (
 	// varredura de 12h que falhou). Depois de deleteAfter ela é apagada.
 	ActiveFor   = 36 * time.Hour
 	deleteAfter = 7 * 24 * time.Hour
+	// Vaga publicada há mais que isso não entra no catálogo e, se já estava, é apagada
+	// na varredura completa: muitos sites deixam a vaga listada meses depois de
+	// preenchida. Vaga sem data de publicação não é afetada.
+	MaxJobAge = 45 * 24 * time.Hour
 	// Histórico de varreduras mantido no painel.
 	runsRetention = 30 * 24 * time.Hour
 
@@ -256,6 +260,7 @@ func (s *Service) Run(ctx context.Context) {
 	if n, errR := s.Repo.FailInterruptedRuns(ctx); errR == nil && n > 0 {
 		s.Logger.Warn("Descoberta: varreduras interrompidas marcadas como erro", zap.Int64("quantidade", n))
 	}
+	s.BackfillTechs(ctx)
 
 	minWait := startupGrace
 	for {
@@ -503,13 +508,11 @@ func (s *Service) record(ctx context.Context, spec runSpec) {
 	}
 
 	results := s.runSources(ctx, spec, prog)
+	s.cleanIndexes(bg)
 
 	var removed int64
 	if spec.full {
-		cutoff := pgtype.Timestamptz{Time: time.Now().Add(-deleteAfter), Valid: true}
-		if removed, errR = s.Repo.DeleteStale(bg, cutoff); errR != nil {
-			s.Logger.Warn("Descoberta: erro ao apagar vagas antigas", zap.String("erro", errR.Message))
-		}
+		removed = s.deleteStale(bg)
 		runsCutoff := pgtype.Timestamptz{Time: time.Now().Add(-runsRetention), Valid: true}
 		if _, errR = s.Repo.PruneRuns(bg, runsCutoff); errR != nil {
 			s.Logger.Warn("Descoberta: erro ao apagar histórico antigo", zap.String("erro", errR.Message))
@@ -719,10 +722,40 @@ func (s *Service) release(source, keyword string) {
 	delete(s.fetched, source+"|"+keyword)
 }
 
-// save grava a vaga (nova ou atualizada) e diz se ela era nova.
+// deleteStale apaga as vagas que sumiram, venceram ou passaram de MaxJobAge, registra
+// quantas saíram de cada fonte e devolve o total.
+func (s *Service) deleteStale(ctx context.Context) int64 {
+	now := time.Now()
+	rows, errR := s.Repo.DeleteStale(ctx, db.DiscoveryDeleteStaleParams{
+		Cutoff:          pgtype.Timestamptz{Time: now.Add(-deleteAfter), Valid: true},
+		PublishedCutoff: pgtype.Timestamptz{Time: now.Add(-MaxJobAge), Valid: true},
+	})
+	if errR != nil {
+		s.Logger.Warn("Descoberta: erro ao apagar vagas antigas", zap.String("erro", errR.Message))
+		return 0
+	}
+	var total int64
+	for _, r := range rows {
+		total += r.Removed
+		s.Logger.Info("Descoberta: vagas removidas do catálogo", zap.String("fonte", r.Source), zap.Int64("vagas", r.Removed))
+	}
+	return total
+}
+
+// tooOld: vaga publicada antes de MaxJobAge (ver deleteStale).
+func tooOld(l Listing, now time.Time) bool {
+	return !l.PublishedAt.IsZero() && now.Sub(l.PublishedAt) > MaxJobAge
+}
+
+// save grava a vaga (nova ou atualizada) e diz se ela era nova. Vaga velha demais
+// (tooOld) não é gravada.
 func (s *Service) save(ctx context.Context, l Listing, keyword string) (saved, created bool) {
+	if tooOld(l, time.Now()) {
+		return false, false
+	}
 	// O registro continua mesmo com o contexto vencido: a vaga já foi baixada.
 	ctx = context.WithoutCancel(ctx)
+	idx := IndexJob(l.Title, l.Description)
 	row, errR := s.Repo.UpsertJob(ctx, db.DiscoveryUpsertJobParams{
 		Source:        l.Source,
 		ExternalID:    l.ExternalID,
@@ -736,6 +769,9 @@ func (s *Service) save(ctx context.Context, l Listing, keyword string) (saved, c
 		Seniority:     MergeSeniority(l.Seniority, ClassifySeniority(l.Title)),
 		PublishedAt:   toTimestamptz(l.PublishedAt),
 		ExpiresAt:     toTimestamptz(l.ExpiresAt),
+		Techs:         idx.Techs,
+		TechsVersion:  TechsVersion,
+		Language:      idx.Language,
 	})
 	if errR != nil {
 		s.Logger.Warn("Descoberta: erro ao gravar vaga", zap.String("url", l.URL), zap.String("erro", errR.Message))
@@ -789,4 +825,49 @@ func (s *Service) SourceInfos() []SourceInfo {
 		out[i] = SourceInfo{Name: src.Name(), Kind: SourceKind(src), UsesBoards: UsesBoards(src)}
 	}
 	return out
+}
+
+const backfillBatch = 500
+
+// BackfillTechs recalcula techs e language das vagas gravadas antes da coluna existir
+// ou com outra versão do catálogo (TechsVersion). Roda ao subir, em lotes; as vagas
+// novas já chegam calculadas pela varredura.
+func (s *Service) BackfillTechs(ctx context.Context) {
+	start := time.Now()
+	total := 0
+	for ctx.Err() == nil {
+		rows, errR := s.Repo.SelectTechsPending(ctx, db.DiscoverySelectTechsPendingParams{
+			Version: TechsVersion, MaxCount: backfillBatch,
+		})
+		if errR != nil {
+			s.Logger.Warn("Descoberta: erro ao buscar vagas para indexar", zap.String("erro", errR.Message))
+			return
+		}
+		for _, r := range rows {
+			idx := IndexJob(r.Title, r.Description)
+			if errR := s.Repo.UpdateTechs(ctx, db.DiscoveryUpdateTechsParams{
+				ID: r.ID, Techs: idx.Techs, Language: idx.Language, Version: TechsVersion,
+			}); errR != nil {
+				s.Logger.Warn("Descoberta: erro ao indexar vaga", zap.String("erro", errR.Message))
+				return
+			}
+		}
+		total += len(rows)
+		if len(rows) < backfillBatch {
+			break
+		}
+	}
+	if total > 0 {
+		s.cleanIndexes(ctx)
+		s.Logger.Info("Descoberta: tecnologias das vagas recalculadas",
+			zap.Int("vagas", total), zap.Duration("duracao", time.Since(start)))
+	}
+}
+
+// cleanIndexes incorpora a lista pendente dos índices GIN depois de uma carga em
+// massa: sem isso, toda busca do Descobrir varre as inserções recentes uma a uma.
+func (s *Service) cleanIndexes(ctx context.Context) {
+	if errR := s.Repo.CleanIndexPending(context.WithoutCancel(ctx)); errR != nil {
+		s.Logger.Warn("Descoberta: erro ao incorporar a lista pendente dos índices", zap.String("erro", errR.Message))
+	}
 }

@@ -19,6 +19,12 @@ var (
 		Buckets: []float64{1, 5, 10, 20, 30, 60, 120, 300},
 	}, []string{"status"})
 
+	// Gerações servidas pelo cache da resposta da IA — labels: hit | miss | fresh
+	LLMCache = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "hackton_llm_cache_total",
+		Help: "Gerações de currículo por resultado do cache da resposta da IA.",
+	}, []string{"result"})
+
 	// Duração do scraper (HTTP + NL) por job — labels: ok | error
 	ScraperDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "hackton_scraper_duration_seconds",

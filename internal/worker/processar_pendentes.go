@@ -195,18 +195,7 @@ func (w *Worker) processarJob(ctx context.Context, job *db.Job) {
 	}
 	src := w.buildSource(job, &mOut.matches, profile)
 
-	llmStart := time.Now()
-	llmResponse, errLLM := w.generateWithCorrection(ctx, jobID, prompt, str, src)
-	llmStatus := "ok"
-	if errLLM != nil {
-		var errRL *services.ErrRateLimit
-		if errors.As(errLLM, &errRL) {
-			llmStatus = "rate_limit"
-		} else {
-			llmStatus = "error"
-		}
-	}
-	metrics.LLMDuration.WithLabelValues(llmStatus).Observe(time.Since(llmStart).Seconds())
+	llmResponse, errLLM := w.generateCached(ctx, job, prompt, str, src)
 	if errLLM != nil {
 		if w.handleIfRateLimit(ctx, job, jobID, errLLM) {
 			return

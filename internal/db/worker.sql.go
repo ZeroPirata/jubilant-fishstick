@@ -53,7 +53,7 @@ func (q *Queries) WorkerRecoverStuckJobs(ctx context.Context, cutoff pgtype.Time
 const workerSelectPendingJobs = `-- name: WorkerSelectPendingJobs :many
 
 
-SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description
+SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation
 FROM jobs j
 INNER JOIN user_accounts acc ON acc.id = j.user_id
 WHERE
@@ -98,6 +98,7 @@ func (q *Queries) WorkerSelectPendingJobs(ctx context.Context, maxCount int32) (
 			&i.FitAnalysis,
 			&i.SourceDescription,
 			&i.ScrapedDescription,
+			&i.FreshGeneration,
 		); err != nil {
 			return nil, err
 		}

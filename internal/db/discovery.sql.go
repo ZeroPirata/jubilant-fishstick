@@ -47,17 +47,65 @@ func (q *Queries) DiscoveryCatalogStats(ctx context.Context, activeSince pgtype.
 	return items, nil
 }
 
-const discoveryDeleteStale = `-- name: DiscoveryDeleteStale :execrows
-DELETE FROM discovered_jobs
-WHERE last_seen_at < $1 OR expires_at < now()
+const discoveryCleanIndexPending = `-- name: DiscoveryCleanIndexPending :exec
+SELECT gin_clean_pending_list('idx_discovered_jobs_search'::regclass),
+       gin_clean_pending_list('idx_discovered_jobs_techs'::regclass)
 `
 
-func (q *Queries) DiscoveryDeleteStale(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
-	result, err := q.db.Exec(ctx, discoveryDeleteStale, cutoff)
+// Os índices GIN guardam as inserções numa lista pendente, varrida sequencialmente em
+// toda busca até ser incorporada. Depois de uma carga em massa (varredura, recálculo de
+// techs) ela fica grande e deixa o Descobrir lento: aqui ela é incorporada de uma vez.
+func (q *Queries) DiscoveryCleanIndexPending(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, discoveryCleanIndexPending)
+	return err
+}
+
+const discoveryDeleteStale = `-- name: DiscoveryDeleteStale :many
+WITH removed AS (
+    DELETE FROM discovered_jobs
+    WHERE last_seen_at < $1
+       OR expires_at < now()
+       OR published_at < $2
+    RETURNING source
+)
+SELECT source, count(*)::bigint AS removed
+FROM removed
+GROUP BY source
+ORDER BY source
+`
+
+type DiscoveryDeleteStaleParams struct {
+	Cutoff          pgtype.Timestamptz `json:"cutoff"`
+	PublishedCutoff pgtype.Timestamptz `json:"published_cutoff"`
+}
+
+type DiscoveryDeleteStaleRow struct {
+	Source  string `json:"source"`
+	Removed int64  `json:"removed"`
+}
+
+// Apaga as vagas que sumiram das buscas (last_seen_at < @cutoff), que venceram ou que
+// foram publicadas antes de @published_cutoff (vaga velha que o site ainda lista), e
+// devolve quantas saíram de cada fonte. Vaga sem data de publicação só sai pelas
+// outras regras.
+func (q *Queries) DiscoveryDeleteStale(ctx context.Context, arg DiscoveryDeleteStaleParams) ([]DiscoveryDeleteStaleRow, error) {
+	rows, err := q.db.Query(ctx, discoveryDeleteStale, arg.Cutoff, arg.PublishedCutoff)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []DiscoveryDeleteStaleRow
+	for rows.Next() {
+		var i DiscoveryDeleteStaleRow
+		if err := rows.Scan(&i.Source, &i.Removed); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const discoveryFailInterruptedRuns = `-- name: DiscoveryFailInterruptedRuns :execrows
@@ -248,68 +296,58 @@ func (q *Queries) DiscoveryLinkKeyword(ctx context.Context, arg DiscoveryLinkKey
 	return err
 }
 
-const discoveryListForUser = `-- name: DiscoveryListForUser :many
+const discoveryListCandidates = `-- name: DiscoveryListCandidates :many
 SELECT
     d.id, d.source, d.title, d.company, d.location, d.workplace_type, d.international, d.url,
-    d.description, d.seniority, d.published_at,
-    pj.id AS pipeline_job_id,
-    COALESCE(pj.status::text, '')::text AS pipeline_status
+    d.seniority, d.published_at, d.techs, d.language
 FROM discovered_jobs d
-LEFT JOIN LATERAL (
-    SELECT j.id, j.status FROM jobs j
-    WHERE j.user_id = $1 AND j.external_url = d.url AND j.deleted_at IS NULL
-    ORDER BY j.created_at DESC
-    LIMIT 1
-) pj ON true
-WHERE d.last_seen_at >= $2
+WHERE d.last_seen_at >= $1
   AND (d.expires_at IS NULL OR d.expires_at >= now())
-  AND (d.title || ' ' || d.description) ~* $3::text
+  AND (d.techs && $2::text[] OR d.id = ANY($3::uuid[]))
 ORDER BY d.published_at DESC NULLS LAST, d.id
 LIMIT $4
 `
 
-type DiscoveryListForUserParams struct {
-	UserID      pgtype.UUID        `json:"user_id"`
+type DiscoveryListCandidatesParams struct {
 	ActiveSince pgtype.Timestamptz `json:"active_since"`
-	Pattern     string             `json:"pattern"`
+	Techs       []string           `json:"techs"`
+	ExtraIds    []pgtype.UUID      `json:"extra_ids"`
 	MaxCount    int32              `json:"max_count"`
 }
 
-type DiscoveryListForUserRow struct {
-	ID             pgtype.UUID        `json:"id"`
-	Source         string             `json:"source"`
-	Title          string             `json:"title"`
-	Company        string             `json:"company"`
-	Location       string             `json:"location"`
-	WorkplaceType  string             `json:"workplace_type"`
-	International  bool               `json:"international"`
-	Url            string             `json:"url"`
-	Description    string             `json:"description"`
-	Seniority      []string           `json:"seniority"`
-	PublishedAt    pgtype.Timestamptz `json:"published_at"`
-	PipelineJobID  pgtype.UUID        `json:"pipeline_job_id"`
-	PipelineStatus string             `json:"pipeline_status"`
+type DiscoveryListCandidatesRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	Source        string             `json:"source"`
+	Title         string             `json:"title"`
+	Company       string             `json:"company"`
+	Location      string             `json:"location"`
+	WorkplaceType string             `json:"workplace_type"`
+	International bool               `json:"international"`
+	Url           string             `json:"url"`
+	Seniority     []string           `json:"seniority"`
+	PublishedAt   pgtype.Timestamptz `json:"published_at"`
+	Techs         []string           `json:"techs"`
+	Language      string             `json:"language"`
 }
 
-// Vagas ativas do catálogo que citam alguma skill do usuário. @pattern é um regex
-// único (case-insensitive) com todos os termos e fronteira de palavra; o casamento
-// final, que trata c#/c++ e "node.js", é feito no Go.
-// pipeline_job_id/pipeline_status: a vaga que ele já mandou para a pipeline (a mais
-// recente com a mesma URL), para a tela mostrar o andamento e o currículo.
-func (q *Queries) DiscoveryListForUser(ctx context.Context, arg DiscoveryListForUserParams) ([]DiscoveryListForUserRow, error) {
-	rows, err := q.db.Query(ctx, discoveryListForUser,
-		arg.UserID,
+// Vagas ativas que citam alguma das tecnologias (índice GIN em techs) ou que a busca
+// de texto achou (@extra_ids, ver DiscoverySkillHits). Só colunas leves: a descrição
+// fica para DiscoveryPageDetails, das vagas da página. Todas as candidatas vêm para o
+// ranking (JobFit) e as contagens dos filtros; @max_count é só um teto de segurança.
+func (q *Queries) DiscoveryListCandidates(ctx context.Context, arg DiscoveryListCandidatesParams) ([]DiscoveryListCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, discoveryListCandidates,
 		arg.ActiveSince,
-		arg.Pattern,
+		arg.Techs,
+		arg.ExtraIds,
 		arg.MaxCount,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DiscoveryListForUserRow
+	var items []DiscoveryListCandidatesRow
 	for rows.Next() {
-		var i DiscoveryListForUserRow
+		var i DiscoveryListCandidatesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Source,
@@ -319,11 +357,10 @@ func (q *Queries) DiscoveryListForUser(ctx context.Context, arg DiscoveryListFor
 			&i.WorkplaceType,
 			&i.International,
 			&i.Url,
-			&i.Description,
 			&i.Seniority,
 			&i.PublishedAt,
-			&i.PipelineJobID,
-			&i.PipelineStatus,
+			&i.Techs,
+			&i.Language,
 		); err != nil {
 			return nil, err
 		}
@@ -426,6 +463,60 @@ func (q *Queries) DiscoveryListRuns(ctx context.Context, maxCount int32) ([]Disc
 			&i.JobsRemoved,
 			&i.StartedAt,
 			&i.FinishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const discoveryPageDetails = `-- name: DiscoveryPageDetails :many
+SELECT
+    d.id, d.description,
+    pj.id AS pipeline_job_id,
+    COALESCE(pj.status::text, '')::text AS pipeline_status
+FROM discovered_jobs d
+LEFT JOIN LATERAL (
+    SELECT j.id, j.status FROM jobs j
+    WHERE j.user_id = $1 AND j.external_url = d.url AND j.deleted_at IS NULL
+    ORDER BY j.created_at DESC
+    LIMIT 1
+) pj ON true
+WHERE d.id = ANY($2::uuid[])
+`
+
+type DiscoveryPageDetailsParams struct {
+	UserID pgtype.UUID   `json:"user_id"`
+	Ids    []pgtype.UUID `json:"ids"`
+}
+
+type DiscoveryPageDetailsRow struct {
+	ID             pgtype.UUID `json:"id"`
+	Description    string      `json:"description"`
+	PipelineJobID  pgtype.UUID `json:"pipeline_job_id"`
+	PipelineStatus string      `json:"pipeline_status"`
+}
+
+// O que só a página mostra: a descrição (trecho e casamento exato) e a vaga na
+// pipeline (Vagas), a mais recente com a mesma URL, para mostrar o andamento.
+func (q *Queries) DiscoveryPageDetails(ctx context.Context, arg DiscoveryPageDetailsParams) ([]DiscoveryPageDetailsRow, error) {
+	rows, err := q.db.Query(ctx, discoveryPageDetails, arg.UserID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DiscoveryPageDetailsRow
+	for rows.Next() {
+		var i DiscoveryPageDetailsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Description,
+			&i.PipelineJobID,
+			&i.PipelineStatus,
 		); err != nil {
 			return nil, err
 		}
@@ -594,6 +685,45 @@ func (q *Queries) DiscoverySelectSettings(ctx context.Context) (DiscoverySelectS
 	return i, err
 }
 
+const discoverySelectTechsPending = `-- name: DiscoverySelectTechsPending :many
+SELECT id, title, description
+FROM discovered_jobs
+WHERE techs_version <> $1
+LIMIT $2
+`
+
+type DiscoverySelectTechsPendingParams struct {
+	Version  int64 `json:"version"`
+	MaxCount int32 `json:"max_count"`
+}
+
+type DiscoverySelectTechsPendingRow struct {
+	ID          pgtype.UUID `json:"id"`
+	Title       string      `json:"title"`
+	Description string      `json:"description"`
+}
+
+// Vagas com techs calculada por outra versão do catálogo (ou nunca calculada).
+func (q *Queries) DiscoverySelectTechsPending(ctx context.Context, arg DiscoverySelectTechsPendingParams) ([]DiscoverySelectTechsPendingRow, error) {
+	rows, err := q.db.Query(ctx, discoverySelectTechsPending, arg.Version, arg.MaxCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DiscoverySelectTechsPendingRow
+	for rows.Next() {
+		var i DiscoverySelectTechsPendingRow
+		if err := rows.Scan(&i.ID, &i.Title, &i.Description); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const discoverySelectUserKeywords = `-- name: DiscoverySelectUserKeywords :many
 SELECT DISTINCT lower(trim(keyword))::text AS keyword
 FROM user_job_filters
@@ -613,6 +743,47 @@ func (q *Queries) DiscoverySelectUserKeywords(ctx context.Context, userID pgtype
 			return nil, err
 		}
 		items = append(items, keyword)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const discoverySkillHits = `-- name: DiscoverySkillHits :many
+SELECT DISTINCT t.term::text AS term, d.id
+FROM unnest($1::text[]) AS t(term)
+JOIN discovered_jobs d ON d.search_vec @@ phraseto_tsquery('simple', t.term)
+WHERE d.last_seen_at >= $2
+  AND (d.expires_at IS NULL OR d.expires_at >= now())
+`
+
+type DiscoverySkillHitsParams struct {
+	Terms       []string           `json:"terms"`
+	ActiveSince pgtype.Timestamptz `json:"active_since"`
+}
+
+type DiscoverySkillHitsRow struct {
+	Term string      `json:"term"`
+	ID   pgtype.UUID `json:"id"`
+}
+
+// Skills do perfil que não estão no catálogo de tecnologias ("APIs REST", "Arquitetura
+// Hexagonal"): busca de frase no texto da vaga, com o índice GIN de search_vec. Uma
+// linha por (termo, vaga); o Go sabe de qual skill é cada termo.
+func (q *Queries) DiscoverySkillHits(ctx context.Context, arg DiscoverySkillHitsParams) ([]DiscoverySkillHitsRow, error) {
+	rows, err := q.db.Query(ctx, discoverySkillHits, arg.Terms, arg.ActiveSince)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DiscoverySkillHitsRow
+	for rows.Next() {
+		var i DiscoverySkillHitsRow
+		if err := rows.Scan(&i.Term, &i.ID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -653,9 +824,32 @@ func (q *Queries) DiscoveryUpdateSettings(ctx context.Context, arg DiscoveryUpda
 	return err
 }
 
+const discoveryUpdateTechs = `-- name: DiscoveryUpdateTechs :exec
+UPDATE discovered_jobs
+SET techs = $1::text[], language = $2, techs_version = $3
+WHERE id = $4
+`
+
+type DiscoveryUpdateTechsParams struct {
+	Techs    []string    `json:"techs"`
+	Language string      `json:"language"`
+	Version  int64       `json:"version"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) DiscoveryUpdateTechs(ctx context.Context, arg DiscoveryUpdateTechsParams) error {
+	_, err := q.db.Exec(ctx, discoveryUpdateTechs,
+		arg.Techs,
+		arg.Language,
+		arg.Version,
+		arg.ID,
+	)
+	return err
+}
+
 const discoveryUpsertJob = `-- name: DiscoveryUpsertJob :one
-INSERT INTO discovered_jobs(source, external_id, title, company, location, workplace_type, international, url, description, seniority, published_at, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12)
+INSERT INTO discovered_jobs(source, external_id, title, company, location, workplace_type, international, url, description, seniority, published_at, expires_at, techs, techs_version, language)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13::text[], $14, $15)
 ON CONFLICT (source, external_id) DO UPDATE SET
     title          = EXCLUDED.title,
     company        = EXCLUDED.company,
@@ -667,6 +861,9 @@ ON CONFLICT (source, external_id) DO UPDATE SET
     seniority      = EXCLUDED.seniority,
     published_at   = EXCLUDED.published_at,
     expires_at     = EXCLUDED.expires_at,
+    techs          = EXCLUDED.techs,
+    techs_version  = EXCLUDED.techs_version,
+    language       = EXCLUDED.language,
     last_seen_at   = now()
 RETURNING id, (xmax = 0)::boolean AS inserted
 `
@@ -684,6 +881,9 @@ type DiscoveryUpsertJobParams struct {
 	Seniority     []string           `json:"seniority"`
 	PublishedAt   pgtype.Timestamptz `json:"published_at"`
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	Techs         []string           `json:"techs"`
+	TechsVersion  int64              `json:"techs_version"`
+	Language      string             `json:"language"`
 }
 
 type DiscoveryUpsertJobRow struct {
@@ -706,6 +906,9 @@ func (q *Queries) DiscoveryUpsertJob(ctx context.Context, arg DiscoveryUpsertJob
 		arg.Seniority,
 		arg.PublishedAt,
 		arg.ExpiresAt,
+		arg.Techs,
+		arg.TechsVersion,
+		arg.Language,
 	)
 	var i DiscoveryUpsertJobRow
 	err := row.Scan(&i.ID, &i.Inserted)

@@ -62,12 +62,26 @@ type candidate struct {
 // tag "mysql" da skill "SQL" avançado. Sem stack ou sem skills não há o que medir:
 // qualidade média, sem itens.
 func Evaluate(stack []string, skills []db.UserSkill, aliases map[string]string) Fit {
-	fit := Fit{Quality: db.JobQualityMid, Items: []Item{}}
-	if len(stack) == 0 || len(skills) == 0 {
-		return fit
-	}
+	return NewEvaluator(skills, aliases).Evaluate(stack)
+}
 
-	cands := make([]candidate, 0, len(skills))
+// Evaluator avalia várias stacks contra as mesmas skills (o ranking do Descobrir
+// avalia milhares de vagas). Guarda o resultado de cada item: as vagas repetem as
+// mesmas tecnologias. Não é seguro para uso concorrente.
+type Evaluator struct {
+	cands   []candidate
+	aliases map[string]string
+	memo    map[string]itemResult
+}
+
+type itemResult struct {
+	best  float64
+	skill string
+	level string
+}
+
+func NewEvaluator(skills []db.UserSkill, aliases map[string]string) *Evaluator {
+	e := &Evaluator{aliases: aliases, memo: map[string]itemResult{}, cands: make([]candidate, 0, len(skills))}
 	for _, s := range skills {
 		c := candidate{skill: s}
 		for _, t := range discovery.NewSkill(s.SkillName).Terms {
@@ -78,46 +92,37 @@ func Evaluate(stack []string, skills []db.UserSkill, aliases map[string]string) 
 				c.tags = append(c.tags, t)
 			}
 		}
-		cands = append(cands, c)
+		e.cands = append(e.cands, c)
+	}
+	return e
+}
+
+func (e *Evaluator) Evaluate(stack []string) Fit {
+	fit := Fit{Quality: db.JobQualityMid, Items: []Item{}}
+	if len(stack) == 0 || len(e.cands) == 0 {
+		return fit
 	}
 
 	var score float64
 	for _, item := range stack {
-		norm := canonical(item, aliases)
+		norm := canonical(item, e.aliases)
 		if norm == "" {
 			continue
 		}
-		it := Item{Name: item, Status: StatusMissing}
-		best := -1.0
-		for _, byTag := range []bool{false, true} {
-			for _, c := range cands {
-				terms := c.names
-				if byTag {
-					terms = c.tags
-				}
-				w := levelWeight[c.skill.ProficiencyLevel]
-				if w <= best || !matchesAny(norm, terms) {
-					continue
-				}
-				best = w
-				it.Skill, it.Level = c.skill.SkillName, string(c.skill.ProficiencyLevel)
-			}
-			if best >= 0 {
-				break
-			}
-		}
+		res := e.item(norm)
+		it := Item{Name: item, Status: StatusMissing, Skill: res.skill, Level: res.level}
 		switch {
-		case best >= 1:
+		case res.best >= 1:
 			it.Status = StatusStrong
 			fit.Strong++
-		case best > 0:
+		case res.best > 0:
 			it.Status = StatusPartial
 			fit.Partial++
 		default:
 			fit.Missing++
 		}
-		if best > 0 {
-			score += best
+		if res.best > 0 {
+			score += res.best
 		}
 		fit.Items = append(fit.Items, it)
 	}
@@ -135,6 +140,34 @@ func Evaluate(stack []string, skills []db.UserSkill, aliases map[string]string) 
 		fit.Quality = db.JobQualityLow
 	}
 	return fit
+}
+
+// item acha a skill de maior nível que cobre o item: pelo nome primeiro, pelas tags
+// só se nenhum nome cobrir.
+func (e *Evaluator) item(norm string) itemResult {
+	if r, ok := e.memo[norm]; ok {
+		return r
+	}
+	r := itemResult{best: -1}
+	for _, byTag := range []bool{false, true} {
+		for _, c := range e.cands {
+			terms := c.names
+			if byTag {
+				terms = c.tags
+			}
+			w := levelWeight[c.skill.ProficiencyLevel]
+			if w <= r.best || !matchesAny(norm, terms) {
+				continue
+			}
+			r.best = w
+			r.skill, r.level = c.skill.SkillName, string(c.skill.ProficiencyLevel)
+		}
+		if r.best >= 0 {
+			break
+		}
+	}
+	e.memo[norm] = r
+	return r
 }
 
 func canonical(s string, aliases map[string]string) string {

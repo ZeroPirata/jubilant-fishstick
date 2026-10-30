@@ -275,6 +275,10 @@ type DiscoveredJob struct {
 	LastSeenAt    pgtype.Timestamptz `json:"last_seen_at"`
 	International bool               `json:"international"`
 	Seniority     []string           `json:"seniority"`
+	Techs         []string           `json:"techs"`
+	TechsVersion  int64              `json:"techs_version"`
+	Language      string             `json:"language"`
+	SearchVec     interface{}        `json:"search_vec"`
 }
 
 type DiscoveredJobKeyword struct {
@@ -360,6 +364,7 @@ type Job struct {
 	FitAnalysis        []byte             `json:"fit_analysis"`
 	SourceDescription  pgtype.Text        `json:"source_description"`
 	ScrapedDescription pgtype.Text        `json:"scraped_description"`
+	FreshGeneration    bool               `json:"fresh_generation"`
 }
 
 type ProfileImport struct {

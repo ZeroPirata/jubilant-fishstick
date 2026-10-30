@@ -41,7 +41,7 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	adminH := handler.NewAdminHandler(logger, adminR)
 
 	mux.HandleFunc("/", handler.ServeUI)
-	mux.Handle("/static/", http.StripPrefix("/static/", noCacheStatic(http.FileServer(http.Dir("static")))))
+	mux.Handle("/static/", http.StripPrefix("/static/", handler.StaticCache(http.FileServer(http.Dir("static")))))
 	outputFS := http.FileServer(http.Dir(handler.OutputBaseDir()))
 	mux.Handle("/output/",
 		middleware.RevocationMiddleware(revoker)(
@@ -109,10 +109,9 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	adminMux.Handle("PUT /ai-settings",             master(http.HandlerFunc(aiH.Save)))
 	adminMux.Handle("POST /ai-settings/resume",     master(http.HandlerFunc(aiH.ResumeWorker)))
 	adminMux.Handle("PATCH /users/{id}/master",     master(http.HandlerFunc(aiH.SetMaster)))
-	adminHandler := middleware.AdminMiddleware(adminR)(adminMux)
-	protectedMux.Handle("/admin/", http.StripPrefix("/admin", adminHandler))
-
-	protectedMux.HandleFunc("POST /debug/gc", func(w http.ResponseWriter, r *http.Request) {
+	// Força coleta de lixo (botão no painel de métricas). Só admin: forçar GC em
+	// sequência pesa no servidor.
+	adminMux.HandleFunc("POST /debug/gc", func(w http.ResponseWriter, r *http.Request) {
 		var before runtime.MemStats
 		runtime.ReadMemStats(&before)
 		runtime.GC()
@@ -125,6 +124,9 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 			"heap_after":  after.HeapAlloc,
 			"freed_bytes": int64(before.HeapAlloc) - int64(after.HeapAlloc),
 		})
+	adminHandler := middleware.AdminMiddleware(adminR)(adminMux)
+	protectedMux.Handle("/admin/", http.StripPrefix("/admin", adminHandler))
+
 	})
 
 	// ActivityMiddleware depois do Auth: precisa do usuário no contexto para registrar o último acesso.
@@ -141,13 +143,6 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 			middleware.AuthMiddleware(jwtManager)(http.HandlerFunc(jobHandler.StreamEvents)),
 		),
 	)
-}
-
-func noCacheStatic(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-cache")
-		next.ServeHTTP(w, r)
-	})
 }
 
 // downloadAuth aceita JWT tanto no header Authorization quanto no query param ?token=
