@@ -27,6 +27,8 @@ type fakeRepo struct {
 	settings db.DiscoverySelectSettingsRow
 	userKws  []string
 	techs    []string
+	cleaned  int
+	upserts  []db.DiscoveryUpsertJobParams
 }
 
 var runID = pgtype.UUID{Bytes: [16]byte{1}, Valid: true}
@@ -43,16 +45,24 @@ func (f *fakeRepo) UpsertJob(_ context.Context, p db.DiscoveryUpsertJobParams) (
 	if f.jobs == nil {
 		f.jobs = map[string]bool{}
 	}
+	f.upserts = append(f.upserts, p)
 	key := p.Source + "|" + p.ExternalID
 	inserted := !f.jobs[key]
 	f.jobs[key] = true
 	return db.DiscoveryUpsertJobRow{ID: pgtype.UUID{Bytes: [16]byte{2}, Valid: true}, Inserted: inserted}, nil
 }
+func (f *fakeRepo) CleanIndexPending(context.Context) *repository.RepositoryError {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.cleaned++
+	return nil
+}
+
 func (f *fakeRepo) LinkKeyword(context.Context, db.DiscoveryLinkKeywordParams) *repository.RepositoryError {
 	return nil
 }
-func (f *fakeRepo) DeleteStale(context.Context, pgtype.Timestamptz) (int64, *repository.RepositoryError) {
-	return 0, nil
+func (f *fakeRepo) DeleteStale(context.Context, db.DiscoveryDeleteStaleParams) ([]db.DiscoveryDeleteStaleRow, *repository.RepositoryError) {
+	return nil, nil
 }
 func (f *fakeRepo) PruneRuns(context.Context, pgtype.Timestamptz) (int64, *repository.RepositoryError) {
 	return 0, nil
@@ -166,6 +176,15 @@ func TestRecord_Andamento(t *testing.T) {
 	if s, _ := repo.source("lista"); s.Kind != KindList || s.KeywordsOk != 1 || s.KeywordsFailed != 1 || s.LastError != "b: 404" || s.JobsNew != 2 {
 		t.Errorf("resultado do site de lista: %+v", s)
 	}
+	// A varredura grava o índice do Descobrir e incorpora a lista pendente dos GIN.
+	if repo.cleaned != 1 {
+		t.Errorf("lista pendente dos índices incorporada %d vezes, want 1", repo.cleaned)
+	}
+	for _, u := range repo.upserts {
+		if u.TechsVersion != TechsVersion || u.Techs == nil {
+			t.Errorf("upsert sem índice de tecnologias: %+v", u)
+		}
+	}
 }
 
 func TestRunFull_SitesEscolhidos(t *testing.T) {
@@ -208,5 +227,17 @@ func TestRunNow_SiteDesconhecido(t *testing.T) {
 	svc := newTestService(&fakeRepo{}, &fakeLister{})
 	if err := svc.RunNow(RunOptions{Sources: []string{"linkedin"}}); err == nil {
 		t.Error("site que não existe deveria dar erro")
+	}
+}
+
+func TestSave_IgnoraVagaVelha(t *testing.T) {
+	repo := &fakeRepo{}
+	svc := &Service{Repo: repo, Logger: zap.NewNop()}
+	old := Listing{Source: "x", URL: "https://x/1", Title: "Dev Go", PublishedAt: time.Now().Add(-MaxJobAge - time.Hour)}
+	if saved, _ := svc.save(context.Background(), old, ""); saved {
+		t.Fatal("vaga publicada há mais de MaxJobAge foi gravada")
+	}
+	if len(repo.upserts) != 0 {
+		t.Fatalf("upserts = %d, quero 0", len(repo.upserts))
 	}
 }

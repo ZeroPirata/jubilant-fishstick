@@ -26,8 +26,8 @@ WHERE user_id = @user_id AND deleted_at IS NULL;
 
 
 -- name: DiscoveryUpsertJob :one
-INSERT INTO discovered_jobs(source, external_id, title, company, location, workplace_type, international, url, description, seniority, published_at, expires_at)
-VALUES (@source, @external_id, @title, @company, @location, @workplace_type, @international, @url, @description, @seniority::text[], @published_at, @expires_at)
+INSERT INTO discovered_jobs(source, external_id, title, company, location, workplace_type, international, url, description, seniority, published_at, expires_at, techs, techs_version, language)
+VALUES (@source, @external_id, @title, @company, @location, @workplace_type, @international, @url, @description, @seniority::text[], @published_at, @expires_at, @techs::text[], @techs_version, @language)
 ON CONFLICT (source, external_id) DO UPDATE SET
     title          = EXCLUDED.title,
     company        = EXCLUDED.company,
@@ -39,6 +39,9 @@ ON CONFLICT (source, external_id) DO UPDATE SET
     seniority      = EXCLUDED.seniority,
     published_at   = EXCLUDED.published_at,
     expires_at     = EXCLUDED.expires_at,
+    techs          = EXCLUDED.techs,
+    techs_version  = EXCLUDED.techs_version,
+    language       = EXCLUDED.language,
     last_seen_at   = now()
 -- xmax = 0 só na linha recém-inserida: separa vaga nova de vaga atualizada.
 RETURNING id, (xmax = 0)::boolean AS inserted;
@@ -50,20 +53,56 @@ VALUES (@job_id, @keyword)
 ON CONFLICT DO NOTHING;
 
 
--- name: DiscoveryDeleteStale :execrows
-DELETE FROM discovered_jobs
-WHERE last_seen_at < @cutoff OR expires_at < now();
+-- name: DiscoveryDeleteStale :many
+-- Apaga as vagas que sumiram das buscas (last_seen_at < @cutoff), que venceram ou que
+-- foram publicadas antes de @published_cutoff (vaga velha que o site ainda lista), e
+-- devolve quantas saíram de cada fonte. Vaga sem data de publicação só sai pelas
+-- outras regras.
+WITH removed AS (
+    DELETE FROM discovered_jobs
+    WHERE last_seen_at < @cutoff
+       OR expires_at < now()
+       OR published_at < @published_cutoff
+    RETURNING source
+)
+SELECT source, count(*)::bigint AS removed
+FROM removed
+GROUP BY source
+ORDER BY source;
 
 
--- name: DiscoveryListForUser :many
--- Vagas ativas do catálogo que citam alguma skill do usuário. @pattern é um regex
--- único (case-insensitive) com todos os termos e fronteira de palavra; o casamento
--- final, que trata c#/c++ e "node.js", é feito no Go.
--- pipeline_job_id/pipeline_status: a vaga que ele já mandou para a pipeline (a mais
--- recente com a mesma URL), para a tela mostrar o andamento e o currículo.
+-- name: DiscoveryListCandidates :many
+-- Vagas ativas que citam alguma das tecnologias (índice GIN em techs) ou que a busca
+-- de texto achou (@extra_ids, ver DiscoverySkillHits). Só colunas leves: a descrição
+-- fica para DiscoveryPageDetails, das vagas da página. Todas as candidatas vêm para o
+-- ranking (JobFit) e as contagens dos filtros; @max_count é só um teto de segurança.
 SELECT
     d.id, d.source, d.title, d.company, d.location, d.workplace_type, d.international, d.url,
-    d.description, d.seniority, d.published_at,
+    d.seniority, d.published_at, d.techs, d.language
+FROM discovered_jobs d
+WHERE d.last_seen_at >= @active_since
+  AND (d.expires_at IS NULL OR d.expires_at >= now())
+  AND (d.techs && @techs::text[] OR d.id = ANY(@extra_ids::uuid[]))
+ORDER BY d.published_at DESC NULLS LAST, d.id
+LIMIT @max_count;
+
+
+-- name: DiscoverySkillHits :many
+-- Skills do perfil que não estão no catálogo de tecnologias ("APIs REST", "Arquitetura
+-- Hexagonal"): busca de frase no texto da vaga, com o índice GIN de search_vec. Uma
+-- linha por (termo, vaga); o Go sabe de qual skill é cada termo.
+SELECT DISTINCT t.term::text AS term, d.id
+FROM unnest(@terms::text[]) AS t(term)
+JOIN discovered_jobs d ON d.search_vec @@ phraseto_tsquery('simple', t.term)
+WHERE d.last_seen_at >= @active_since
+  AND (d.expires_at IS NULL OR d.expires_at >= now());
+
+
+-- name: DiscoveryPageDetails :many
+-- O que só a página mostra: a descrição (trecho e casamento exato) e a vaga na
+-- pipeline (Vagas), a mais recente com a mesma URL, para mostrar o andamento.
+SELECT
+    d.id, d.description,
     pj.id AS pipeline_job_id,
     COALESCE(pj.status::text, '')::text AS pipeline_status
 FROM discovered_jobs d
@@ -73,11 +112,21 @@ LEFT JOIN LATERAL (
     ORDER BY j.created_at DESC
     LIMIT 1
 ) pj ON true
-WHERE d.last_seen_at >= @active_since
-  AND (d.expires_at IS NULL OR d.expires_at >= now())
-  AND (d.title || ' ' || d.description) ~* @pattern::text
-ORDER BY d.published_at DESC NULLS LAST, d.id
+WHERE d.id = ANY(@ids::uuid[]);
+
+
+-- name: DiscoverySelectTechsPending :many
+-- Vagas com techs calculada por outra versão do catálogo (ou nunca calculada).
+SELECT id, title, description
+FROM discovered_jobs
+WHERE techs_version <> @version
 LIMIT @max_count;
+
+
+-- name: DiscoveryUpdateTechs :exec
+UPDATE discovered_jobs
+SET techs = @techs::text[], language = @language, techs_version = @version
+WHERE id = @id;
 
 
 -- name: DiscoverySelectPreferences :one
@@ -206,3 +255,11 @@ FROM discovered_jobs
 WHERE url = @url AND description <> ''
 ORDER BY last_seen_at DESC
 LIMIT 1;
+
+
+-- name: DiscoveryCleanIndexPending :exec
+-- Os índices GIN guardam as inserções numa lista pendente, varrida sequencialmente em
+-- toda busca até ser incorporada. Depois de uma carga em massa (varredura, recálculo de
+-- techs) ela fica grande e deixa o Descobrir lento: aqui ela é incorporada de uma vez.
+SELECT gin_clean_pending_list('idx_discovered_jobs_search'::regclass),
+       gin_clean_pending_list('idx_discovered_jobs_techs'::regclass);

@@ -456,6 +456,7 @@ function renderDiscoveryRow(j) {
       <td data-label="Vaga">
         <div class="disc-title">${escDisc(j.title)}${level}</div>
         <div class="disc-company">${[j.company, _discSourceNames[j.source] || j.source].filter(Boolean).map(escDisc).join(' · ')}</div>
+        ${discFitLine(j.fit)}
         <div class="disc-snippet clamp-3">${escDisc(j.snippet)}</div>
       </td>
       <td data-label="Local">${escDisc(local) || '<span style="color:var(--muted)">—</span>'}</td>
@@ -468,6 +469,23 @@ function renderDiscoveryRow(j) {
         </div>
       </td>
     </tr>`;
+}
+
+// Compatibilidade da vaga (o mesmo JobFit da aba Vagas): cobertura da stack pelo
+// perfil, ponderada pelo nível, quantas tecnologias você cobre e as que faltam. É ela
+// que ordena a lista.
+function discFitLine(fit) {
+  if (!fit || !(fit.items || []).length) return '';
+  const total = fit.items.length;
+  const covered = fit.strong + fit.partial;
+  const missing = fit.items.filter(i => i.status === 'missing').map(i => i.name);
+  const gaps = missing.length
+    ? ` · <span class="disc-fit-gaps" title="${escDisc(missing.join(', '))}">falta: ${escDisc(missing.slice(0, 3).join(', '))}${missing.length > 3 ? ` +${missing.length - 3}` : ''}</span>`
+    : ' · <span class="disc-fit-full">cobre toda a stack</span>';
+  return `<div class="disc-fit">
+    <span class="disc-fit-pct disc-fit-${escDisc(fit.quality)}" title="Cobertura da stack da vaga pelo seu perfil, ponderada pelo nível de cada skill">${fit.coverage_pct}% da stack</span>
+    <span class="disc-fit-count">você cobre ${covered} de ${total}</span>${gaps}
+  </div>`;
 }
 
 // "Gerar currículo" abre a escolha de idioma (sugerido pelo texto da vaga) e do que

@@ -17,6 +17,7 @@ function openJobDetail(id, { from = 'vagas', focus = '' } = {}) {
   _jd.from = from;
   _jd.tab = _jdTabs.includes(focus) ? focus : 'fit';
   navigateTo('vaga');
+  setRoute('#/vaga/' + id);
   // A tela não tem item próprio no menu: fica marcada a aba de onde veio.
   document.querySelectorAll(`.sidebar button[data-tab="${from}"]`).forEach(b => b.classList.add('active'));
   const crumb = document.getElementById('crumb-current');
@@ -235,14 +236,14 @@ function jdToggleFull(btn) {
 function jdRetryMenu() {
   const lang = _jd.language === 'en' ? 'en' : 'pt-br';
   document.getElementById('jd-actions').innerHTML =
-    genChooser({ label: 'Gerar de novo:', lang, onGo: 'jdRetry', onCancel: 'loadJobDetail()' });
+    genChooser({ label: 'Gerar de novo:', lang, onGo: 'jdRetry', onCancel: 'loadJobDetail()', retry: true });
 }
 
 async function jdRetry(mode, btn) {
-  const language = genLanguage(btn);
-  btn.closest('.jd-actions').querySelectorAll('button, select').forEach(b => b.disabled = true);
+  const language = genLanguage(btn), fresh = genFresh(btn);
+  btn.closest('.jd-actions').querySelectorAll('button, select, input').forEach(b => b.disabled = true);
   try {
-    const res = await api.put(`/jobs/${_jd.id}/retry`, { mode, language });
+    const res = await api.put(`/jobs/${_jd.id}/retry`, { mode, language, fresh });
     if (!res.ok) { toast('Erro ao reprocessar.', 'error'); loadJobDetail(); return; }
     toast(`Vaga enviada para reprocessamento (${language === 'en' ? 'inglês' : 'português'}).`);
   } catch (e) { toast(e.message, 'error'); }

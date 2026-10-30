@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"net/http"
 
 	"go.uber.org/zap"
 )
@@ -25,7 +24,3 @@ func NewBaseHandler(logger *zap.Logger) *BaseHandler {
 	}
 }
 
-func ServeUI(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-cache")
-	http.ServeFile(w, r, "static/index.html")
-}

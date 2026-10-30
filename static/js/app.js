@@ -9,7 +9,7 @@ function showApp() {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   checkAdminStatus();
-  navigateTo('vagas');
+  applyRoute();
   impResume();
   connectSSE();
 }
@@ -73,7 +73,42 @@ function navigateTo(id) {
   if (id === 'admin')    loadAdminPanel();
   if (id === 'ajuda')    loadHelp();
   impSyncPill();
+  // A tela da vaga põe o próprio endereço (#/vaga/<id>, em openJobDetail).
+  if (id !== 'vaga') setRoute('#/' + id);
 }
+
+// ── Rotas: #/<aba> e #/vaga/<id> ──
+// O endereço acompanha a aba aberta: F5 volta para ela, o link de uma vaga pode ser
+// aberto em outra aba do navegador e o Voltar do navegador volta para a tela anterior.
+
+// setRoute grava o endereço no histórico sem disparar hashchange (pushState).
+function setRoute(hash) {
+  if (location.hash !== hash) history.pushState(null, '', hash);
+}
+
+// applyRoute abre a tela do endereço atual. Endereço desconhecido, ou aba de admin
+// para quem não é admin, cai em Vagas.
+function applyRoute() {
+  const path = location.hash.replace(/^#\/?/, '');
+  const vaga = path.match(/^vaga\/([0-9a-f-]{36})$/i);
+  if (vaga) {
+    if (_activeTab !== 'vaga' || _jd.id !== vaga[1]) openJobDetail(vaga[1]);
+    return;
+  }
+  let tab = path;
+  const section = tab && tab !== 'vaga' ? document.getElementById('tab-' + tab) : null;
+  const adminOnly = document.querySelector(`.sidebar button.admin-only[data-tab="${tab}"]`);
+  if (!section || (adminOnly && localStorage.getItem('jp_is_admin') !== '1')) {
+    // Substitui em vez de empilhar: o Voltar não cai de novo no endereço inválido.
+    tab = 'vagas';
+    history.replaceState(null, '', '#/vagas');
+  }
+  if (tab !== _activeTab) navigateTo(tab);
+}
+
+window.addEventListener('hashchange', () => {
+  if (!document.getElementById('app').classList.contains('hidden')) applyRoute();
+});
 
 // ── Auth: login / register ──
 let _authMode = 'login';

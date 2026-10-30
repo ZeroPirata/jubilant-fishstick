@@ -37,6 +37,7 @@ SET
     status     = 'pending',
     mode       = COALESCE(NULLIF(@mode::text, ''), jobs.mode),
     language   = COALESCE(NULLIF(@language::text, ''), jobs.language),
+    fresh_generation = @fresh_generation,
     updated_at = now()
 WHERE id = @id AND user_id = @user_id;
 

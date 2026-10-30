@@ -3,6 +3,8 @@ package handler
 import (
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/discovery"
+	"hackton-treino/internal/jobfit"
+	"slices"
 	"testing"
 )
 
@@ -238,10 +240,44 @@ func TestCleanPreferences_Nivel(t *testing.T) {
 }
 
 func TestOtherStack(t *testing.T) {
+	// techs vem da varredura, com as regras de contexto.
+	idx := discovery.IndexJob("Engenheiro(a) de Software", "linguagens de programação (C#, Java, Go ou Rust); noções de Docker")
 	j := DiscoveredJob{
 		MatchedSkills: []string{"Go (Golang)"},
 		MatchedTechs:  []string{},
-		text:          "Engenheiro(a) de Software\nlinguagens de programação (C#, Java, Go ou Rust); noções de Docker",
+		techs:         idx.Techs,
 	}
 	names(t, otherStack(j), "Java", "C#", "Rust", "Docker")
+}
+
+func TestRankDiscovered(t *testing.T) {
+	fit := func(q db.JobQuality, strong, partial, pct int) jobfit.Fit {
+		items := make([]jobfit.Item, strong+partial+1)
+		return jobfit.Fit{Quality: q, Strong: strong, Partial: partial, CoveragePct: pct, Items: items}
+	}
+	jobs := []DiscoveredJob{
+		{ID: "so-texto"},
+		{ID: "baixa", fit: fit(db.JobQualityLow, 0, 1, 20)},
+		{ID: "so-go", fit: fit(db.JobQualityHigh, 1, 0, 100)},
+		{ID: "media", fit: fit(db.JobQualityMid, 3, 0, 60)},
+		{ID: "go-pg-docker", fit: fit(db.JobQualityHigh, 3, 0, 75)},
+	}
+	rankDiscovered(jobs)
+	var got []string
+	for _, j := range jobs {
+		got = append(got, j.ID)
+	}
+	want := []string{"go-pg-docker", "so-go", "media", "baixa", "so-texto"}
+	if !slices.Equal(got, want) {
+		t.Errorf("ordem = %v, want %v", got, want)
+	}
+}
+
+func TestIntersect(t *testing.T) {
+	if got := intersect([]string{"Go", "Rust", "Java"}, []string{"Java", "Go"}); !slices.Equal(got, []string{"Go", "Java"}) {
+		t.Errorf("intersect = %v", got)
+	}
+	if got := intersect(nil, []string{"Go"}); got == nil || len(got) != 0 {
+		t.Errorf("intersect vazio = %#v, want []string{}", got)
+	}
 }

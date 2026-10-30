@@ -34,14 +34,43 @@ func (r *discoveryRepository) LinkKeyword(ctx context.Context, args db.Discovery
 	return repository.HandleDatabaseError(r.Q.DiscoveryLinkKeyword(ctx, args))
 }
 
-func (r *discoveryRepository) DeleteStale(ctx context.Context, cutoff pgtype.Timestamptz) (int64, *repository.RepositoryError) {
-	n, err := r.Q.DiscoveryDeleteStale(ctx, cutoff)
-	return n, repository.HandleDatabaseError(err)
+func (r *discoveryRepository) DeleteStale(ctx context.Context, args db.DiscoveryDeleteStaleParams) ([]db.DiscoveryDeleteStaleRow, *repository.RepositoryError) {
+	rows, err := r.Q.DiscoveryDeleteStale(ctx, args)
+	return rows, repository.HandleDatabaseError(err)
 }
 
-func (r *discoveryRepository) ListForUser(ctx context.Context, args db.DiscoveryListForUserParams) ([]db.DiscoveryListForUserRow, *repository.RepositoryError) {
-	rows, err := r.Q.DiscoveryListForUser(ctx, args)
+func (r *discoveryRepository) ListCandidates(ctx context.Context, args db.DiscoveryListCandidatesParams) ([]db.DiscoveryListCandidatesRow, *repository.RepositoryError) {
+	rows, err := r.Q.DiscoveryListCandidates(ctx, args)
 	return rows, repository.HandleDatabaseError(err)
+}
+
+func (r *discoveryRepository) SkillHits(ctx context.Context, args db.DiscoverySkillHitsParams) ([]db.DiscoverySkillHitsRow, *repository.RepositoryError) {
+	if len(args.Terms) == 0 {
+		return nil, nil
+	}
+	rows, err := r.Q.DiscoverySkillHits(ctx, args)
+	return rows, repository.HandleDatabaseError(err)
+}
+
+func (r *discoveryRepository) PageDetails(ctx context.Context, args db.DiscoveryPageDetailsParams) ([]db.DiscoveryPageDetailsRow, *repository.RepositoryError) {
+	if len(args.Ids) == 0 {
+		return nil, nil
+	}
+	rows, err := r.Q.DiscoveryPageDetails(ctx, args)
+	return rows, repository.HandleDatabaseError(err)
+}
+
+func (r *discoveryRepository) SelectTechsPending(ctx context.Context, args db.DiscoverySelectTechsPendingParams) ([]db.DiscoverySelectTechsPendingRow, *repository.RepositoryError) {
+	rows, err := r.Q.DiscoverySelectTechsPending(ctx, args)
+	return rows, repository.HandleDatabaseError(err)
+}
+
+func (r *discoveryRepository) CleanIndexPending(ctx context.Context) *repository.RepositoryError {
+	return repository.HandleDatabaseError(r.Q.DiscoveryCleanIndexPending(ctx))
+}
+
+func (r *discoveryRepository) UpdateTechs(ctx context.Context, args db.DiscoveryUpdateTechsParams) *repository.RepositoryError {
+	return repository.HandleDatabaseError(r.Q.DiscoveryUpdateTechs(ctx, args))
 }
 
 // SelectPreferences devolve preferências vazias para quem nunca salvou.

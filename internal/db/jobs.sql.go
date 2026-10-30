@@ -194,21 +194,24 @@ SET
     status     = 'pending',
     mode       = COALESCE(NULLIF($1::text, ''), jobs.mode),
     language   = COALESCE(NULLIF($2::text, ''), jobs.language),
+    fresh_generation = $3,
     updated_at = now()
-WHERE id = $3 AND user_id = $4
+WHERE id = $4 AND user_id = $5
 `
 
 type QueryReprocessJobParams struct {
-	Mode     string      `json:"mode"`
-	Language string      `json:"language"`
-	ID       pgtype.UUID `json:"id"`
-	UserID   pgtype.UUID `json:"user_id"`
+	Mode            string      `json:"mode"`
+	Language        string      `json:"language"`
+	FreshGeneration bool        `json:"fresh_generation"`
+	ID              pgtype.UUID `json:"id"`
+	UserID          pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) QueryReprocessJob(ctx context.Context, arg QueryReprocessJobParams) error {
 	_, err := q.db.Exec(ctx, queryReprocessJob,
 		arg.Mode,
 		arg.Language,
+		arg.FreshGeneration,
 		arg.ID,
 		arg.UserID,
 	)
@@ -216,7 +219,7 @@ func (q *Queries) QueryReprocessJob(ctx context.Context, arg QueryReprocessJobPa
 }
 
 const querySelectJobForUser = `-- name: QuerySelectJobForUser :one
-SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description
+SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation
 FROM jobs j
 WHERE j.id = $1 AND j.user_id = $2 AND j.deleted_at IS NULL
 `
@@ -248,12 +251,13 @@ func (q *Queries) QuerySelectJobForUser(ctx context.Context, arg QuerySelectJobF
 		&i.FitAnalysis,
 		&i.SourceDescription,
 		&i.ScrapedDescription,
+		&i.FreshGeneration,
 	)
 	return i, err
 }
 
 const querySelectJobsForUser = `-- name: QuerySelectJobsForUser :many
-SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, COUNT(*) OVER() AS total_count
+SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation, COUNT(*) OVER() AS total_count
 FROM jobs j
 INNER JOIN user_accounts acc ON acc.id = j.user_id
 WHERE
@@ -293,6 +297,7 @@ type QuerySelectJobsForUserRow struct {
 	FitAnalysis        []byte             `json:"fit_analysis"`
 	SourceDescription  pgtype.Text        `json:"source_description"`
 	ScrapedDescription pgtype.Text        `json:"scraped_description"`
+	FreshGeneration    bool               `json:"fresh_generation"`
 	TotalCount         int64              `json:"total_count"`
 }
 
@@ -330,6 +335,7 @@ func (q *Queries) QuerySelectJobsForUser(ctx context.Context, arg QuerySelectJob
 			&i.FitAnalysis,
 			&i.SourceDescription,
 			&i.ScrapedDescription,
+			&i.FreshGeneration,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

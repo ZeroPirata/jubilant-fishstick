@@ -19,8 +19,13 @@ type Repository interface {
 	SelectUserKeywords(ctx context.Context, userID pgtype.UUID) ([]string, *repository.RepositoryError)
 	UpsertJob(ctx context.Context, args db.DiscoveryUpsertJobParams) (db.DiscoveryUpsertJobRow, *repository.RepositoryError)
 	LinkKeyword(ctx context.Context, args db.DiscoveryLinkKeywordParams) *repository.RepositoryError
-	DeleteStale(ctx context.Context, cutoff pgtype.Timestamptz) (int64, *repository.RepositoryError)
-	ListForUser(ctx context.Context, args db.DiscoveryListForUserParams) ([]db.DiscoveryListForUserRow, *repository.RepositoryError)
+	DeleteStale(ctx context.Context, args db.DiscoveryDeleteStaleParams) ([]db.DiscoveryDeleteStaleRow, *repository.RepositoryError)
+	ListCandidates(ctx context.Context, args db.DiscoveryListCandidatesParams) ([]db.DiscoveryListCandidatesRow, *repository.RepositoryError)
+	SkillHits(ctx context.Context, args db.DiscoverySkillHitsParams) ([]db.DiscoverySkillHitsRow, *repository.RepositoryError)
+	PageDetails(ctx context.Context, args db.DiscoveryPageDetailsParams) ([]db.DiscoveryPageDetailsRow, *repository.RepositoryError)
+	SelectTechsPending(ctx context.Context, args db.DiscoverySelectTechsPendingParams) ([]db.DiscoverySelectTechsPendingRow, *repository.RepositoryError)
+	UpdateTechs(ctx context.Context, args db.DiscoveryUpdateTechsParams) *repository.RepositoryError
+	CleanIndexPending(ctx context.Context) *repository.RepositoryError
 	SelectSettings(ctx context.Context) (db.DiscoverySelectSettingsRow, *repository.RepositoryError)
 	UpdateSettings(ctx context.Context, args db.DiscoveryUpdateSettingsParams) *repository.RepositoryError
 	InsertRun(ctx context.Context, args db.DiscoveryInsertRunParams) (pgtype.UUID, *repository.RepositoryError)
