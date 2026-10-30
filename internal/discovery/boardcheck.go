@@ -53,7 +53,14 @@ func (s *Service) CheckBoard(ctx context.Context, source, token string) (BoardCh
 var boardURL = map[string]*regexp.Regexp{
 	"greenhouse": regexp.MustCompile(`^(?:job-)?boards(?:-api)?\.greenhouse\.io$`),
 	"lever":      regexp.MustCompile(`^jobs\.lever\.co$`),
+	// jobs.ashbyhq.com/nubank, apply.workable.com/olist, jobs.smartrecruiters.com/Experian.
+	"ashby":           regexp.MustCompile(`^jobs\.ashbyhq\.com$`),
+	"workable":        regexp.MustCompile(`^apply\.workable\.com$`),
+	"smartrecruiters": regexp.MustCompile(`^(?:jobs|careers)\.smartrecruiters\.com$`),
 }
+
+// O Recruitee usa subdomínio: bunq.recruitee.com.
+var recruiteeHost = regexp.MustCompile(`^([a-z0-9][a-z0-9-]{0,62})\.recruitee\.com$`)
 
 // FindBoards procura a empresa em todos os ATS. query é o link do quadro de vagas
 // (confere só aquele) ou o nome da empresa (tenta os tokens mais prováveis). Devolve
@@ -102,6 +109,9 @@ func parseBoardURL(raw string) (source, token string, ok bool) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "", "", false
+	}
+	if m := recruiteeHost.FindStringSubmatch(strings.ToLower(u.Hostname())); m != nil && m[1] != "www" && m[1] != "app" {
+		return "recruitee", m[1], true
 	}
 	for name, host := range boardURL {
 		if host.MatchString(strings.ToLower(u.Hostname())) {
