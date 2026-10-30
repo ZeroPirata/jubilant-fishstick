@@ -32,6 +32,7 @@ SET
     company_name = @company_name,
     job_title    = @job_title,
     description  = @description,
+    scraped_description = @scraped_description,
     tech_stack   = @tech_stack,
     requirements = @requirements,
     language     = @language,
@@ -44,6 +45,14 @@ UPDATE jobs
 SET
     quality    = @quality,
     updated_at = now()
+WHERE id = @id;
+
+
+-- name: WorkerUpdateJobAnalysis :exec
+UPDATE jobs
+SET
+    fit_analysis = @fit_analysis,
+    updated_at   = now()
 WHERE id = @id;
 
 

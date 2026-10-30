@@ -42,6 +42,9 @@ func (f *fakeWorkerRepo) WorkerUpdateJob(_ context.Context, _ db.WorkerUpdateJob
 func (f *fakeWorkerRepo) WorkerUpdateJobQuality(_ context.Context, _ db.WorkerUpdateJobQualityParams) *repository.RepositoryError {
 	return nil
 }
+func (f *fakeWorkerRepo) WorkerUpdateJobAnalysis(_ context.Context, _ db.WorkerUpdateJobAnalysisParams) *repository.RepositoryError {
+	return nil
+}
 func (f *fakeWorkerRepo) WorkerInsertGeneratedResume(_ context.Context, _ db.WorkerInsertGeneratedResumeParams) (string, *repository.RepositoryError) {
 	return "", nil
 }

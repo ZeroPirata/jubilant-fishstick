@@ -50,18 +50,12 @@ func TestYearsOfExperience(t *testing.T) {
 func llmOut() LLMOutput {
 	var out LLMOutput
 	out.Resumo = "Engenheiro Backend com 3 anos em Go."
-	out.Experiencias = append(out.Experiencias, struct {
-		ID      int      `json:"id"`
-		Bullets []string `json:"bullets"`
-	}{0, []string{
+	out.Experiencias = append(out.Experiencias, LLMExperience{ID: 0, Bullets: []string{
 		"Desenvolveu microsserviços em Go com Fiber para motores de cálculo.",
 		"Otimizou a latência em 30% com Redis.", // número inventado
 		"Implementou validação CRC-16 nos pacotes UDP.",
 	}})
-	out.Habilidades = append(out.Habilidades, struct {
-		Categoria string   `json:"categoria"`
-		Itens     []string `json:"itens"`
-	}{"Linguagens", []string{"Go", "Java", "Python", "go"}})
+	out.Habilidades = append(out.Habilidades, LLMSkillGroup{"Linguagens", []string{"Go", "Java", "Python", "go"}})
 	out.Projetos = append(out.Projetos,
 		struct {
 			ID        int    `json:"id"`
@@ -292,10 +286,7 @@ func TestAssemble_TecnologiaDeOutraExperiencia(t *testing.T) {
 	}
 	var out LLMOutput
 	add := func(id int, bullets ...string) {
-		out.Experiencias = append(out.Experiencias, struct {
-			ID      int      `json:"id"`
-			Bullets []string `json:"bullets"`
-		}{id, bullets})
+		out.Experiencias = append(out.Experiencias, LLMExperience{ID: id, Bullets: bullets})
 	}
 	add(0,
 		"Desenvolveu microsserviços em Go com Fiber para motores de cálculo.",

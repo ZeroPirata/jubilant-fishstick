@@ -314,7 +314,7 @@ RETURNING id, user_id, skill_name, proficiency_level, tags, created_at, updated_
 type QueryInsertSkillParams struct {
 	UserID           pgtype.UUID `json:"user_id"`
 	SkillName        string      `json:"skill_name"`
-	ProficiencyLevel interface{} `json:"proficiency_level"`
+	ProficiencyLevel SkillLevel  `json:"proficiency_level"`
 	Tags             []string    `json:"tags"`
 }
 
@@ -651,7 +651,7 @@ type QueryListSkillsRow struct {
 	ID               pgtype.UUID        `json:"id"`
 	UserID           pgtype.UUID        `json:"user_id"`
 	SkillName        string             `json:"skill_name"`
-	ProficiencyLevel interface{}        `json:"proficiency_level"`
+	ProficiencyLevel SkillLevel         `json:"proficiency_level"`
 	Tags             []string           `json:"tags"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
@@ -1256,7 +1256,7 @@ WHERE id = $4 AND user_id = $5
 
 type QueryUpdateSkillParams struct {
 	SkillName        string      `json:"skill_name"`
-	ProficiencyLevel interface{} `json:"proficiency_level"`
+	ProficiencyLevel SkillLevel  `json:"proficiency_level"`
 	Tags             []string    `json:"tags"`
 	ID               pgtype.UUID `json:"id"`
 	UserID           pgtype.UUID `json:"user_id"`

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"hackton-treino/config"
 	"hackton-treino/internal/aiconfig"
+	"hackton-treino/internal/discovery"
 	"hackton-treino/internal/handler"
 	"hackton-treino/internal/middleware"
 	adminRepo "hackton-treino/internal/repository/admin"
@@ -29,7 +30,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.Config, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store, llm *services.AiService) {
+func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.Config, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store, llm *services.AiService, disc *discovery.Service) {
 	timeout := config.GetConfigDurationOrDefault(cfg.Project.ContextTimeout, 60*time.Second)
 	hash := config.LoadHashConfig(cfg)
 	hasher := security.NewHasher(hash)
@@ -69,6 +70,7 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	importLog := importlog.New(db, profileimport.StaleAfter)
 	setupProfileImportRoutes(protectedMux, logger, db, rds, llm, importLog)
 	setupFilterRoutes(protectedMux, logger, db)
+	setupDiscoveryRoutes(protectedMux, logger, db, disc)
 	setupSecurityRoutes(protectedMux, logger, secLog)
 
 	logoutHandler := handler.NewLogoutHandler(logger, revoker)
@@ -90,6 +92,15 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	adminMux.HandleFunc("GET /metrics/ai", metricsH.AI)
 	adminMux.HandleFunc("GET /metrics/users", metricsH.UserStats)
 	adminMux.HandleFunc("GET /imports", handler.NewImportLogHandler(logger, importLog).List)
+
+	// Busca automática de vagas (aba Descobrir): configuração no painel admin,
+	// andamento e histórico das varreduras no painel de métricas
+	discAdmin := handler.NewDiscoveryAdminHandler(logger, db, disc)
+	adminMux.HandleFunc("GET /discovery/settings", discAdmin.GetSettings)
+	adminMux.HandleFunc("PUT /discovery/settings", discAdmin.SaveSettings)
+	adminMux.HandleFunc("POST /discovery/run", discAdmin.RunNow)
+	adminMux.HandleFunc("POST /discovery/boards/check", discAdmin.CheckBoards)
+	adminMux.HandleFunc("GET /metrics/discovery", discAdmin.Metrics)
 
 	// Só master: configurações de IA (contêm API keys) e promoção de masters
 	master := middleware.MasterMiddleware(adminR)

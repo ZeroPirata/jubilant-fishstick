@@ -1,0 +1,59 @@
+package discovery
+
+import (
+	"slices"
+	"testing"
+)
+
+func TestClassifySeniority(t *testing.T) {
+	cases := map[string][]string{
+		"Desenvolvedor Back-end Pleno":          {LevelMid},
+		"Dev Java Sr.":                          {LevelSenior},
+		"Engenheiro de Software Pleno/Sênior":   {LevelMid, LevelSenior},
+		"Estágio em Desenvolvimento":            {LevelIntern},
+		"Analista de Dados Jr":                  {LevelJunior},
+		"Staff Software Engineer":               {LevelExpert},
+		"Tech Lead Go":                          {LevelExpert},
+		"Analista de Sistemas III":              {LevelSenior},
+		"Software Engineer II":                  {LevelMid},
+		"Desenvolvedor PL/SQL":                  {},
+		"Desenvolvedor PL SQL Pleno":            {LevelMid},
+		"Desenvolvedor Back-end":                {},
+		"Mid-market Account Executive":          {},
+		"Customer Support Specialist":           {},
+		"Senior Leadership Coordinator":         {LevelSenior},
+		"Desenvolvedora Python Júnior (Remoto)": {LevelJunior},
+		"Arquiteto de Soluções Cloud":           {LevelExpert},
+	}
+	for title, want := range cases {
+		if got := ClassifySeniority(title); !slices.Equal(got, want) {
+			t.Errorf("%q: %v, esperado %v", title, got, want)
+		}
+	}
+	// Campo de nível da Himalayas e do ProgramaThor.
+	if got := ClassifySeniority("Entry-level", "Mid-level"); !slices.Equal(got, []string{LevelJunior, LevelMid}) {
+		t.Errorf("himalayas: %v", got)
+	}
+}
+
+func TestMergeSeniority(t *testing.T) {
+	got := MergeSeniority([]string{LevelSenior}, []string{LevelMid, LevelSenior})
+	if !slices.Equal(got, []string{LevelMid, LevelSenior}) {
+		t.Errorf("%v", got)
+	}
+}
+
+func TestSeniorityPrefs(t *testing.T) {
+	all := SeniorityPrefs{}
+	if !all.Matches(nil) || !all.Matches([]string{LevelSenior}) {
+		t.Error("sem nível marcado não filtra")
+	}
+	p := SeniorityPrefs{Levels: []string{LevelMid}}
+	if p.Matches(nil) || !p.Matches([]string{LevelMid, LevelSenior}) || p.Matches([]string{LevelSenior}) {
+		t.Error("filtro de pleno")
+	}
+	p.IncludeUnknown = true
+	if !p.Matches([]string{}) {
+		t.Error("vaga sem nível entra com IncludeUnknown")
+	}
+}

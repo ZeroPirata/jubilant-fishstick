@@ -9,6 +9,7 @@ import (
 	"hackton-treino/database/postgres"
 	"hackton-treino/internal/aiconfig"
 	"hackton-treino/internal/bootstrap"
+	"hackton-treino/internal/discovery"
 	"hackton-treino/internal/middleware"
 	"hackton-treino/internal/profileimport"
 	"hackton-treino/internal/repository/aimetrics"
@@ -95,15 +96,19 @@ func run() error {
 	aiCalls := aimetrics.New(db)
 	llm.Recorder = aiCalls
 
+	disc := discovery.NewService(db, zap.L())
+
 	serverDone := make(chan error, 1)
 	go func() {
-		serverDone <- startServer(ctx, *cfg, db, rds, bus, aiStore, llm)
+		serverDone <- startServer(ctx, *cfg, db, rds, bus, aiStore, llm, disc)
 	}()
 
 	go pruneAICalls(ctx, aiCalls, importlog.New(db, profileimport.StaleAfter))
 	go func() {
 		worker.NewWorker(zap.L(), db, *llm, cfg.ScrapeAi.Activate, rds, bus, cfg.Worker).Start(ctx)
 	}()
+	// Liga/desliga, intervalo, sites e termos vêm do painel admin (discovery_settings).
+	go disc.Run(ctx)
 
 	<-ctx.Done()
 	zap.L().Info("Encerrando aplicação graciosamente...")
@@ -115,14 +120,14 @@ func run() error {
 	return nil
 }
 
-func startServer(ctx context.Context, cfg config.Config, db *pgxpool.Pool, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store, llm *services.AiService) error {
+func startServer(ctx context.Context, cfg config.Config, db *pgxpool.Pool, rds *redis.Client, bus *sse.Bus, aiStore *aiconfig.Store, llm *services.AiService, disc *discovery.Service) error {
 	port := ":8080"
 	if cfg.Server.Port != "" {
 		port = ":" + cfg.Server.Port
 	}
 
 	mux := http.NewServeMux()
-	routes.Setup(mux, zap.L(), db, cfg, rds, bus, aiStore, llm)
+	routes.Setup(mux, zap.L(), db, cfg, rds, bus, aiStore, llm, disc)
 
 	handler := middleware.MetricsMiddleware(
 		middleware.SecurityHeaders(

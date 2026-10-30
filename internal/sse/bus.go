@@ -1,19 +1,20 @@
 package sse
 
-import "sync"
-
-type GapAnalysis struct {
-	MissingSkills []string `json:"missing_skills,omitempty"`
-	CoveragePct   int      `json:"coverage_pct"`
-}
+import (
+	"hackton-treino/internal/jobfit"
+	"hackton-treino/internal/resume"
+	"sync"
+)
 
 type JobEvent struct {
-	ID          string       `json:"id"`
-	Status      string       `json:"status"`
-	Quality     string       `json:"quality,omitempty"`
-	CompanyName string       `json:"company_name,omitempty"`
-	JobTitle    string       `json:"job_title,omitempty"`
-	Gap         *GapAnalysis `json:"gap,omitempty"`
+	ID          string `json:"id"`
+	Status      string `json:"status"`
+	Quality     string `json:"quality,omitempty"`
+	CompanyName string `json:"company_name,omitempty"`
+	JobTitle    string `json:"job_title,omitempty"`
+	// Fit e Analysis vão no evento de concluído: a aba Qualidade abre sem recarregar.
+	Fit      *jobfit.Fit         `json:"fit,omitempty"`
+	Analysis *resume.FitAnalysis `json:"analysis,omitempty"`
 }
 
 type Bus struct {

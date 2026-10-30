@@ -1,8 +1,7 @@
-package worker
+package jobfit
 
 import (
 	"hackton-treino/internal/db"
-	"hackton-treino/internal/scraper"
 	"testing"
 )
 
@@ -45,16 +44,16 @@ func TestTechMatch(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			got := techMatch(tc.item, tc.filtro)
+			got := TechMatch(tc.item, tc.filtro)
 			if got != tc.want {
-				t.Errorf("techMatch(%q, %q) = %v, want %v", tc.item, tc.filtro, got, tc.want)
+				t.Errorf("TechMatch(%q, %q) = %v, want %v", tc.item, tc.filtro, got, tc.want)
 			}
 		})
 	}
 }
 
-// TestCalcularQualidade testa os limiares de qualidade e a integração com aliases.
-func TestCalcularQualidade(t *testing.T) {
+// TestEvaluate_Qualidade testa os limiares de qualidade e a integração com aliases.
+func TestEvaluate_Qualidade(t *testing.T) {
 	noAliases := map[string]string{}
 
 	cases := []struct {
@@ -168,13 +167,45 @@ func TestCalcularQualidade(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			result := &scraper.ResultScraper{
-				NLScraperResult: scraper.NLScraperResult{Stack: tc.stack},
-			}
-			got := calcularQualidade(result, tc.filtros, tc.aliases)
+			got := Evaluate(tc.stack, tc.filtros, tc.aliases).Quality
 			if got != tc.want {
-				t.Errorf("calcularQualidade() = %q, want %q", got, tc.want)
+				t.Errorf("Evaluate().Quality = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// Vaga real (Sezzle): o nível da skill pesa e cada item diz qual skill o cobre.
+func TestEvaluate_PesoPorNivel(t *testing.T) {
+	skills := []db.UserSkill{
+		{SkillName: "Go (Golang)", ProficiencyLevel: db.SkillLevelExpert, Tags: []string{"golang", "go", "backend"}},
+		{SkillName: "React.js", ProficiencyLevel: db.SkillLevelBasic, Tags: []string{"react", "frontend"}},
+		{SkillName: "AWS SQS", ProficiencyLevel: db.SkillLevelAdvanced, Tags: []string{"aws", "sqs"}},
+		{SkillName: "Amazon S3", ProficiencyLevel: db.SkillLevelIntermediate, Tags: []string{"aws", "s3"}},
+		{SkillName: "MySQL", ProficiencyLevel: db.SkillLevelIntermediate},
+		// A tag "mysql" de uma skill avançada não passa por cima da skill MySQL.
+		{SkillName: "SQL", ProficiencyLevel: db.SkillLevelAdvanced, Tags: []string{"sql", "mysql"}},
+	}
+	fit := Evaluate([]string{"go", "react", "aws", "mysql", "kubernetes"}, skills, nil)
+
+	want := map[string]Item{
+		"go":         {Status: StatusStrong, Skill: "Go (Golang)", Level: "expert"},
+		"react":      {Status: StatusPartial, Skill: "React.js", Level: "basic"},
+		"aws":        {Status: StatusStrong, Skill: "AWS SQS", Level: "advanced"}, // o maior nível vence
+		"mysql":      {Status: StatusPartial, Skill: "MySQL", Level: "intermediate"},
+		"kubernetes": {Status: StatusMissing},
+	}
+	for _, it := range fit.Items {
+		w := want[it.Name]
+		if it.Status != w.Status || it.Skill != w.Skill || it.Level != w.Level {
+			t.Errorf("%s: %+v, esperado %+v", it.Name, it, w)
+		}
+	}
+	// (1 + 0.4 + 1 + 0.75 + 0) / 5 = 63%
+	if fit.CoveragePct != 63 || fit.Quality != db.JobQualityMid {
+		t.Errorf("cobertura %d%% %s", fit.CoveragePct, fit.Quality)
+	}
+	if fit.Strong != 2 || fit.Partial != 2 || fit.Missing != 1 {
+		t.Errorf("contagens %d/%d/%d", fit.Strong, fit.Partial, fit.Missing)
 	}
 }

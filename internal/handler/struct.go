@@ -2,6 +2,8 @@ package handler
 
 import (
 	"hackton-treino/internal/db"
+	"hackton-treino/internal/jobfit"
+	"hackton-treino/internal/resume"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -34,6 +36,14 @@ type Job struct {
 	Quality      *string  `json:"quality,omitempty"`
 	Status       string   `json:"status,omitempty"`
 	Mode         string   `json:"mode,omitempty"` // "full" | "resume_only" | "cover_only"
+	// Fit: compatibilidade com o perfil atual (jobfit). Analysis: análise da IA.
+	Fit      *jobfit.Fit         `json:"fit,omitempty"`
+	Analysis *resume.FitAnalysis `json:"analysis,omitempty"`
+	// Só na tela da vaga (GET /jobs/{id}): a descrição colada pelo usuário e o texto
+	// completo da vaga, com a origem dele ("processamento" ou "catalogo").
+	SourceDescription   *string `json:"source_description,omitempty"`
+	FullDescription     *string `json:"full_description,omitempty"`
+	FullDescriptionFrom string  `json:"full_description_from,omitempty"`
 }
 
 // Resume

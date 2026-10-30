@@ -67,6 +67,7 @@ function navigateTo(id) {
   _activeTab = id;
   if (id === 'vagas')    loadJobs();
   if (id === 'perfil')   loadProfile();
+  if (id === 'descobrir') loadDiscovery();
   if (id === 'filtros')  loadFilters();
   if (id === 'metricas') startMetricsRefresh();
   if (id === 'admin')    loadAdminPanel();

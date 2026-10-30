@@ -16,6 +16,7 @@
   <symbol id="i-brand" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2.4" fill="currentColor" stroke="none"/><circle cx="12" cy="6" r="2.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="2.4" fill="currentColor" stroke="none"/><circle cx="12" cy="18" r="2.4" fill="currentColor" stroke="none"/><path d="M6.8 10.6 10.2 7.4M13.8 7.4l3.4 3.2M17.2 13.4l-3.4 3.2M10.2 16.6 6.8 13.4" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
   <symbol id="i-jobs" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
   <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 5-7"/></symbol>
   <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.4 8.6 8 9 4.6-.4 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></symbol>
@@ -103,6 +104,7 @@
     <nav>
       <button data-tab="vagas" class="active"><svg class="ico"><use href="#i-jobs"/></svg><span>Vagas</span></button>
       <button data-tab="nova-vaga"><svg class="ico"><use href="#i-plus"/></svg><span>Nova vaga</span></button>
+      <button data-tab="descobrir"><svg class="ico"><use href="#i-search"/></svg><span>Descobrir</span></button>
       <button data-tab="perfil"><svg class="ico"><use href="#i-user"/></svg><span>Perfil</span></button>
       <button data-tab="metricas" class="admin-only hidden"><svg class="ico"><use href="#i-chart"/></svg><span>Métricas</span></button>
       <button data-tab="admin" class="admin-only hidden"><svg class="ico"><use href="#i-shield"/></svg><span>Painel admin</span></button>
@@ -181,6 +183,12 @@
       </div>
     </section>
 
+    <!-- ─── VAGA (tela de uma vaga; sem item no menu, abre a partir de Vagas/Descobrir) ─── -->
+    <section id="tab-vaga" data-tab>
+      <button class="btn btn-ghost btn-sm jd-back" onclick="closeJobDetail()">← Voltar</button>
+      <div id="jd-root"></div>
+    </section>
+
     <!-- ─── MÉTRICAS ─── -->
     <section id="tab-metricas" data-tab>
       <div class="section-header">
@@ -191,6 +199,7 @@
             <button data-mview="sistema" onclick="switchMetricsView('sistema',this)">Sistema</button>
             <button data-mview="ia" onclick="switchMetricsView('ia',this)">IA</button>
             <button data-mview="banco" onclick="switchMetricsView('banco',this)">Banco</button>
+            <button data-mview="busca" onclick="switchMetricsView('busca',this)">Busca de vagas</button>
           </div>
           <button class="live-badge" id="metrics-live" onclick="liveToggle('metrics')"></button>
           <button class="btn btn-ghost" onclick="refreshMetricsView()">↻ Atualizar</button>
@@ -488,6 +497,39 @@
       </div>
 
       <!-- ── Banco: consultas e pool de conexões (desde o último reinício) ── -->
+      <!-- ── Busca de vagas: agendador, andamento da varredura, sites e histórico ── -->
+      <div id="metrics-view-busca" class="hidden">
+        <div class="metrics-grid4" style="margin:0 0 16px">
+          <div class="metric-card"><div class="metric-label">Situação</div><div class="metric-val metric-val-sm" id="dm-state">—</div><div class="metric-sub" id="dm-state-sub"></div></div>
+          <div class="metric-card"><div class="metric-label">Próxima varredura</div><div class="metric-val metric-val-sm" id="dm-next">—</div><div class="metric-sub" id="dm-next-sub"></div></div>
+          <div class="metric-card"><div class="metric-label">Última varredura</div><div class="metric-val metric-val-sm" id="dm-last">—</div><div class="metric-sub" id="dm-last-sub"></div></div>
+          <div class="metric-card"><div class="metric-label">Catálogo</div><div class="metric-val metric-val-sm" id="dm-catalog">—</div><div class="metric-sub" id="dm-catalog-sub"></div></div>
+        </div>
+
+        <div class="metric-card dm-progress hidden" id="dm-progress" style="margin-bottom:16px"></div>
+
+        <div class="metric-card" style="margin-bottom:16px">
+          <div class="panel-head"><div class="metric-card-title" style="margin:0">Sites</div>
+            <button class="btn-more" onclick="goToDiscoverySettings()">configurar →</button></div>
+          <div class="table-wrap" style="margin:0">
+            <table class="routes-table table-cards">
+              <thead><tr><th>Site</th><th>Situação</th><th>Última varredura</th><th>Vagas ativas</th><th>Último sucesso</th><th>Último erro</th></tr></thead>
+              <tbody id="dm-sources"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-card-title">Últimas varreduras</div>
+          <div class="table-wrap" style="margin:0">
+            <table class="routes-table table-cards">
+              <thead><tr><th>Início</th><th>Gatilho</th><th>Status</th><th>Duração</th><th>Termos</th><th>Vagas</th><th>Sites</th></tr></thead>
+              <tbody id="dm-runs"><tr><td colspan="7" class="empty">Carregando...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <div id="metrics-view-banco" class="hidden">
         <div class="metrics-grid">
           <div data-domain="banco" class="metric-card">
@@ -614,6 +656,108 @@
           <button id="btn-bulk-submit" class="btn btn-primary" onclick="submitBulkUrls()" disabled>Enviar 0 vagas</button>
         </div>
 
+      </div>
+    </section>
+
+    <!-- ─── DESCOBRIR ─── -->
+    <section id="tab-descobrir" data-tab>
+      <div class="section-header">
+        <h2>Descobrir vagas</h2>
+        <div class="toolbar" style="margin:0">
+          <span class="disc-status" id="disc-status"></span>
+          <button class="btn btn-primary" id="btn-disc-refresh" onclick="refreshDiscovery()">Buscar novas vagas</button>
+        </div>
+      </div>
+
+      <div class="disc-stack">
+      <div class="form-card">
+        <p class="card-eyebrow">Local de interesse</p>
+        <p class="card-note">Filtra as vagas já encontradas, na hora. Vaga remota aparece de qualquer lugar; as cidades valem para híbrida e presencial. Exterior traz vagas remotas de empresas de fora que aceitam candidatos no Brasil. Sem nada marcado, mostra tudo.</p>
+        <div class="disc-location">
+          <div class="disc-modes">
+            <label class="field-check"><input type="checkbox" name="disc-mode" value="remote" onchange="saveDiscoveryPreferences()" /> Remoto</label>
+            <label class="field-check"><input type="checkbox" name="disc-mode" value="hybrid" onchange="saveDiscoveryPreferences()" /> Híbrido</label>
+            <label class="field-check"><input type="checkbox" name="disc-mode" value="onsite" onchange="saveDiscoveryPreferences()" /> Presencial</label>
+            <label class="field-check" title="Vagas remotas de empresas de fora que aceitam candidatos no Brasil"><input type="checkbox" name="disc-mode" value="abroad" onchange="saveDiscoveryPreferences()" /> Exterior</label>
+          </div>
+          <input type="text" id="disc-cities" placeholder="Cidades, separadas por vírgula (ex: São José dos Campos, Jacareí)"
+                 onchange="saveDiscoveryPreferences()" onkeydown="if(event.key==='Enter') this.blur()" />
+        </div>
+      </div>
+
+      <div class="form-card">
+        <p class="card-eyebrow">Tecnologias de interesse</p>
+        <p class="card-note">Escolha linguagens e ferramentas: a lista passa a mostrar as vagas que citam qualquer uma delas, mesmo fora do seu perfil (“golang” e “go” contam como Go). Elas também entram na busca dos sites. Sem nenhuma escolhida, a lista usa as skills do seu perfil.</p>
+        <div class="disc-keywords" id="disc-techs"></div>
+        <div class="toolbar disc-area-add" style="margin:10px 0 0">
+          <select id="disc-tech-select" aria-label="Tecnologia para adicionar"></select>
+          <button class="btn btn-ghost" onclick="addDiscoveryTech()">Adicionar</button>
+        </div>
+      </div>
+
+      <div class="form-card">
+        <p class="card-eyebrow">Outras áreas</p>
+        <p class="card-note">O catálogo já traz vagas de tecnologia, atualizadas sozinhas a cada 12h. Se a sua área não aparece (RH, administração...), escolha ela na lista: ela é buscada nos sites e entra no catálogo. "Buscar novas vagas" refaz essa busca.</p>
+        <div class="disc-keywords" id="disc-keywords"></div>
+        <div class="toolbar disc-area-add" style="margin:10px 0 0">
+          <select id="disc-area-select" onchange="discAreaChanged()" aria-label="Área para adicionar"></select>
+          <input type="text" id="disc-keyword-input" class="hidden" placeholder="Digite a área (ex: biomedicina)" maxlength="60"
+                 onkeydown="if(event.key==='Enter') addDiscoveryKeyword()" />
+          <button class="btn btn-ghost" onclick="addDiscoveryKeyword()">Adicionar</button>
+        </div>
+      </div>
+      </div>
+
+      <div class="disc-filters">
+        <div class="disc-filter-row">
+          <span class="disc-filter-label">Nível</span>
+          <div class="disc-chips" id="disc-level-chips"></div>
+          <label class="field-check disc-level-unknown hidden" title="A maioria das vagas não diz o nível no título">
+            <input type="checkbox" id="disc-level-unknown" checked onchange="toggleDiscLevelUnknown(this)" />
+            Incluir vagas sem nível informado <span id="disc-level-unknown-count"></span>
+          </label>
+        </div>
+        <div class="disc-filter-row">
+          <span class="disc-filter-label">Plataforma</span>
+          <div class="disc-chips" id="disc-source-chips"></div>
+        </div>
+        <div class="disc-filter-row">
+          <span class="disc-filter-label">Precisa citar</span>
+          <div class="disc-chips" id="disc-skill-chips"></div>
+        </div>
+      </div>
+
+      <div id="disc-skills-note" class="banner banner-warn hidden">
+        <span class="banner-icon">⚠</span>
+        <div style="flex:1">Nenhuma skill do seu perfil está como <b>avançado</b> ou <b>expert</b>, então a lista usa todas as suas skills. Ajuste os níveis em Perfil para ver só as vagas em que você é forte.</div>
+      </div>
+      <div class="list-controls">
+        <div class="page-nav" style="margin-left:0">
+          <select id="disc-size" onchange="changeDiscoverySize(this.value)">
+            <option value="10">10/pág</option>
+            <option value="20" selected>20/pág</option>
+            <option value="50">50/pág</option>
+          </select>
+          <button class="btn-page" id="disc-prev" onclick="discoveryPrevPage()" disabled>‹</button>
+          <span class="page-info" id="disc-page-info">—</span>
+          <button class="btn-page" id="disc-next" onclick="discoveryNextPage()">›</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-cards">
+          <thead>
+            <tr>
+              <th>Vaga</th>
+              <th>Local</th>
+              <th title="Em destaque, as que batem com você; apagadas, as outras que a vaga cita">Stack da vaga</th>
+              <th>Publicada</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="disc-body">
+            <tr><td colspan="5" class="empty">Carregando...</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
@@ -940,6 +1084,7 @@
           <button class="active" data-admin="errors" onclick="switchAdminView('errors',this)">Log de Erros</button>
           <button               data-admin="users"  onclick="switchAdminView('users',this)">Usuários</button>
           <button               data-admin="imports" onclick="switchAdminView('imports',this)">Importações</button>
+          <button               data-admin="discovery" onclick="switchAdminView('discovery',this)">Busca de vagas</button>
           <button class="master-only hidden" data-admin="ai" onclick="switchAdminView('ai',this)">Configurações de IA</button>
         </div>
       </div>
@@ -986,6 +1131,93 @@
       </div>
 
       <!-- Importações de currículo -->
+      <div id="admin-discovery" class="hidden">
+        <div class="list-controls" style="margin-bottom:12px">
+          <button class="btn btn-primary" id="dadm-save" onclick="dadmSave()" disabled>Salvar alterações</button>
+          <span class="disc-status" id="dadm-dirty"></span>
+          <button class="btn-more" style="margin-left:auto" onclick="goToDiscoveryMetrics()">métricas e andamento →</button>
+        </div>
+
+        <div class="disc-stack">
+          <div class="form-card">
+            <p class="card-eyebrow">Executar agora</p>
+            <p class="card-note">Roda na hora só os sites marcados aqui, sem esperar o agendamento. Uma execução com parte dos sites ou só com o catálogo não muda o horário da próxima varredura completa. Um site desligado na configuração também pode ser escolhido aqui.</p>
+            <div class="dadm-run-sources" id="dadm-run-sources"></div>
+            <div class="dadm-run-row">
+              <button class="btn-more" type="button" onclick="dadmRunSelectAll(true)">marcar todos</button>
+              <button class="btn-more" type="button" onclick="dadmRunSelectAll(false)">desmarcar</button>
+            </div>
+            <div class="dadm-run-row">
+              <label class="field-check"><input type="radio" name="dadm-run-terms" value="all" checked /> Catálogo + palavras-chave dos usuários</label>
+              <label class="field-check"><input type="radio" name="dadm-run-terms" value="catalog" /> Só os termos do catálogo</label>
+            </div>
+            <p class="card-note" style="margin:4px 0 10px">Os termos só valem para os sites de busca por termo. Os sites de lista completa sempre trazem todas as vagas.</p>
+            <button class="btn btn-ghost" id="dadm-run" onclick="dadmRunNow()">Executar selecionados</button>
+          </div>
+
+          <div class="form-card">
+            <p class="card-eyebrow">Agendamento</p>
+            <label class="field-check"><span class="ai-switch"><input type="checkbox" id="dadm-enabled" onchange="dadmDirty()" /><span></span></span> Busca de vagas ativa</label>
+            <p class="card-note">Desativada, nada é buscado nos sites: nem as varreduras agendadas, nem o botão dos usuários. As vagas já no catálogo continuam aparecendo.</p>
+            <div class="dadm-interval">
+              <label>Varrer a cada</label>
+              <select id="dadm-interval-preset" onchange="dadmPresetChanged()">
+                <option value="60">1 hora</option>
+                <option value="360">6 horas</option>
+                <option value="720">12 horas (padrão)</option>
+                <option value="1440">24 horas</option>
+                <option value="custom">Personalizado…</option>
+              </select>
+              <span id="dadm-custom" class="hidden">
+                <input type="number" id="dadm-custom-value" min="1" style="width:90px" oninput="dadmDirty()" />
+                <select id="dadm-custom-unit" onchange="dadmDirty()">
+                  <option value="1">minutos</option>
+                  <option value="60" selected>horas</option>
+                  <option value="1440">dias</option>
+                </select>
+              </span>
+            </div>
+            <p class="card-note" style="margin:8px 0 0">Entre 15 minutos e 7 dias. A próxima varredura é contada a partir do início da última; ao mudar o intervalo, vale na hora.</p>
+          </div>
+
+          <div class="form-card">
+            <p class="card-eyebrow">Sites</p>
+            <p class="card-note">Desligado, o site fica de fora da varredura agendada. As vagas que já vieram dele continuam no catálogo até expirarem. <b>Busca por termo</b>: um pedido por termo do catálogo e por palavra-chave dos usuários. <b>Lista completa</b>: baixa todas as vagas do site de uma vez.</p>
+            <div class="dadm-sources" id="dadm-sources"></div>
+          </div>
+
+          <div class="form-card" id="dadm-boards-card">
+            <p class="card-eyebrow">Empresas nos ATS</p>
+            <p class="card-note">Greenhouse e Lever não têm busca geral: cada empresa tem o seu quadro de vagas. Procure pelo nome da empresa ou cole o link do quadro de vagas dela (<code>boards.greenhouse.io/stone</code>, <code>jobs.lever.co/ciandt</code>). O sistema confere nos dois ATS e mostra quantas vagas servem (no Brasil ou remotas abertas para cá). Empresa que não aparece usa outro sistema (Gupy, Workday...).</p>
+            <div class="dadm-board-search">
+              <input type="text" id="dadm-board-query" placeholder="Nome da empresa ou link do quadro de vagas" maxlength="200"
+                     onkeydown="if(event.key==='Enter') dadmFindBoards()" />
+              <button class="btn btn-ghost" id="dadm-board-find" onclick="dadmFindBoards()">Procurar</button>
+            </div>
+            <div id="dadm-board-found"></div>
+            <div class="dadm-run-row" style="justify-content:space-between">
+              <span class="disc-status" id="dadm-boards-count"></span>
+              <button class="btn-more" id="dadm-board-checkall" onclick="dadmCheckAllBoards()">verificar todas</button>
+            </div>
+            <div class="table-wrap" style="margin:6px 0 0">
+              <table class="routes-table table-cards dadm-board-table">
+                <thead><tr><th>Empresa</th><th>Site</th><th>Token</th><th>Situação</th><th></th></tr></thead>
+                <tbody id="dadm-boards"></tbody>
+              </table>
+            </div>
+          </div>
+          </div>
+
+          <div class="form-card">
+            <p class="card-eyebrow">Termos do catálogo</p>
+            <p class="card-note">Buscados nos sites de busca por termo a cada varredura, junto com as palavras-chave dos usuários. Um por linha.</p>
+            <textarea id="dadm-terms" rows="8" oninput="dadmDirty()"></textarea>
+            <div class="disc-status" id="dadm-terms-count" style="margin-top:6px"></div>
+          </div>
+        </div>
+        <p class="disc-status" id="dadm-updated"></p>
+      </div>
+
       <div id="admin-imports" class="hidden">
         <div class="list-controls" style="margin-bottom:12px">
           <select id="imports-filter" onchange="renderAdminImports()" style="width:auto" aria-label="Filtrar por resultado">
@@ -1116,10 +1348,14 @@
 <script src="/static/js/api.js"></script>
 <script src="/static/js/app.js"></script>
 <script src="/static/js/jobs.js"></script>
+<script src="/static/js/job_detail.js"></script>
+<script src="/static/js/discovery.js"></script>
 <script src="/static/js/profile.js"></script>
 <script src="/static/js/import.js"></script>
 <script src="/static/js/help.js"></script>
 <script src="/static/js/metrics.js"></script>
 <script src="/static/js/admin.js"></script>
+<script src="/static/js/discovery_admin.js"></script>
+<script src="/static/js/discovery_metrics.js"></script>
 </body>
 </html>

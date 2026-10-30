@@ -1,6 +1,8 @@
 version: "2"
 sql:
-  - schema: "repository/migrations/"
+  - schema:
+      - "repository/sqlc/enums.sql"
+      - "repository/migrations/"
     queries:
       - "repository/query/query.sql"
       - "repository/query/jobs.sql"
@@ -11,6 +13,7 @@ sql:
       - "repository/query/aliases.sql"
       - "repository/query/worker.sql"
       - "repository/query/security.sql"
+      - "repository/query/discovery.sql"
     engine: "postgresql"
     gen:
       go:

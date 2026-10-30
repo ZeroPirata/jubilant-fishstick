@@ -5,16 +5,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"hackton-treino/internal/db"
+	"hackton-treino/internal/jobfit"
 	"hackton-treino/internal/middleware"
 	"hackton-treino/internal/repository"
+	"hackton-treino/internal/repository/aliases"
+	discoveryRepo "hackton-treino/internal/repository/discovery"
 	"hackton-treino/internal/repository/feedbacks"
 	"hackton-treino/internal/repository/jobs"
 	"hackton-treino/internal/repository/secevents"
 	"hackton-treino/internal/repository/users"
+	"hackton-treino/internal/resume"
 	"hackton-treino/internal/sse"
 	"hackton-treino/internal/util"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -27,6 +32,8 @@ type JobHandler struct {
 	Jobs      jobs.Repository
 	Feedbacks feedbacks.Repository
 	Users     users.Repository
+	Aliases   aliases.Repository
+	Catalog   discoveryRepo.Repository
 	PDF       *PDFService
 	Bus       *sse.Bus
 	SecLog    secevents.Repository
@@ -38,6 +45,8 @@ func NewJobHandler(logger *zap.Logger, conn *pgxpool.Pool, pdf *PDFService, bus 
 		Jobs:        jobs.New(conn),
 		Feedbacks:   feedbacks.New(conn),
 		Users:       users.New(conn),
+		Aliases:     aliases.New(conn),
+		Catalog:     discoveryRepo.New(conn),
 		PDF:         pdf,
 		Bus:         bus,
 		SecLog:      secLog,
@@ -110,6 +119,11 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 
 	if err := util.ValidatePublicURL(req.Url); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if req.Language != nil && (*req.Language == "" || !validJobLanguage(*req.Language)) {
+		writeError(w, http.StatusBadRequest, "idioma inválido: use pt-br ou en")
 		return
 	}
 
@@ -188,6 +202,12 @@ func (h *JobHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Compatibilidade recalculada com o perfil de agora: quem cadastra uma skill vê a
+	// nota mudar sem reprocessar a vaga. Sem skills ou aliases, a vaga sai sem fit.
+	skills, errS := h.Users.QuerySelectAllSkills(r.Context(), userID.String())
+	aliasMap, errA := h.Aliases.QuerySelectAllStackAliases(r.Context())
+	canFit := errS == nil && errA == nil
+
 	response := make([]Job, len(rows))
 	for i, j := range rows {
 		response[i] = Job{
@@ -206,10 +226,105 @@ func (h *JobHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 			Language:     util.PgTextoToNullString(j.Language.String),
 			Status:       string(j.Status),
 			Quality:      util.PgTextoToNullString(string(j.Quality.JobQuality)),
+			Analysis:     decodeAnalysis(j.FitAnalysis),
+		}
+		if canFit {
+			h.attachFit(r.Context(), userID, &response[i], j.ID, j.TechStack, j.Status, j.Quality, skills, aliasMap)
 		}
 	}
 
 	writeList(w, http.StatusOK, response, size, cursor, int32(rows[0].TotalCount))
+}
+
+// attachFit calcula a compatibilidade com o perfil atual e, se a qualidade gravada
+// mudou, grava a nova (o filtro de qualidade continua batendo com a tela).
+func (h *JobHandler) attachFit(ctx context.Context, userID pgtype.UUID, out *Job, id pgtype.UUID, stack []string,
+	status db.JobStatus, stored db.NullJobQuality, skills []db.UserSkill, aliasMap map[string]string) {
+	if len(stack) == 0 {
+		return
+	}
+	fit := jobfit.Evaluate(stack, skills, aliasMap)
+	out.Fit = &fit
+	if status != db.JobStatusCompleted || !stored.Valid || stored.JobQuality == fit.Quality {
+		return
+	}
+	q := string(fit.Quality)
+	out.Quality = &q
+	if errU := h.Jobs.QueryUpdateJobQuality(ctx, db.QueryUpdateJobQualityParams{
+		Quality: db.NullJobQuality{JobQuality: fit.Quality, Valid: true},
+		ID:      id,
+		UserID:  userID,
+	}); errU != nil {
+		h.Logger.Warn("Erro ao atualizar qualidade recalculada", zap.String("job_id", id.String()), zap.String("erro", errU.Message))
+	}
+}
+
+// GetJob é a tela da vaga: tudo de uma vaga (descrições, stack, compatibilidade,
+// análise). Os currículos vêm de /jobs/{id}/resumes.
+func (h *JobHandler) GetJob(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, ErrNotAuthorized.Error())
+		return
+	}
+	jobID, err := util.ParseUUID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "id inválido")
+		return
+	}
+	j, errR := h.Jobs.QuerySelectJobForUser(r.Context(), db.QuerySelectJobForUserParams{ID: jobID, UserID: userID})
+	if errR != nil {
+		writeRepositoryError(w, errR)
+		return
+	}
+
+	out := Job{
+		Base: Base{
+			ID:        j.ID.String(),
+			CreatedAt: j.CreatedAt.Time,
+			UpdatedAt: util.PgTimeToPtr(j.UpdatedAt.Time),
+		},
+		Url:               j.ExternalUrl,
+		CompanyName:       util.PgTextoToNullString(j.CompanyName.String),
+		JobTitle:          util.PgTextoToNullString(j.JobTitle.String),
+		Description:       util.PgTextoToNullString(j.Description.String),
+		Stacks:            j.TechStack,
+		Requirements:      j.Requirements,
+		Language:          util.PgTextoToNullString(j.Language.String),
+		Status:            string(j.Status),
+		Quality:           util.PgTextoToNullString(string(j.Quality.JobQuality)),
+		Mode:              j.Mode,
+		Analysis:          decodeAnalysis(j.FitAnalysis),
+		SourceDescription: util.PgTextoToNullString(j.SourceDescription.String),
+	}
+	// Texto completo: o lido no processamento; para vagas processadas antes de ele ser
+	// guardado, o do catálogo do Descobrir, quando a vaga veio de lá.
+	switch {
+	case strings.TrimSpace(j.ScrapedDescription.String) != "":
+		out.FullDescription, out.FullDescriptionFrom = &j.ScrapedDescription.String, "processamento"
+	default:
+		if row, found, errC := h.Catalog.SelectByURL(r.Context(), j.ExternalUrl); errC == nil && found && row.Description != "" {
+			out.FullDescription, out.FullDescriptionFrom = &row.Description, "catalogo"
+		}
+	}
+
+	skills, errS := h.Users.QuerySelectAllSkills(r.Context(), userID.String())
+	aliasMap, errA := h.Aliases.QuerySelectAllStackAliases(r.Context())
+	if errS == nil && errA == nil {
+		h.attachFit(r.Context(), userID, &out, j.ID, j.TechStack, j.Status, j.Quality, skills, aliasMap)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func decodeAnalysis(raw []byte) *resume.FitAnalysis {
+	if len(raw) == 0 {
+		return nil
+	}
+	var a resume.FitAnalysis
+	if json.Unmarshal(raw, &a) != nil {
+		return nil
+	}
+	return a.Clean()
 }
 
 func (h *JobHandler) DeleteJob(w http.ResponseWriter, r *http.Request) {
@@ -326,8 +441,12 @@ func (h *JobHandler) GetResume(w http.ResponseWriter, r *http.Request) {
 
 func (h *JobHandler) DeleteResume(w http.ResponseWriter, r *http.Request) {
 	GenericDelete(func(userID pgtype.UUID, r *http.Request) (db.QueryDeleteResumeParams, *repository.RepositoryError) {
-		id, err := util.ParseUUID(r.PathValue("id"))
-		return db.QueryDeleteResumeParams{ID: id, UserID: userID}, err
+		jobID, err := util.ParseUUID(r.PathValue("id"))
+		if err != nil {
+			return db.QueryDeleteResumeParams{}, err
+		}
+		resumeID, err := util.ParseUUID(r.PathValue("resume_id"))
+		return db.QueryDeleteResumeParams{ID: resumeID, JobID: jobID, UserID: userID}, err
 	},
 		h.Jobs.QueryDeleteResume,
 	)(w, r)
@@ -452,13 +571,20 @@ func (h *JobHandler) RetryJobProcessing(w http.ResponseWriter, r *http.Request) 
 
 	var body struct {
 		Mode string `json:"mode"`
+		// Language: idioma do currículo e da cover letter ("pt-br" ou "en"); vazio mantém.
+		Language string `json:"language"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
+	if !validJobLanguage(body.Language) {
+		writeError(w, http.StatusBadRequest, "idioma inválido: use pt-br ou en")
+		return
+	}
 
 	errR = h.Jobs.QueryReprocessJob(r.Context(), db.QueryReprocessJobParams{
-		ID:     pgJobId,
-		UserID: userId,
-		Mode:   body.Mode,
+		ID:       pgJobId,
+		UserID:   userId,
+		Mode:     body.Mode,
+		Language: body.Language,
 	})
 
 	if errR != nil {
@@ -489,4 +615,10 @@ func (h *JobHandler) InsertFeedback(w http.ResponseWriter, r *http.Request) {
 			TypedRequired[Feedback]("status", "comments"),
 		),
 	)(w, r)
+}
+
+// validJobLanguage: idiomas em que o worker gera currículo (o prompt em inglês para
+// "en", o em português para o resto). Vazio é "não mudar".
+func validJobLanguage(lang string) bool {
+	return lang == "" || lang == "pt-br" || lang == "ptbr" || lang == "en"
 }
