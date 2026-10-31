@@ -95,13 +95,14 @@ const HELP_TOPICS = [
       },
       {
         title: 'A tela da vaga',
-        body: `<p>Clique numa vaga para ver tudo dela em três abas (use ← → para trocar):</p>
+        body: `<p>Clique numa vaga para ver tudo dela em quatro abas (use ← → para trocar):</p>
           <ul><li><b>Compatibilidade</b>: análise da IA (pontos fortes, lacunas, recomendação) e stack × perfil</li>
+          <li><b>Palavras-chave</b>: os termos da vaga que o currículo cita, os que você tem no perfil mas ficaram de fora e os que o perfil não tem (sem IA)</li>
           <li><b>Currículos e cover letters</b>: PDFs, modelos, avaliação e apagar vários de uma vez</li>
           <li><b>Sobre a vaga</b>: resumo, descrição completa e de onde ela veio</li></ul>
           <p>O endereço (<code>#/vaga/…</code>) pode ser salvo ou aberto em outra aba; o F5 volta para a mesma tela.</p>`,
         visual: `<div class="hv-status">
-          ${['Compatibilidade', 'Currículos', 'Sobre a vaga'].map((s, i) => `<span class="hv-pill" style="--i:${i}">${s}</span>`).join('<i>·</i>')}
+          ${['Compatibilidade', 'Palavras-chave', 'Currículos', 'Sobre a vaga'].map((s, i) => `<span class="hv-pill" style="--i:${i}">${s}</span>`).join('<i>·</i>')}
         </div>`,
       },
       {
@@ -154,6 +155,16 @@ const HELP_TOPICS = [
           <li>Se o site da vaga bloquear a leitura, o sistema usa a descrição guardada no catálogo</li></ul>`,
         visual: `<div class="hv-status">
           ${['Gerar currículo', 'Na fila', 'Ver currículo'].map((s, i) => `<span class="hv-pill" style="--i:${i}">${s}</span>`).join('<i>›</i>')}
+        </div>`,
+      },
+      {
+        title: 'Avisos de vagas novas',
+        body: `<p>O <b>sininho</b> no topo conta as vagas que entraram no catálogo desde a sua última olhada e combinam com você.</p>
+          <ul><li>Escolha avisar só das de compatibilidade <b>alta</b> (padrão) ou também das <b>médias</b>, ou desligar</li>
+          <li>Valem o local e o nível que você salvou no Descobrir</li>
+          <li>Abrir o sininho ou o Descobrir marca como vistas: a mesma vaga não é avisada de novo</li></ul>`,
+        visual: `<div class="hv-status">
+          ${['varredura', 'vaga nova', 'compatível?', 'sininho'].map((s, i) => `<span class="hv-pill" style="--i:${i}">${s}</span>`).join('<i>›</i>')}
         </div>`,
       },
       {

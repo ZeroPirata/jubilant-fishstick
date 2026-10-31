@@ -20,6 +20,7 @@ function showApp() {
   applyRoute();
   impResume();
   connectSSE();
+  startAlerts();
 }
 
 // ── Confirm dialog ──
@@ -75,7 +76,7 @@ function navigateTo(id) {
   _activeTab = id;
   if (id === 'vagas')    loadJobs();
   if (id === 'perfil')   loadProfile();
-  if (id === 'descobrir') loadDiscovery();
+  if (id === 'descobrir') { loadDiscovery(); markAlertsSeen(); }
   if (id === 'filtros')  loadFilters();
   if (id === 'metricas') startMetricsRefresh();
   if (id === 'admin')    loadAdminPanel();
@@ -172,6 +173,7 @@ async function doRegister() {
 
 function doLogout() {
   disconnectSSE();
+  stopAlerts();
   clearToken();
   localStorage.removeItem('jp_is_admin');
   if (typeof clearSkillsCache === 'function') clearSkillsCache();

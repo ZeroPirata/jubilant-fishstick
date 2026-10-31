@@ -11,6 +11,62 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const alertsMarkSeen = `-- name: AlertsMarkSeen :exec
+INSERT INTO user_job_alerts(user_id, seen_at)
+VALUES ($1, now())
+ON CONFLICT (user_id) DO UPDATE SET seen_at = now()
+`
+
+func (q *Queries) AlertsMarkSeen(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, alertsMarkSeen, userID)
+	return err
+}
+
+const alertsSelect = `-- name: AlertsSelect :one
+
+
+SELECT enabled, min_quality, seen_at
+FROM user_job_alerts
+WHERE user_id = $1
+`
+
+type AlertsSelectRow struct {
+	Enabled    bool               `json:"enabled"`
+	MinQuality string             `json:"min_quality"`
+	SeenAt     pgtype.Timestamptz `json:"seen_at"`
+}
+
+// =============================================================================
+// ALERTAS de vagas novas (sininho)
+// =============================================================================
+func (q *Queries) AlertsSelect(ctx context.Context, userID pgtype.UUID) (AlertsSelectRow, error) {
+	row := q.db.QueryRow(ctx, alertsSelect, userID)
+	var i AlertsSelectRow
+	err := row.Scan(&i.Enabled, &i.MinQuality, &i.SeenAt)
+	return i, err
+}
+
+const alertsUpsertSettings = `-- name: AlertsUpsertSettings :exec
+INSERT INTO user_job_alerts(user_id, enabled, min_quality, seen_at)
+VALUES ($1, $2, $3, now() - interval '24 hours')
+ON CONFLICT (user_id) DO UPDATE SET
+    enabled     = EXCLUDED.enabled,
+    min_quality = EXCLUDED.min_quality,
+    updated_at  = now()
+`
+
+type AlertsUpsertSettingsParams struct {
+	UserID     pgtype.UUID `json:"user_id"`
+	Enabled    bool        `json:"enabled"`
+	MinQuality string      `json:"min_quality"`
+}
+
+// Mudar a configuração não mexe em seen_at (primeira vez: vale o padrão da tabela).
+func (q *Queries) AlertsUpsertSettings(ctx context.Context, arg AlertsUpsertSettingsParams) error {
+	_, err := q.db.Exec(ctx, alertsUpsertSettings, arg.UserID, arg.Enabled, arg.MinQuality)
+	return err
+}
+
 const discoveryCatalogStats = `-- name: DiscoveryCatalogStats :many
 SELECT
     source,
@@ -299,7 +355,7 @@ func (q *Queries) DiscoveryLinkKeyword(ctx context.Context, arg DiscoveryLinkKey
 const discoveryListCandidates = `-- name: DiscoveryListCandidates :many
 SELECT
     d.id, d.source, d.title, d.company, d.location, d.workplace_type, d.international, d.url,
-    d.seniority, d.published_at, d.techs, d.language
+    d.seniority, d.published_at, d.techs, d.language, d.first_seen_at
 FROM discovered_jobs d
 WHERE d.last_seen_at >= $1
   AND (d.expires_at IS NULL OR d.expires_at >= now())
@@ -328,6 +384,7 @@ type DiscoveryListCandidatesRow struct {
 	PublishedAt   pgtype.Timestamptz `json:"published_at"`
 	Techs         []string           `json:"techs"`
 	Language      string             `json:"language"`
+	FirstSeenAt   pgtype.Timestamptz `json:"first_seen_at"`
 }
 
 // Vagas ativas que citam alguma das tecnologias (índice GIN em techs) ou que a busca
@@ -361,6 +418,7 @@ func (q *Queries) DiscoveryListCandidates(ctx context.Context, arg DiscoveryList
 			&i.PublishedAt,
 			&i.Techs,
 			&i.Language,
+			&i.FirstSeenAt,
 		); err != nil {
 			return nil, err
 		}

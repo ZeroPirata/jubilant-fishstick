@@ -18,6 +18,9 @@ func setupDiscoveryRoutes(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Po
 	mux.HandleFunc("GET /discovery/preferences", h.GetPreferences)
 	mux.HandleFunc("PUT /discovery/preferences", h.SavePreferences)
 	mux.HandleFunc("GET /discovery/technologies", h.Technologies)
+	mux.HandleFunc("GET /discovery/alerts", h.GetAlerts)
+	mux.HandleFunc("PUT /discovery/alerts", h.SaveAlerts)
+	mux.HandleFunc("POST /discovery/alerts/seen", h.MarkAlertsSeen)
 }
 
 func setupFilterRoutes(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool) {

@@ -472,6 +472,14 @@ type UserExperience struct {
 	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type UserJobAlert struct {
+	UserID     pgtype.UUID        `json:"user_id"`
+	Enabled    bool               `json:"enabled"`
+	MinQuality string             `json:"min_quality"`
+	SeenAt     pgtype.Timestamptz `json:"seen_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type UserJobFilter struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`

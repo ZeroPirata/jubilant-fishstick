@@ -41,6 +41,9 @@ type Repository interface {
 	SelectPreferences(ctx context.Context, userID pgtype.UUID) (db.DiscoverySelectPreferencesRow, *repository.RepositoryError)
 	UpsertPreferences(ctx context.Context, args db.DiscoveryUpsertPreferencesParams) *repository.RepositoryError
 	SelectByURL(ctx context.Context, url string) (db.DiscoverySelectByURLRow, bool, *repository.RepositoryError)
+	SelectAlerts(ctx context.Context, userID pgtype.UUID) (db.AlertsSelectRow, *repository.RepositoryError)
+	UpsertAlertSettings(ctx context.Context, args db.AlertsUpsertSettingsParams) *repository.RepositoryError
+	MarkAlertsSeen(ctx context.Context, userID pgtype.UUID) *repository.RepositoryError
 }
 
 func New(conn *pgxpool.Pool) Repository {

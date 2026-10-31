@@ -6,6 +6,7 @@ import (
 	"hackton-treino/internal/jobfit"
 	"slices"
 	"testing"
+	"time"
 )
 
 func names(t *testing.T, got []string, want ...string) {
@@ -302,5 +303,33 @@ func TestIntersect(t *testing.T) {
 	}
 	if got := intersect(nil, []string{"Go"}); got == nil || len(got) != 0 {
 		t.Errorf("intersect vazio = %#v, want []string{}", got)
+	}
+}
+
+func TestNewAlerts_NovasAcimaDoLimite(t *testing.T) {
+	since := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	fit := func(q db.JobQuality) jobfit.Fit {
+		return jobfit.Fit{Quality: q, Items: []jobfit.Item{{Name: "go"}}}
+	}
+	jobs := []DiscoveredJob{
+		{ID: "alta-nova", firstSeen: since.Add(time.Hour), fit: fit(db.JobQualityHigh)},
+		{ID: "media-nova", firstSeen: since.Add(time.Hour), fit: fit(db.JobQualityMid)},
+		{ID: "baixa-nova", firstSeen: since.Add(time.Hour), fit: fit(db.JobQualityLow)},
+		{ID: "alta-velha", firstSeen: since.Add(-time.Hour), fit: fit(db.JobQualityHigh)},
+		{ID: "alta-no-limite", firstSeen: since, fit: fit(db.JobQualityHigh)},
+		{ID: "sem-stack", firstSeen: since.Add(time.Hour), fit: jobfit.Fit{Quality: db.JobQualityMid}},
+	}
+	ids := func(js []DiscoveredJob) []string {
+		out := []string{}
+		for _, j := range js {
+			out = append(out, j.ID)
+		}
+		return out
+	}
+	if got := ids(newAlerts(jobs, since, db.JobQualityHigh)); !slices.Equal(got, []string{"alta-nova"}) {
+		t.Errorf("high: %v", got)
+	}
+	if got := ids(newAlerts(jobs, since, db.JobQualityMid)); !slices.Equal(got, []string{"alta-nova", "media-nova"}) {
+		t.Errorf("mid: %v", got)
 	}
 }

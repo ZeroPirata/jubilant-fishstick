@@ -77,9 +77,10 @@ type DiscoveredJob struct {
 	Language string `json:"language,omitempty"`
 	// Fit: compatibilidade da stack da vaga com o perfil (o mesmo JobFit da aba Vagas),
 	// que ordena a lista. Só vai na resposta para as vagas da página.
-	Fit   *jobfit.Fit `json:"fit,omitempty"`
-	techs []string
-	fit   jobfit.Fit
+	Fit       *jobfit.Fit `json:"fit,omitempty"`
+	techs     []string
+	fit       jobfit.Fit
+	firstSeen time.Time
 }
 
 // ListJobs devolve as vagas do catálogo que citam skills em que o usuário é forte
@@ -101,34 +102,65 @@ func (h *DiscoveryHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	cursor, size := getPaginationParams(r)
 
-	skills, errR := h.Users.QuerySelectAllSkills(ctx, userID.String())
+	rk, errR := h.rankedJobs(ctx, userID)
 	if errR != nil {
 		writeRepositoryError(w, errR)
 		return
+	}
+	if rk.jobs == nil {
+		writeDiscoveryList(w, discoveryResult{Jobs: []DiscoveredJob{}, Facets: emptyFacets()}, size, cursor, rk.onlyStrong)
+		return
+	}
+
+	q := r.URL.Query()
+	f := rk.filter
+	f.Sources, f.Skills = q["source"], q["skill"]
+	result := filterDiscovered(rk.jobs, f)
+	if errR := h.fillPage(ctx, userID, result.Jobs, cursor, size); errR != nil {
+		writeRepositoryError(w, errR)
+		return
+	}
+	writeDiscoveryList(w, result, size, cursor, rk.onlyStrong)
+}
+
+// ranked: as vagas candidatas do usuário já ranqueadas, e o filtro salvo (local e
+// nível) para aplicar nelas. jobs nil = o perfil não tem skills nem tecnologias de
+// interesse para casar.
+type ranked struct {
+	jobs       []DiscoveredJob
+	filter     discoveryFilter
+	onlyStrong bool
+}
+
+// rankedJobs faz a parte comum da lista do Descobrir e dos alertas: candidatas do
+// catálogo, casamento com as skills e as tecnologias de interesse, e o ranking.
+func (h *DiscoveryHandler) rankedJobs(ctx context.Context, userID pgtype.UUID) (ranked, *repository.RepositoryError) {
+	var out ranked
+	skills, errR := h.Users.QuerySelectAllSkills(ctx, userID.String())
+	if errR != nil {
+		return out, errR
 	}
 	prefs, errR := h.Repo.SelectPreferences(ctx, userID)
 	if errR != nil {
-		writeRepositoryError(w, errR)
-		return
+		return out, errR
 	}
-	f := discoveryFilter{
+	out.filter = discoveryFilter{
 		Location:  discovery.LocationPrefs{WorkplaceTypes: prefs.WorkplaceTypes, Cities: prefs.Cities},
 		Seniority: discovery.SeniorityPrefs{Levels: prefs.Seniorities, IncludeUnknown: prefs.SeniorityUnknown},
 	}
 
 	matchSkills, onlyStrong := strongSkills(skills)
+	out.onlyStrong = onlyStrong
 	interest := prefs.Technologies
 	if len(matchSkills) == 0 && len(interest) == 0 {
-		writeDiscoveryList(w, discoveryResult{Jobs: []DiscoveredJob{}, Facets: emptyFacets()}, size, cursor, onlyStrong)
-		return
+		return out, nil
 	}
 	plan := discovery.PlanSkills(matchSkills)
 	activeSince := pgtype.Timestamptz{Time: time.Now().Add(-discovery.ActiveFor), Valid: true}
 
 	hitRows, errR := h.Repo.SkillHits(ctx, db.DiscoverySkillHitsParams{Terms: plan.Terms, ActiveSince: activeSince})
 	if errR != nil {
-		writeRepositoryError(w, errR)
-		return
+		return out, errR
 	}
 	hits := map[[16]byte][]string{}
 	for _, hr := range hitRows {
@@ -146,8 +178,7 @@ func (h *DiscoveryHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, errR := h.Repo.ListCandidates(ctx, params)
 	if errR != nil {
-		writeRepositoryError(w, errR)
-		return
+		return out, errR
 	}
 
 	aliasMap, errA := h.Aliases.QuerySelectAllStackAliases(ctx)
@@ -181,15 +212,8 @@ func (h *DiscoveryHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 		jobs = append(jobs, job)
 	}
 	rankDiscovered(jobs)
-
-	q := r.URL.Query()
-	f.Sources, f.Skills = q["source"], q["skill"]
-	result := filterDiscovered(jobs, f)
-	if errR := h.fillPage(ctx, userID, result.Jobs, cursor, size); errR != nil {
-		writeRepositoryError(w, errR)
-		return
-	}
-	writeDiscoveryList(w, result, size, cursor, onlyStrong)
+	out.jobs = jobs
+	return out, nil
 }
 
 // rankDiscovered ordena pela compatibilidade (JobFit): primeiro a faixa (alta, média,
@@ -618,6 +642,7 @@ func toDiscoveredJob(row db.DiscoveryListCandidatesRow, matched []string) Discov
 		Stack:         []string{},
 		Language:      row.Language,
 		techs:         row.Techs,
+		firstSeen:     row.FirstSeenAt.Time,
 	}
 	if job.MatchedSkills == nil {
 		job.MatchedSkills = []string{}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/repository"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -151,4 +152,26 @@ func (r *discoveryRepository) SelectByURL(ctx context.Context, url string) (db.D
 		return row, false, nil
 	}
 	return row, err == nil, repository.HandleDatabaseError(err)
+}
+
+// SelectAlerts devolve a configuração dos alertas; sem linha, os padrões da tabela,
+// com as últimas 24h como "novas" (o primeiro acesso não fica vazio).
+func (r *discoveryRepository) SelectAlerts(ctx context.Context, userID pgtype.UUID) (db.AlertsSelectRow, *repository.RepositoryError) {
+	row, err := r.Q.AlertsSelect(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.AlertsSelectRow{
+			Enabled:    true,
+			MinQuality: string(db.JobQualityHigh),
+			SeenAt:     pgtype.Timestamptz{Time: time.Now().Add(-24 * time.Hour), Valid: true},
+		}, nil
+	}
+	return row, repository.HandleDatabaseError(err)
+}
+
+func (r *discoveryRepository) UpsertAlertSettings(ctx context.Context, args db.AlertsUpsertSettingsParams) *repository.RepositoryError {
+	return repository.HandleDatabaseError(r.Q.AlertsUpsertSettings(ctx, args))
+}
+
+func (r *discoveryRepository) MarkAlertsSeen(ctx context.Context, userID pgtype.UUID) *repository.RepositoryError {
+	return repository.HandleDatabaseError(r.Q.AlertsMarkSeen(ctx, userID))
 }

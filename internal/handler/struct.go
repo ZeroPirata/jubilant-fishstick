@@ -44,6 +44,8 @@ type Job struct {
 	SourceDescription   *string `json:"source_description,omitempty"`
 	FullDescription     *string `json:"full_description,omitempty"`
 	FullDescriptionFrom string  `json:"full_description_from,omitempty"`
+	// Keywords: relatório de palavras-chave da vaga × último currículo × perfil.
+	Keywords *jobfit.KeywordReport `json:"keywords,omitempty"`
 }
 
 // Resume

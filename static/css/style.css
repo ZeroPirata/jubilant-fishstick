@@ -1381,6 +1381,9 @@ nav button.nav-ready::after { background: var(--green); box-shadow: 0 0 0 0 rgba
 .jd-block .quality-group-label { margin-bottom: 6px; }
 .jd-text { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text); }
 .jd-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.kw-intro { font-size: 12.5px; color: var(--text-2); margin: 0 0 14px; }
+.kw-hint { font-size: 11.5px; color: var(--muted); margin: 0 0 6px; }
+.kw-count { font: 400 10px var(--font-mono); color: var(--muted); margin-left: 4px; }
 .fit-neutral { background: rgba(255,255,255,.03); color: var(--text-2); border-color: var(--border-strong); }
 .jd-source { text-transform: none; letter-spacing: 0; font-family: var(--font-body); }
 .jd-full { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px; line-height: 1.55; color: var(--text-2); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 8px; }
@@ -1395,3 +1398,42 @@ tr.job-row-link:hover .job-title-link { color: var(--accent); text-decoration: u
   .jd-tabs .help-topic { flex: 0 0 auto; min-width: 160px; scroll-snap-align: start; }
   .jd-actions { justify-content: flex-start; }
 }
+
+/* ══ Alertas de vagas novas (sininho) ══ */
+.alerts-bell {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: none; color: var(--muted); cursor: pointer; transition: all .15s;
+}
+.alerts-bell:hover { color: var(--text); border-color: var(--border-strong); }
+.alerts-bell.has-new { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.alerts-count {
+  position: absolute; top: -6px; right: -7px; min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px; background: var(--accent); color: #111; font: 600 10px/16px var(--font-mono); text-align: center;
+}
+.sidebar-head .alerts-bell-compact { display: none; }
+@media (max-width: 860px) { .sidebar-head .alerts-bell-compact:not(.hidden) { display: inline-flex; } }
+.alerts-panel {
+  position: fixed; top: 52px; right: 16px; z-index: 60; width: min(380px, calc(100vw - 32px));
+  max-height: calc(100vh - 80px); overflow-y: auto; padding: 12px 14px;
+  background: linear-gradient(180deg, var(--surface2), var(--surface));
+  border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow);
+  animation: rise .2s var(--ease) both;
+}
+.alerts-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.alerts-close { background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.alerts-close:hover { color: var(--text); }
+.alerts-sub, .alerts-empty { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+.alerts-list { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: min(420px, 55vh); overflow-y: auto; overscroll-behavior: contain; }
+.alerts-list li { display: flex; gap: 10px; align-items: flex-start; padding: 7px 4px; border-top: 1px solid var(--border); }
+.alerts-job { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.alerts-job a, .alerts-job span { color: var(--text); font-size: 13px; text-decoration: none; overflow-wrap: anywhere; }
+.alerts-job a:hover { color: var(--accent); }
+.alerts-job small { color: var(--muted); font-size: 11px; }
+.alerts-pct { flex: 0 0 auto; min-width: 38px; text-align: right; font: 500 12px var(--font-mono); color: var(--text-2); padding-top: 1px; }
+.alerts-pct.q-high { color: var(--green); }
+.alerts-pct.q-mid { color: var(--yellow); }
+.alerts-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 10px; }
+.alerts-level { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
+.alerts-level select { font-size: 12px; padding: 3px 6px; }
+@media (max-width: 860px) { .alerts-panel { top: 58px; right: 12px; } }

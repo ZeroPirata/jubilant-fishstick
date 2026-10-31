@@ -312,8 +312,40 @@ func (h *JobHandler) GetJob(w http.ResponseWriter, r *http.Request) {
 	aliasMap, errA := h.Aliases.QuerySelectAllStackAliases(r.Context())
 	if errS == nil && errA == nil {
 		h.attachFit(r.Context(), userID, &out, j.ID, j.TechStack, j.Status, j.Quality, skills, aliasMap)
+		desc := j.SourceDescription.String
+		if out.FullDescription != nil {
+			desc = *out.FullDescription
+		}
+		kw := jobfit.Keywords(j.TechStack, desc, h.latestResumeText(r.Context(), userID, j.ID), skills, aliasMap)
+		out.Keywords = &kw
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// latestResumeText devolve o texto do currículo gerado mais recente da vaga ("" sem
+// currículo ou com erro: o relatório de palavras-chave sai sem a coluna do currículo).
+func (h *JobHandler) latestResumeText(ctx context.Context, userID, jobID pgtype.UUID) string {
+	rows, err := h.Jobs.QueryListResumesForUser(ctx, db.QueryListResumesForUserParams{UserID: userID, JobID: jobID, Size: 1})
+	if err != nil || len(rows) == 0 {
+		return ""
+	}
+	return resumeText(rows[0].ContentJson)
+}
+
+// resumeText tira o texto do currículo do content_json: "curriculo" (os dois formatos
+// gravam) ou, se vier vazio, o texto montado a partir do doc estruturado.
+func resumeText(contentJSON []byte) string {
+	var c struct {
+		Doc       *resume.Doc `json:"doc"`
+		Curriculo string      `json:"curriculo"`
+	}
+	if json.Unmarshal(contentJSON, &c) != nil {
+		return ""
+	}
+	if strings.TrimSpace(c.Curriculo) == "" && c.Doc != nil {
+		return resume.Text(*c.Doc)
+	}
+	return c.Curriculo
 }
 
 func decodeAnalysis(raw []byte) *resume.FitAnalysis {

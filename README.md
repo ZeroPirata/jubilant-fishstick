@@ -19,7 +19,7 @@ O JobPipeline lê uma vaga, compara com o seu perfil e monta um currículo (e, s
 1. **Monte o perfil.** Importe o currículo que você já tem (PDF, DOCX, TXT ou o PDF do LinkedIn) ou cadastre experiências, habilidades (com nível), projetos, formação, certificados e idiomas. Tudo que vai para o currículo sai daqui.
 2. **Escolha a vaga.** Cole o link em *Nova vaga* (ou vários de uma vez, no lote) ou encontre uma no **Descobrir** e clique em *Gerar currículo*. Escolha o idioma e o que gerar: currículo e carta, só currículo ou só carta.
 3. **Acompanhe.** A lista de vagas se atualiza sozinha enquanto a vaga é lida, analisada e escrita.
-4. **Abra a vaga.** A tela da vaga tem três abas: *Compatibilidade* (análise da IA e stack × perfil), *Currículos e cover letters* e *Sobre a vaga*. O endereço (`#/vaga/<id>`) pode ser salvo e sobrevive ao F5.
+4. **Abra a vaga.** A tela da vaga tem quatro abas: *Compatibilidade* (análise da IA e stack × perfil), *Palavras-chave* (termos da vaga × último currículo × perfil, sem IA, para filtros de ATS), *Currículos e cover letters* e *Sobre a vaga*. O endereço (`#/vaga/<id>`) pode ser salvo e sobrevive ao F5.
 5. **Baixe e avalie.** Gere o PDF em um dos quatro modelos e avalie o resultado: as avaliações ensinam o sistema a escrever do seu jeito.
 
 A aba **Ajuda**, dentro do app, explica tudo isso passo a passo, inclusive o que acontece por dentro.
@@ -95,6 +95,8 @@ Cada fonte só entrou depois de verificar os termos de uso; as avaliadas e recus
 **Indexação na entrada, não na leitura.** Ao gravar uma vaga, o sistema calcula as tecnologias citadas (`techs TEXT[]`, com regras de contexto: "go-to" não é Go), o idioma e o nível (júnior/pleno/sênior). Habilidades fora da lista de tecnologias ("APIs REST") são buscadas num `tsvector` do texto. As duas colunas têm índice GIN: a lista de 9 mil vagas sai em ~60–90 ms, contra ~0,6–1,8 s da versão que lia o texto a cada pedido.
 
 **Ranking.** Todas as vagas candidatas são avaliadas pelo mesmo JobFit da aba Vagas e ordenadas por faixa de compatibilidade, tecnologias cobertas com nível forte, cobertura e coincidências. Cada linha mostra "62% da stack · você cobre 3 de 7 · falta: Kafka, AWS".
+
+**Avisos de vagas novas.** O sininho no topo conta as vagas que entraram no catálogo (`first_seen_at`) desde a última olhada do usuário, com compatibilidade alta (ou alta e média, à escolha) e dentro do local e nível salvos. Usa o mesmo ranking da lista. Abrir o sininho ou o Descobrir avança a marca (`user_job_alerts.seen_at`): nenhuma vaga é avisada duas vezes. Por enquanto só na plataforma; Telegram e e-mail podem reaproveitar a mesma lista.
 
 **Higiene do catálogo.** Vaga que some das buscas sai da lista em 36 h e é apagada em 7 dias; vaga publicada há mais de 45 dias não entra (e é removida, com log por fonte); vagas repetidas (mesmo título e empresa) aparecem uma vez.
 
@@ -187,6 +189,7 @@ erDiagram
 | `jobs` | Vagas do usuário: status, compatibilidade, stack, requisitos, idioma, modo, análise da IA, descrição lida |
 | `generated_resumes` / `resumes_feedback` | Currículos gerados (JSON estruturado) e avaliações |
 | `discovered_jobs` | Catálogo do Descobrir, com `techs[]`, `search_vec`, idioma e nível indexados |
+| `user_job_alerts` | Alertas de vagas novas: ligado, limite de compatibilidade e quando o usuário viu por último |
 | `discovery_settings`, `discovery_runs`, `discovery_run_sources` | Configuração da varredura (sites, termos, intervalo, empresas nos ATS) e histórico por site |
 | `ai_providers`, `ai_calls` | Cadeia de IA configurada no painel e registro de cada chamada |
 | `profile_imports`, `error_logs`, `security_events` | Importações, erros do pipeline e eventos de segurança |
@@ -229,16 +232,18 @@ O painel de Métricas mostra ainda o histórico das chamadas de IA, usuários at
 
 ```mermaid
 flowchart LR
-    Push["git push main"] --> Version["Check version<br/>maior que a do ar,<br/>data ≥ a dela"]
-    Version --> Test["Testes<br/>go test + race detector"]
-    Test --> Deploy["Deploy<br/>backup do banco → rsync →<br/>docker compose up --build"]
+    Push["git push main"] --> Version["Check version (servidor)<br/>maior que a do ar,<br/>data ≥ a dela"]
+    Push --> Test["Testes (GitHub)<br/>go test + race detector"]
+    Version --> Image["Imagem (GitHub)<br/>build → GHCR"]
+    Test --> Image
+    Image --> Deploy["Deploy (servidor)<br/>backup do banco → rsync →<br/>docker compose pull + up"]
     Deploy --> Health["Healthcheck"] --> Smoke["Smoke test"] --> Done["✅ Produção"]
     Version -- "mesma versão ou dia anterior" --> Abort["❌ bloqueado"]
     Test -- "falha" --> Abort
 ```
 
 - **Versão:** todo deploy atualiza o [`version.json`](version.json) (`{"version": "X.Y.Z", "date": "AAAA-MM-DD"}`). O passo *Check version* (`cmd/checkversion`) compara com o que está no ar e barra versão igual ou menor, ou data anterior. A versão vai embutida no binário e aparece nos logs e para o admin master.
-- **Runner próprio:** o servidor de produção (um notebook) é o executor. Os testes rodam com 2 núcleos e prioridade mínima, com cache de módulos e de build entre execuções.
+- **Servidor só baixa:** o servidor de produção é um notebook. Testes e build da imagem rodam nos runners do GitHub; a imagem vai para o GHCR com a tag do commit, e o servidor (runner próprio) só confere a versão, faz backup, baixa a imagem e reinicia. Nada é compilado nele.
 - **Banco:** backup (`pg_dump`) antes de cada deploy, mantendo os 10 mais recentes; as migrations rodam na subida.
 
 ---
@@ -264,7 +269,7 @@ Base `/api/v1`. Rotas protegidas exigem `Authorization: Bearer <jwt>`; as respos
 | POST | `/jobs/{id}/resumes/{resume_id}/feedback` | Avaliar |
 | GET | `/jobs/events` | SSE |
 
-**Descobrir:** `GET /discovery/jobs` (filtros, paginação, ordenado por compatibilidade) · `GET /discovery/technologies` · `GET/PUT /discovery/preferences` · `POST /discovery/refresh` · `GET /discovery/status`
+**Descobrir:** `GET /discovery/jobs` (filtros, paginação, ordenado por compatibilidade) · `GET /discovery/technologies` · `GET/PUT /discovery/preferences` · `POST /discovery/refresh` · `GET /discovery/status` · `GET/PUT /discovery/alerts` · `POST /discovery/alerts/seen`
 
 **Filtros e segurança:** `GET/POST /filters`, `DELETE /filters/{id}` · `GET /security/events`
 
@@ -318,7 +323,7 @@ Build de produção: `docker compose up -d --build` (imagem multi-stage: binári
 │   ├── appversion/        # version.json embutido
 │   ├── discovery/         # Fontes de vagas, varredura, indexação (techs, idioma, nível)
 │   ├── handler/           # HTTP: vagas, perfil, Descobrir, admin, UI e cache de assets
-│   ├── jobfit/            # Compatibilidade stack × habilidades (cálculo único)
+│   ├── jobfit/            # Compatibilidade stack × habilidades (cálculo único) e palavras-chave
 │   ├── profileimport/     # Importação de currículo
 │   ├── repository/        # Acesso a dados por domínio (interfaces + sqlc)
 │   ├── resume/            # Documento do currículo: montagem, conferências, tradução

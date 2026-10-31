@@ -4,10 +4,10 @@
 // texto completo lido do site e o que o usuário colou). Abre ao clicar na vaga em
 // Vagas, em "Currículos"/qualidade e em "Ver currículo" no Descobrir.
 
-// tab: painel aberto (fit | resumes | about). Como na Ajuda, um por vez em vez de
+// tab: painel aberto (fit | keywords | resumes | about). Como na Ajuda, um por vez em vez de
 // uma página longa; continua o mesmo quando a tela recarrega sozinha (SSE).
 const _jd = { id: null, from: 'vagas', seq: 0, reloadTimer: null, language: '', tab: 'fit' };
-const _jdTabs = ['fit', 'resumes', 'about'];
+const _jdTabs = ['fit', 'keywords', 'resumes', 'about'];
 
 const _jdModes = { full: 'Currículo e cover letter', resume_only: 'Só currículo', cover_only: 'Só cover letter' };
 const _jdSourceLabel = { processamento: 'lida do site no processamento', catalogo: 'do catálogo do Descobrir' };
@@ -99,6 +99,7 @@ function renderJobDetail(j, resumes) {
   const fitSub = j.fit && j.fit.items.length ? `${j.fit.coverage_pct}% da stack` : (j.quality ? (qualityLabels[j.quality] || j.quality) : 'análise e stack');
   const tabs = [
     ['fit', 'Compatibilidade', fitSub, 'i-chart'],
+    ['keywords', 'Palavras-chave', jdKeywordsSub(j.keywords), 'i-search'],
     ['resumes', 'Currículos e cover letters', resumes.length ? `${resumes.length} ${resumes.length === 1 ? 'gerado' : 'gerados'}` : (running ? 'gerando…' : 'nenhum ainda'), 'i-jobs'],
     ['about', 'Sobre a vaga', 'descrição, stack e requisitos', 'i-search'],
   ];
@@ -115,6 +116,12 @@ function renderJobDetail(j, resumes) {
     <div class="jd-card" id="jd-fit" role="tabpanel"${_jd.tab === 'fit' ? '' : ' hidden'}>
       <h3 class="jd-card-title">Compatibilidade</h3>
       ${renderFitDetails({ stack: j.stacks || [], reqs: j.requirements || [], quality: j.quality, fit: j.fit, analysis: j.analysis })}
+    </div>`;
+
+  const keywords = `
+    <div class="jd-card" id="jd-keywords" role="tabpanel"${_jd.tab === 'keywords' ? '' : ' hidden'}>
+      <h3 class="jd-card-title">Palavras-chave</h3>
+      ${renderKeywords(j.keywords)}
     </div>`;
 
   const resumesCard = `
@@ -157,7 +164,52 @@ function renderJobDetail(j, resumes) {
         </div>` : ''}
     </div>`;
 
-  return header + `<div class="jd-body">${nav}<div class="jd-stage">${fit + resumesCard + about}</div></div>`;
+  return header + `<div class="jd-body">${nav}<div class="jd-stage">${fit + keywords + resumesCard + about}</div></div>`;
+}
+
+// ── Palavras-chave (ATS) ──
+// Sistemas de triagem procuram no currículo os termos da vaga. O relatório (calculado
+// no servidor, sem IA) compara a stack e as tecnologias da descrição com o último
+// currículo gerado e com o perfil.
+function jdKeywordsSub(k) {
+  if (!k) return 'vaga × currículo';
+  const total = k.in_resume.length + k.missing_in_resume.length + k.not_in_profile.length;
+  if (!total) return 'nenhum termo';
+  return k.has_resume ? `${k.in_resume.length} de ${total} no currículo` : `${total} ${total === 1 ? 'termo' : 'termos'} da vaga`;
+}
+
+function renderKeywords(k) {
+  if (!k) return '<p class="jd-empty-inline">Cadastre suas skills no Perfil para ver o relatório.</p>';
+  const total = k.in_resume.length + k.missing_in_resume.length + k.not_in_profile.length;
+  if (!total) return '<p class="jd-empty-inline">A vaga ainda não tem stack nem descrição para comparar.</p>';
+  const chips = (list, cls, fmt = t => escHtml(t)) =>
+    `<div class="jd-chips">${list.map(t => `<span class="fit-tag ${cls}">${fmt(t)}</span>`).join('')}</div>`;
+  const block = (title, hint, body) => `
+    <div class="jd-block">
+      <div class="quality-group-label">${title}</div>
+      <p class="kw-hint">${hint}</p>
+      ${body}
+    </div>`;
+  const out = [];
+  out.push(`<p class="kw-intro">Muitas empresas filtram currículos por palavras-chave antes de alguém ler. Estes são os termos desta vaga (stack e tecnologias citadas na descrição), comparados com ${k.has_resume ? 'o último currículo gerado' : 'o seu perfil'}.</p>`);
+  if (!k.has_resume) {
+    out.push('<p class="jd-empty-inline">Ainda não há currículo gerado para esta vaga: a coluna "no currículo" aparece depois de gerar.</p>');
+  } else if (k.in_resume.length) {
+    out.push(block(`No currículo <span class="kw-count">${k.in_resume.length}</span>`, 'A vaga pede e o currículo cita.', chips(k.in_resume, 'fit-strong')));
+  }
+  if (k.missing_in_resume.length) {
+    out.push(block(`No perfil, fora do currículo <span class="kw-count">${k.missing_in_resume.length}</span>`,
+      k.has_resume
+        ? 'Você tem, mas o currículo não cita. Confira se a experiência descreve o uso (o gerador só cita o que o perfil comprova) e use “Refazer” com “Nova versão da IA”.'
+        : 'Você tem no perfil: o currículo gerado pode citar.',
+      chips(k.missing_in_resume, 'fit-partial', g => escHtml(g.name) + (g.skill && g.skill.toLowerCase() !== g.name.toLowerCase() ? ` <small>${escHtml(g.skill)}</small>` : ''))));
+  }
+  if (k.not_in_profile.length) {
+    out.push(block(`Fora do perfil <span class="kw-count">${k.not_in_profile.length}</span>`,
+      'A vaga pede e o perfil não tem. Não entra no currículo: só adicione ao Perfil o que você realmente usou.',
+      chips(k.not_in_profile, 'fit-missing')));
+  }
+  return out.join('');
 }
 
 function jdTab(id) {

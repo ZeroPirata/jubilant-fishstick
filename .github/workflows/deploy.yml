@@ -8,22 +8,25 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  test:
-    name: Tests
+  # Só o que precisa do servidor roda nele (um notebook): conferir a versão contra a
+  # que está no ar. Testes e build da imagem rodam nos runners do GitHub, e o servidor
+  # só baixa a imagem pronta: deploy sem compilar nem esquentar a máquina.
+  version:
+    name: Check version
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4.2.2
 
       # Todo deploy precisa de versão nova no version.json: maior que a do ar e com data
-      # igual ou posterior à dela (cmd/checkversion). O runner é o servidor, então a
-      # versão no ar é o version.json da pasta do deploy.
+      # igual ou posterior à dela (cmd/checkversion). A versão no ar é o version.json da
+      # pasta do deploy.
       - name: Check version
         run: |
           GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
           LIVE=/opt/jubilant-fishstick/version.json
           MOUNT=""
           [ -f "$LIVE" ] && MOUNT="-v $LIVE:/live/version.json:ro"
-          docker run --rm --cpus=2 \
+          docker run --rm --cpus=1 \
             -v "$(pwd):/app" $MOUNT \
             -v jubilant-ci-gomod:/go/pkg/mod \
             -v jubilant-ci-gocache:/root/.cache/go-build \
@@ -31,40 +34,61 @@ jobs:
             "golang:${GO_VERSION}-alpine" \
             nice -n 19 go run ./cmd/checkversion /live/version.json
 
-      # O runner é o próprio servidor (um notebook): os testes rodam com no máximo 2
-      # núcleos e prioridade mínima (nice 19), para não esquentar a máquina nem
-      # disputar CPU com o app. Os volumes guardam módulos e cache de build entre
-      # execuções: só recompila o que mudou.
+  test:
+    name: Tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: actions/setup-go@v5.4.0
+        with:
+          go-version-file: go.mod
+
       - name: Run tests
-        run: |
-          GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
-          docker run --rm --cpus=2 \
-            -v "$(pwd):/app" \
-            -v jubilant-ci-gomod:/go/pkg/mod \
-            -v jubilant-ci-gocache:/root/.cache/go-build \
-            -w /app \
-            "golang:${GO_VERSION}-alpine" \
-            nice -n 19 go test ./... -count=1 -timeout 120s
+        run: go test ./... -count=1 -timeout 120s
 
       # Passo separado: com -race a compilação é bem mais lenta, e a falha aqui
       # aponta direto para condição de corrida, não para teste quebrado.
-      # A imagem alpine não traz gcc/musl-dev, que o cgo do race detector exige.
       - name: Race detector
-        run: |
-          GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
-          docker run --rm --cpus=2 \
-            -v "$(pwd):/app" \
-            -v jubilant-ci-gomod:/go/pkg/mod \
-            -v jubilant-ci-gocache:/root/.cache/go-build \
-            -w /app \
-            -e CGO_ENABLED=1 \
-            "golang:${GO_VERSION}-alpine" \
-            sh -c "apk add --no-cache gcc musl-dev && nice -n 19 go test ./... -race -count=1 -timeout 900s"
+        run: go test ./... -race -count=1 -timeout 900s
+
+  image:
+    name: Build image
+    runs-on: ubuntu-24.04
+    needs: [version, test]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: docker/setup-buildx-action@v3.10.0
+
+      - uses: docker/login-action@v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tag pelo commit: o deploy sobe exatamente a imagem testada. O cache do
+      # GitHub Actions guarda as camadas pesadas (apk, pip) entre execuções.
+      - uses: docker/build-push-action@v6.15.0
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/zeropirata/jubilant-fishstick:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   deploy:
     name: Deploy to server
     runs-on: self-hosted
-    needs: test
+    needs: image
+    permissions:
+      contents: read
+      packages: read
+    env:
+      APP_IMAGE: ghcr.io/zeropirata/jubilant-fishstick:${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v4.2.2
@@ -101,11 +125,18 @@ jobs:
           # Mantém só os 10 backups mais recentes
           ls -1t "$BACKUP_DIR"/*.sql.gz | tail -n +11 | xargs -r rm --
 
-      - name: Build and restart containers
+      # Baixa a imagem construída no GitHub (sem compilar aqui) e recria o app. As
+      # imagens antigas do app são apagadas do servidor (continuam no GHCR).
+      - name: Pull image and restart containers
         working-directory: /opt/jubilant-fishstick
         run: |
           set -e
-          docker compose up -d --build --remove-orphans
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker compose pull app
+          docker compose up -d --no-build --remove-orphans
+          docker logout ghcr.io
+          docker images ghcr.io/zeropirata/jubilant-fishstick --format '{{.Repository}}:{{.Tag}}' \
+            | grep -v ":${{ github.sha }}$" | xargs -r docker rmi || true
           docker image prune -f
 
       - name: Wait for healthcheck

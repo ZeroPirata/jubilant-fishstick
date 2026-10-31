@@ -1,5 +1,8 @@
 services:
   app:
+    # No deploy, APP_IMAGE é a imagem construída no GitHub (ghcr.io/...:<commit>) e o
+    # servidor só baixa; sem ela, o compose constrói localmente com o Dockerfile.
+    image: ${APP_IMAGE:-jubilant-fishstick-app}
     build:
       context: .
       dockerfile: Dockerfile

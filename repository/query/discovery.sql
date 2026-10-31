@@ -78,7 +78,7 @@ ORDER BY source;
 -- ranking (JobFit) e as contagens dos filtros; @max_count é só um teto de segurança.
 SELECT
     d.id, d.source, d.title, d.company, d.location, d.workplace_type, d.international, d.url,
-    d.seniority, d.published_at, d.techs, d.language
+    d.seniority, d.published_at, d.techs, d.language, d.first_seen_at
 FROM discovered_jobs d
 WHERE d.last_seen_at >= @active_since
   AND (d.expires_at IS NULL OR d.expires_at >= now())
@@ -263,3 +263,30 @@ LIMIT 1;
 -- techs) ela fica grande e deixa o Descobrir lento: aqui ela é incorporada de uma vez.
 SELECT gin_clean_pending_list('idx_discovered_jobs_search'::regclass),
        gin_clean_pending_list('idx_discovered_jobs_techs'::regclass);
+
+
+-- =============================================================================
+-- ALERTAS de vagas novas (sininho)
+-- =============================================================================
+
+
+-- name: AlertsSelect :one
+SELECT enabled, min_quality, seen_at
+FROM user_job_alerts
+WHERE user_id = @user_id;
+
+
+-- name: AlertsUpsertSettings :exec
+-- Mudar a configuração não mexe em seen_at (primeira vez: vale o padrão da tabela).
+INSERT INTO user_job_alerts(user_id, enabled, min_quality, seen_at)
+VALUES (@user_id, @enabled, @min_quality, now() - interval '24 hours')
+ON CONFLICT (user_id) DO UPDATE SET
+    enabled     = EXCLUDED.enabled,
+    min_quality = EXCLUDED.min_quality,
+    updated_at  = now();
+
+
+-- name: AlertsMarkSeen :exec
+INSERT INTO user_job_alerts(user_id, seen_at)
+VALUES (@user_id, now())
+ON CONFLICT (user_id) DO UPDATE SET seen_at = now();

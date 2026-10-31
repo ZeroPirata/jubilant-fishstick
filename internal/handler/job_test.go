@@ -9,6 +9,7 @@ import (
 	"hackton-treino/internal/security"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -56,6 +57,27 @@ func TestDeleteResume_UsaIDDoCurriculo(t *testing.T) {
 		p := fake.deleted[0]
 		if p.ID.String() != resumeID || p.JobID.String() != jobID || p.UserID.String() != userID {
 			t.Errorf("params = id %s job %s user %s", p.ID.String(), p.JobID.String(), p.UserID.String())
+		}
+	}
+}
+
+func TestResumeText_Formatos(t *testing.T) {
+	cases := map[string]struct{ in, want string }{
+		"texto gravado":  {`{"version":2,"curriculo":"Go e PostgreSQL","doc":{"summary":"outro"}}`, "Go e PostgreSQL"},
+		"só o doc":       {`{"version":2,"doc":{"summary":"Backend em Go"}}`, ""},
+		"formato antigo": {`{"curriculo":"texto antigo"}`, "texto antigo"},
+		"inválido":       {`{`, ""},
+	}
+	for name, c := range cases {
+		got := resumeText([]byte(c.in))
+		if name == "só o doc" {
+			if !strings.Contains(got, "Backend em Go") {
+				t.Errorf("%s: %q", name, got)
+			}
+			continue
+		}
+		if got != c.want {
+			t.Errorf("%s: %q, want %q", name, got, c.want)
 		}
 	}
 }
