@@ -8,7 +8,15 @@ function showAuth() {
 function showApp() {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
-  checkAdminStatus();
+  // Logo depois do login ainda não se sabe se é admin (jp_is_admin vem de /me): uma
+  // aba de admin pedida no endereço é reaberta quando a resposta chega.
+  const wanted = location.hash;
+  checkAdminStatus().then(() => {
+    if (/^#\/(admin|metricas)$/.test(wanted) && location.hash !== wanted && localStorage.getItem('jp_is_admin') === '1') {
+      history.replaceState(null, '', wanted);
+      applyRoute();
+    }
+  });
   applyRoute();
   impResume();
   connectSSE();
