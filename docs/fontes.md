@@ -38,9 +38,11 @@ removida.
 | SmartRecruiters | `api.smartrecruiters.com/v1/companies/<id>/postings?country=br` + detalhe por vaga | só no detalhe | [Docs](https://developers.smartrecruiters.com/docs/posting-api). Só os endpoints sem autenticação. A lista não traz descrição: até 200 vagas por empresa, 150 ms entre detalhes. Identificador inexistente responde 200 vazio, então "achou" = tem vagas. |
 | Recruitee | `<empresa>.recruitee.com/api/offers/` | sim | [Docs](https://docs.recruitee.com/reference/offers). O token vira subdomínio: só `[a-z0-9-]`. |
 
-Empresas cadastradas pelas migrations: 00016/00017 (Greenhouse, Lever) e 00025
-(Nubank no Ashby, Experian no SmartRecruiters). Workable e Recruitee começam vazios:
-nenhuma empresa brasileira com vagas foi achada na conferência.
+Empresas cadastradas pelas migrations: 00016/00017 (Greenhouse, Lever), 00025
+(Nubank no Ashby, Experian no SmartRecruiters) e 00026 (Blueground, Platzi,
+RemotePass e Netguru no Workable; bunq no Recruitee). Workable e Recruitee são mais
+usados na Europa: nenhuma empresa brasileira com vagas foi achada, e as cadastradas
+têm poucas vagas no Brasil ou remotas para cá (2, 1, 1, 0 e 0 em 2026-10-31).
 
 ## Busca por termo e listas
 
