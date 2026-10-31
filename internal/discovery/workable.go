@@ -20,7 +20,7 @@ type Workable struct {
 }
 
 func NewWorkable() *Workable {
-	return &Workable{Client: &http.Client{Timeout: 30 * time.Second}}
+	return &Workable{Client: newBoardClient()}
 }
 
 func (w *Workable) Name() string { return "workable" }

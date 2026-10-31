@@ -1,8 +1,13 @@
 package discovery
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestClassifyPlace(t *testing.T) {
@@ -76,5 +81,40 @@ func TestParseLever(t *testing.T) {
 	}
 	if !got[1].International || got[1].WorkplaceType != "remote" {
 		t.Errorf("remota LATAM é do exterior: %+v", got[1])
+	}
+}
+
+func TestGetJSON_TentaDeNovoNoTimeout(t *testing.T) {
+	old := boardRetryDelay
+	boardRetryDelay = 10 * time.Millisecond
+	defer func() { boardRetryDelay = old }()
+
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) == 1 {
+			time.Sleep(300 * time.Millisecond) // primeiro pedido: lento demais
+		}
+		w.Write([]byte(`{"ok": true}`))
+	}))
+	defer srv.Close()
+	client := &http.Client{Timeout: 100 * time.Millisecond}
+
+	var out struct{ OK bool }
+	if err := getJSON(context.Background(), client, srv.URL, &out); err != nil || !out.OK {
+		t.Fatalf("getJSON = %v, %+v; quero sucesso na segunda tentativa", err, out)
+	}
+	if n := calls.Load(); n != 2 {
+		t.Errorf("pedidos = %d, quero 2", n)
+	}
+
+	// Erro que não é de tempo não é repetido.
+	calls.Store(0)
+	notFound := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		http.NotFound(w, r)
+	}))
+	defer notFound.Close()
+	if err := getJSON(context.Background(), client, notFound.URL, &out); err != errBoardNotFound || calls.Load() != 1 {
+		t.Errorf("404: err = %v, pedidos = %d; quero errBoardNotFound em 1 pedido", err, calls.Load())
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 )
 
 const (
@@ -27,7 +26,7 @@ type Greenhouse struct {
 }
 
 func NewGreenhouse() *Greenhouse {
-	return &Greenhouse{Client: &http.Client{Timeout: 30 * time.Second}}
+	return &Greenhouse{Client: newBoardClient()}
 }
 
 func (g *Greenhouse) Name() string { return "greenhouse" }

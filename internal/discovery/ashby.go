@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 const ashbyJobsURL = "https://api.ashbyhq.com/posting-api/job-board/%s"
@@ -18,7 +17,7 @@ type Ashby struct {
 }
 
 func NewAshby() *Ashby {
-	return &Ashby{Client: &http.Client{Timeout: 30 * time.Second}}
+	return &Ashby{Client: newBoardClient()}
 }
 
 func (a *Ashby) Name() string { return "ashby" }

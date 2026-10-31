@@ -19,7 +19,7 @@ type Recruitee struct {
 }
 
 func NewRecruitee() *Recruitee {
-	return &Recruitee{Client: &http.Client{Timeout: 30 * time.Second}}
+	return &Recruitee{Client: newBoardClient()}
 }
 
 func (r *Recruitee) Name() string { return "recruitee" }

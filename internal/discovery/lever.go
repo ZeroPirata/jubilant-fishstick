@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 )
 
 const leverPostingsURL = "https://api.lever.co/v0/postings/%s?mode=json"
@@ -22,7 +21,7 @@ type Lever struct {
 }
 
 func NewLever() *Lever {
-	return &Lever{Client: &http.Client{Timeout: 30 * time.Second}}
+	return &Lever{Client: newBoardClient()}
 }
 
 func (l *Lever) Name() string { return "lever" }

@@ -30,7 +30,7 @@ type SmartRecruiters struct {
 }
 
 func NewSmartRecruiters() *SmartRecruiters {
-	return &SmartRecruiters{Client: &http.Client{Timeout: 30 * time.Second}}
+	return &SmartRecruiters{Client: newBoardClient()}
 }
 
 func (s *SmartRecruiters) Name() string { return "smartrecruiters" }
