@@ -84,12 +84,24 @@ const HELP_TOPICS = [
         visual: `<div class="hv-form"><span class="hv-row"><span class="hv-input">Acme Corp</span><span class="hv-input">Dev Backend Pleno</span></span><span class="hv-input hv-area">Requisitos: Go, PostgreSQL, Docker…</span></div>`,
       },
       {
-        title: 'Score de qualidade',
-        body: '<p>Mostra quanto do que a vaga pede está nas suas <b>Habilidades</b>. Não impede a geração: serve para você priorizar onde se candidatar.</p>',
+        title: 'Compatibilidade',
+        body: `<p>Mostra quanto da stack da vaga está nas suas <b>Habilidades</b>, pesando o nível: expert e avançado contam inteiro, intermediário 75%, básico 40%.</p>
+          <ul><li>É a mesma conta na aba Vagas, na tela da vaga e no Descobrir</li><li>Não impede a geração: serve para você priorizar onde se candidatar</li></ul>`,
         visual: `<div class="hv-score">
           <div><em class="badge badge-low">Baixa</em><span class="hv-meter"><i style="--w:22%"></i></span>menos de 30%</div>
           <div><em class="badge badge-mid">Média</em><span class="hv-meter"><i style="--w:50%"></i></span>de 30% a 69%</div>
           <div><em class="badge badge-high">Alta</em><span class="hv-meter"><i style="--w:85%"></i></span>70% ou mais</div>
+        </div>`,
+      },
+      {
+        title: 'A tela da vaga',
+        body: `<p>Clique numa vaga para ver tudo dela em três abas (use ← → para trocar):</p>
+          <ul><li><b>Compatibilidade</b>: análise da IA (pontos fortes, lacunas, recomendação) e stack × perfil</li>
+          <li><b>Currículos e cover letters</b>: PDFs, modelos, avaliação e apagar vários de uma vez</li>
+          <li><b>Sobre a vaga</b>: resumo, descrição completa e de onde ela veio</li></ul>
+          <p>O endereço (<code>#/vaga/…</code>) pode ser salvo ou aberto em outra aba; o F5 volta para a mesma tela.</p>`,
+        visual: `<div class="hv-status">
+          ${['Compatibilidade', 'Currículos', 'Sobre a vaga'].map((s, i) => `<span class="hv-pill" style="--i:${i}">${s}</span>`).join('<i>·</i>')}
         </div>`,
       },
       {
@@ -98,6 +110,121 @@ const HELP_TOPICS = [
         visual: `<div class="hv-status">
           ${['Pendente', 'Coletando', 'Analisando', 'Concluído'].map((s, i) => `<span class="hv-pill" style="--i:${i}">${s}</span>`).join('<i>›</i>')}
         </div>`,
+      },
+    ],
+  },
+  {
+    id: 'descobrir', title: 'Descobrir', icon: 'i-search',
+    slides: [
+      {
+        title: 'Vagas que vêm até você',
+        body: `<p>O Descobrir mantém um <b>catálogo próprio</b> de vagas de tecnologia, lido de fontes públicas:</p>
+          <ul><li>Gupy, ProgramaThor, repositórios de vagas do GitHub e Himalayas (remotas)</li>
+          <li>Quadros de vagas de empresas nos ATS: Greenhouse, Lever, Ashby, Workable, SmartRecruiters e Recruitee</li>
+          <li>Atualiza sozinho a cada 12 horas; o botão de busca procura na hora com os seus termos</li></ul>`,
+        visual: `<div class="hv-stack">
+          <div class="hv-card"><b>Sites de vagas</b><span class="hv-chips"><em>Gupy</em><em>GitHub</em><em>Himalayas</em></span></div>
+          <div class="hv-card"><b>Empresas (ATS)</b><span class="hv-chips"><em>Greenhouse</em><em>Lever</em><em>Ashby</em></span></div>
+          <div class="hv-card"><b>Catálogo</b><span class="hv-bar" style="--w:85%"></span></div>
+        </div>`,
+        cta: { label: 'Abrir o Descobrir', action: "navigateTo('descobrir')" },
+      },
+      {
+        title: 'Ordenadas pelo que você sabe',
+        body: `<p>Cada vaga mostra a <b>compatibilidade</b> com o seu perfil: quanto da stack você cobre (pesando o nível), quantas tecnologias são suas e o que falta.</p>
+          <ul><li>A lista vem das mais compatíveis para as menos</li><li>O que falta é um bom roteiro de estudo</li></ul>`,
+        visual: `<div class="hv-stack">
+          <div class="disc-fit"><span class="disc-fit-pct disc-fit-high">82% da stack</span><span>você cobre 5 de 6</span> · <span class="disc-fit-gaps">falta: Kafka</span></div>
+          <div class="disc-fit"><span class="disc-fit-pct disc-fit-mid">55% da stack</span><span>você cobre 3 de 5</span> · <span class="disc-fit-gaps">falta: AWS, Terraform</span></div>
+          <div class="disc-fit"><span class="disc-fit-pct disc-fit-low">20% da stack</span><span>você cobre 1 de 5</span></div>
+        </div>`,
+      },
+      {
+        title: 'Filtre do seu jeito',
+        body: `<p>Sem nada escolhido, a lista usa as <b>habilidades do seu perfil</b>. Escolha tecnologias para ver vagas fora dele.</p>
+          <ul><li>"golang" e "go" contam como Go; "go-to" não conta</li>
+          <li>Habilidades fora da lista de tecnologias ("APIs REST") são procuradas no texto da vaga</li>
+          <li>Filtre por site, nível (júnior, pleno, sênior), local, modo de trabalho e vagas do exterior</li></ul>`,
+        visual: `<div class="hv-form"><span class="hv-row"><span class="hv-input">Go</span><span class="hv-input">PostgreSQL</span><span class="hv-input">+</span></span><span class="hv-row"><span class="hv-input">Pleno</span><span class="hv-input">Remoto</span></span></div>`,
+      },
+      {
+        title: 'Da vaga ao currículo',
+        body: `<p><b>Gerar currículo</b> manda a vaga para a sua lista. Você escolhe o idioma (o da vaga vem sugerido) e o que gerar.</p>
+          <ul><li>Quando fica pronto, o botão vira <b>Ver currículo</b></li>
+          <li>Se o site da vaga bloquear a leitura, o sistema usa a descrição guardada no catálogo</li></ul>`,
+        visual: `<div class="hv-status">
+          ${['Gerar currículo', 'Na fila', 'Ver currículo'].map((s, i) => `<span class="hv-pill" style="--i:${i}">${s}</span>`).join('<i>›</i>')}
+        </div>`,
+      },
+      {
+        title: 'Catálogo sempre atual',
+        body: `<ul><li>Vaga que some das buscas sai da lista em <b>36 horas</b> e é apagada em <b>7 dias</b></li>
+          <li>Vaga publicada há mais de <b>45 dias</b> não entra: muitos sites deixam a vaga no ar depois de preenchida</li>
+          <li>Vagas repetidas (mesmo título e empresa) aparecem uma vez só</li></ul>`,
+        visual: `<div class="hv-status">
+          ${['nova', 'ativa', 'sumiu 36h', 'apagada 7d'].map((s, i) => `<span class="hv-pill" style="--i:${i}">${s}</span>`).join('<i>›</i>')}
+        </div>`,
+      },
+    ],
+  },
+  {
+    id: 'bastidores', title: 'Por dentro', icon: 'i-shield',
+    slides: [
+      {
+        title: 'As etapas de cada vaga',
+        body: `<ol class="help-steps">
+          <li><b>Leitura</b>: o texto do site da vaga; se o site bloquear, a descrição que você colou ou a do catálogo</li>
+          <li><b>Seleção</b>: as experiências, projetos e habilidades do seu perfil que combinam com a vaga</li>
+          <li><b>Compatibilidade</b>: stack da vaga × suas habilidades</li>
+          <li><b>Escrita</b>: a IA escreve resumo, tópicos, carta e a análise da vaga</li>
+          <li><b>Montagem e conferência</b>: o sistema junta tudo, confere e gera o PDF</li></ol>`,
+        visual: `<div class="hv-flow">
+          ${['Leitura', 'Seleção', 'Fit', 'IA', 'Conferência', 'PDF'].map((s, i) => `<div class="hv-step" style="--i:${i}"><span>0${i + 1}</span>${s}</div>`).join('<i></i>')}
+        </div>`,
+      },
+      {
+        title: 'A IA escreve, os fatos são seus',
+        body: `<p>A IA só recebe o que está no seu perfil e devolve <b>texto</b>. Empresa, cargo, datas, formação e contato são colocados pelo sistema a partir do seu cadastro: a IA não consegue mudá-los.</p>
+          <p>Por isso o perfil é tão importante: nada entra no currículo que não esteja nele.</p>`,
+        visual: `<div class="hv-compare">
+          <div class="hv-good"><span>IA</span>resumo, tópicos das experiências, carta</div>
+          <div class="hv-good"><span>Você</span>empresas, cargos, datas, formação, contato</div>
+        </div>`,
+      },
+      {
+        title: 'Conferências antes de entregar',
+        body: `<ul><li>Resumo que cita tecnologia que você não tem (ou anos de experiência em primeiro emprego) volta para a IA corrigir; o que continuar errado é cortado</li>
+          <li>Ponto forte da análise que cita tecnologia fora do seu perfil é removido</li>
+          <li>Em inglês, cargos e habilidades são traduzidos, mas tradução que sobe o nível ("Júnior" → "Senior") ou acrescenta coisas é descartada: fica o original</li></ul>`,
+        visual: `<div class="hv-compare">
+          <div class="hv-bad"><span>✕</span>"Experiência sólida com Kubernetes" (fora do perfil)</div>
+          <div class="hv-good"><span>✓</span>"Experiência com Docker e AWS em produção"</div>
+        </div>`,
+      },
+      {
+        title: 'Quem decide é você',
+        body: `<p>A compatibilidade e a análise da IA <b>só informam</b>: o currículo é gerado em qualquer nível.</p>
+          <ul><li>A análise traz pontos fortes, lacunas e uma recomendação</li>
+          <li>Vaga com compatibilidade baixa pode valer a pena; a decisão é sua</li></ul>`,
+        visual: `<div class="hv-score">
+          <div><em class="badge badge-high">Vale se candidatar</em>bom encaixe</div>
+          <div><em class="badge badge-mid">Com ressalvas</em>vale tentar, sabendo das lacunas</div>
+          <div><em class="badge badge-low">Baixa aderência</em>lacunas grandes</div>
+        </div>`,
+      },
+      {
+        title: 'Refazer sem gastar à toa',
+        body: `<p>No <b>Refazer</b> você escolhe idioma, o que gerar e se quer uma <b>Nova versão da IA</b>.</p>
+          <ul><li>Desmarcada: se nada mudou (vaga, perfil, avaliações, idioma e modo), a última resposta da IA é reaproveitada na hora, sem gastar cota</li>
+          <li>Trocar o modelo do PDF nunca chama a IA</li></ul>`,
+        visual: `<div class="hv-form"><span class="hv-row"><span class="hv-input">EN</span><span class="hv-input">☑ Nova versão da IA</span></span><span class="hv-btn">Currículo</span></div>`,
+      },
+      {
+        title: 'Vagas buscadas com respeito',
+        body: `<ul><li>Só APIs e quadros de vagas <b>públicos</b>, lidos sem login de ninguém e sem burlar bloqueio de sites</li>
+          <li>O LinkedIn não é raspado: os termos dele proíbem</li>
+          <li>O link leva sempre à vaga original: a candidatura é feita por você no site da empresa</li></ul>`,
+        visual: '<div class="hv-done"><span>✓</span></div>',
       },
     ],
   },

@@ -1,115 +1,123 @@
-# Job Pipeline
+# JobPipeline
 
-> Engine inteligente de geração de currículos técnica, orquestrada em Go com processamento de IA.
+> Do link da vaga ao currículo sob medida em PDF — com IA que escreve, mas não inventa.
 
-| CI/CD Status | Demo Online |
+| CI/CD | Demo |
 | :--- | :--- |
 | [![Deploy](https://github.com/ZeroPirata/jubilant-fishstick/actions/workflows/deploy.yml/badge.svg)](https://github.com/ZeroPirata/jubilant-fishstick/actions/workflows/deploy.yml) | [![Acesse o Site](https://img.shields.io/badge/Acessar_Site-Gerador_de_Currículos-brightgreen?style=for-the-badge&logo=google-chrome&logoColor=white)](https://gerador-curriculo.gsbnunes.com.br) |
 
+O JobPipeline lê uma vaga, compara com o seu perfil e monta um currículo (e, se quiser, a carta de apresentação) adaptado àquela vaga, em português ou inglês, pronto em PDF. Ele também mantém um catálogo próprio de vagas de tecnologia — o **Descobrir** — ordenado pelo quanto cada vaga combina com o que você sabe.
 
-## Propósito do Projeto
-Este é um projeto de portfólio desenvolvido como um **Laboratório de Engenharia de Software**. O objetivo principal foi aplicar e estressar conceitos avançados de arquitetura distribuída e concorrência em **Go**, simulando um ambiente de produção de alta criticidade.
+É também um laboratório de engenharia em **Go**: worker concorrente, arquitetura em camadas (handlers → repositórios → sqlc), cache, tempo real por SSE, observabilidade e deploy contínuo num servidor próprio.
 
-**Key Architecture Goals:**
-* **Arquitetura Hexagonal:** Desacoplamento total entre lógica de negócio e adaptadores externos (banco de dados, IA, renderizadores).
-* **Concorrência Nativa:** Uso intensivo de Goroutines e Channels para processamento paralelo de workers.
-* **Resiliência:** Implementação de retries e tratamento de falhas em sistemas assíncronos.
-
-Plataforma end-to-end para geração automatizada de currículos e cartas de apresentação personalizados por IA. O sistema automatiza todo o ciclo de candidatura: coleta dados da vaga, analisa compatibilidade com o perfil do candidato, gera documentos via LLM e entrega PDFs prontos para envio — sem intervenção manual.
+**Sumário:** [Como usar](#como-usar) · [Como pensamos](#como-pensamos) · [O caminho de uma vaga](#o-caminho-de-uma-vaga) · [Descobrir](#descobrir-o-catálogo-de-vagas) · [Importar currículo](#importar-currículo) · [Painel admin](#painel-admin) · [Arquitetura](#arquitetura) · [Dados](#dados) · [Segurança](#segurança) · [Observabilidade](#observabilidade) · [Versões e deploy](#versões-e-deploy) · [API](#api) · [Rodando localmente](#rodando-localmente) · [Estrutura](#estrutura-do-projeto)
 
 ---
 
-## Visão Geral
+## Como usar
 
-```
-Usuário cadastra uma vaga (URL ou dados manuais)
-              │
-              ▼
-     Job salvo → status: pending
-              │
-              ▼ (Worker a cada 30s, até 5 jobs simultâneos)
-  ┌────────────────────────────────────────────┐
-  │  recovery check  → jobs em 'processing'    │  travados há > RECOVERY_TIMEOUT → pending
-  │  scraping_basic  → HTTP scraper            │  empresa, título, descrição bruta
-  │  scraping_nl     → LLM estrutura a vaga    │  stack[], requisitos[], descrição limpa
-  │  match perfil    → Redis cache + Postgres  │  experiências, habilidades, projetos…
-  │  quality score   → algoritmo de matching   │  low / mid / high
-  │  gap analysis    → habilidades faltando    │  missing_skills[], coverage_pct via SSE
-  │  buildUserPrompt → JSON para o LLM         │  dados truncados, modo e idioma incluídos
-  │  LLM gera docs   → currículo + cover       │  respeita modo (full/resume_only/cover_only)
-  │  substituição    → dados reais do usuário  │  {{CANDIDATO_NOME}} → "Gabriel"
-  └────────────────────────────────────────────┘
-              │
-              ▼
-     Currículo salvo no banco → status: completed
-              │
-              ▼  (sob demanda do usuário)
-     WeasyPrint renderiza HTML/CSS → PDF entregue via download autenticado
-```
+1. **Monte o perfil.** Importe o currículo que você já tem (PDF, DOCX, TXT ou o PDF do LinkedIn) ou cadastre experiências, habilidades (com nível), projetos, formação, certificados e idiomas. Tudo que vai para o currículo sai daqui.
+2. **Escolha a vaga.** Cole o link em *Nova vaga* (ou vários de uma vez, no lote) ou encontre uma no **Descobrir** e clique em *Gerar currículo*. Escolha o idioma e o que gerar: currículo e carta, só currículo ou só carta.
+3. **Acompanhe.** A lista de vagas se atualiza sozinha enquanto a vaga é lida, analisada e escrita.
+4. **Abra a vaga.** A tela da vaga tem três abas: *Compatibilidade* (análise da IA e stack × perfil), *Currículos e cover letters* e *Sobre a vaga*. O endereço (`#/vaga/<id>`) pode ser salvo e sobrevive ao F5.
+5. **Baixe e avalie.** Gere o PDF em um dos quatro modelos e avalie o resultado: as avaliações ensinam o sistema a escrever do seu jeito.
 
-Atualizações de status chegam em tempo real no browser via **Server-Sent Events (SSE)** — sem polling.
-
-Funcionalidades recentes: avisos de perfil fraco antes do processamento, análise de gap de habilidades após a conclusão, modo de geração parcial (só currículo / só cover letter) e suporte completo a candidatos sem experiência profissional.
+A aba **Ajuda**, dentro do app, explica tudo isso passo a passo, inclusive o que acontece por dentro.
 
 ---
 
-## Funcionalidades
+## Como pensamos
 
-### Modo de geração parcial
+Algumas decisões guiam o produto inteiro. Elas explicam boa parte do código.
 
-Cada vaga aceita um campo `mode` que controla o que o LLM gera:
-
-| Modo | Comportamento |
+| Princípio | Na prática |
 |---|---|
-| `full` (padrão) | Gera currículo **e** cover letter |
-| `resume_only` | Gera apenas o currículo — `cover_letter` é string vazia |
-| `cover_only` | Gera apenas a cover letter — `curriculo` é string vazia |
+| **A IA escreve; os fatos são seus.** | A IA recebe só o seu perfil e devolve **texto** (resumo, tópicos, carta, análise), citando experiências e projetos por id. Empresa, cargo, datas, formação e contato são montados pelo código a partir do banco (`internal/resume`). A IA não consegue mudar um fato. |
+| **Nada é inventado.** | Conferências automáticas antes de entregar: resumo que cita tecnologia fora do perfil volta para correção; ponto forte com tecnologia que você não tem é removido; tradução que "promove" o cargo é descartada. |
+| **Você decide.** | Compatibilidade e análise só informam. O currículo é gerado em qualquer nível de aderência. |
+| **Cota de IA é recurso escasso.** | Resposta da IA guardada por hash do pedido; trocar o modelo do PDF não chama a IA; pausa automática quando o provedor limita. |
+| **Fontes com respeito.** | Vagas só de APIs e quadros públicos, sem login de terceiros e sem burlar bloqueios. O link leva sempre à vaga original. Detalhes em [`docs/fontes.md`](docs/fontes.md). |
+| **Um cálculo, uma verdade.** | A compatibilidade (`internal/jobfit`) é a mesma na lista de vagas, na tela da vaga e no Descobrir: a nota nunca diverge da tela. |
 
-O modo é persistido na tabela `jobs` e pode ser alterado no reprocessamento (`PUT /jobs/{id}/retry` com `{"mode":"resume_only"}`). No frontend, o botão "Refazer" expande três opções de modo inline antes de disparar a requisição.
+---
 
-### Avisos de perfil fraco
+## O caminho de uma vaga
 
-Ao criar uma vaga (`POST /jobs`), a API verifica o estado do perfil e retorna um array `warnings` com alertas acionáveis:
-
-- Nenhuma habilidade técnica cadastrada
-- Nenhuma experiência profissional e nenhum projeto
-- Experiências sem conquistas e sem descrição (o LLM não terá conteúdo para os bullet points)
-- Projetos sem descrição
-
-O job é criado normalmente — os avisos são informativos, não bloqueantes. O frontend exibe um banner amarelo na tela de cadastro quando `warnings.length > 0`.
-
-### Análise de gap de habilidades
-
-Após o processamento de uma vaga, o worker computa o gap entre o stack exigido pela vaga e as habilidades cadastradas no perfil do usuário:
-
-```go
-type GapAnalysis struct {
-    MissingSkills []string `json:"missing_skills,omitempty"`
-    CoveragePct   int      `json:"coverage_pct"`
-}
+```mermaid
+flowchart LR
+    A["Cadastro<br/>link, lote ou Descobrir"] --> B["Leitura<br/>site da vaga"]
+    B --> C["Estruturação<br/>stack e requisitos"]
+    C --> D["Compatibilidade<br/>stack × habilidades"]
+    A2["Seu perfil<br/>(cache Redis)"] --> D
+    D --> E["Escrita<br/>IA devolve texto"]
+    E --> F["Montagem<br/>fatos do banco"]
+    F --> G["Conferências"]
+    G --> H["Currículo salvo<br/>✓ concluído"]
+    H --> I["PDF<br/>4 modelos"]
 ```
 
-O resultado é enviado via SSE no evento `completed` e exibido no painel de detalhes da qualidade (clique no badge de qualidade da vaga). O painel mostra:
-- Barra de progresso com a porcentagem de cobertura
-- Tags vermelhas para cada habilidade faltando no perfil
+**1. Cadastro.** A vaga entra em `jobs` com status `pending`, idioma (`pt-br`/`en`) e modo (`full`, `resume_only`, `cover_only`). O cadastro avisa se o perfil está fraco (sem habilidades, sem experiências e projetos…), sem bloquear.
 
-O matching usa a mesma lógica word-boundary do score de qualidade, incluindo normalização por aliases globais.
+**2. Leitura** (`scraping_basic`). Um leitor por site (`internal/scraper`): LinkedIn, Gupy, ProgramaThor, Jobright, Amazon, GeekHunter, os ATS (Greenhouse, Lever, Ashby…) e um leitor genérico que entende o `JobPosting` (JSON-LD) presente em muitos sites. Se o usuário colou a descrição, ela vale e o site nem é aberto. Se o site bloquear e a vaga veio do Descobrir, usa a descrição guardada no catálogo.
 
-### Suporte a candidatos sem experiência profissional
+**3. Estruturação** (`scraping_nl`). Uma chamada leve à IA extrai `stack[]`, `requisitos[]` e uma descrição limpa. Os nomes são normalizados por aliases (`Golang → Go`, `Postgres → PostgreSQL`).
 
-O sistema não rejeita mais perfis sem experiência profissional. Quando `experiencias` está vazio no prompt, o LLM ativa automaticamente o modo **first-job**:
+**4. Seleção do perfil e compatibilidade.** O worker lê o perfil (com cache no Redis por tópico, invalidado a cada edição) e calcula a compatibilidade: a cobertura da stack da vaga pelas suas habilidades, **pesando o nível** (expert/avançado 100%, intermediário 75%, básico 40%). Alta a partir de 70%, média a partir de 30%.
 
-- O `SUMMARY` é gerado no formato "Desenvolvedor com formação em [curso] e projetos práticos em [stack da vaga], em busca de ingressar no mercado de [domínio]"
-- A seção `EXPERIÊNCIA / EXPERIENCE` é completamente omitida do currículo (título e conteúdo)
-- O texto "0 anos de experiência" é explicitamente proibido nos prompts
+**5. Escrita.** O prompt é um JSON com a vaga, as experiências (até 4 conquistas cada), projetos, habilidades, formação, o modo e — para aprender com você — o último currículo avaliado como *Excelente* e os comentários recentes das avaliações. A IA devolve resumo, tópicos por experiência, agrupamento de habilidades, carta e a análise da vaga (pontos fortes, lacunas, recomendação).
 
-### Tradução de habilidades por idioma
+> **Cache da resposta:** o pedido é identificado por um hash do prompt de sistema + prompt do usuário. Se nada mudou (vaga, perfil, avaliações, idioma, modo, versão do prompt), a resposta guardada no Redis por 30 dias é reaproveitada. No *Refazer*, a opção **Nova versão da IA** (marcada por padrão) ignora o cache.
 
-Quando o currículo é gerado em inglês (`language = "en"`), o LLM recebe uma tabela de tradução nos prompts e é instruído a usar os termos em inglês na seção de habilidades. Termos como "Banco de dados", "Aprendizado de máquina" e "Contêineres" são traduzidos automaticamente para "Databases", "Machine learning" e "Containers".
+**6. Montagem.** `resume.Assemble` junta o texto da IA com os fatos do banco num documento estruturado (`Doc`, versão 2): cabeçalho com contato e links, experiências com empresa/cargo/datas reais, formação, certificados e idiomas. Em inglês, cargos e habilidades são traduzidos — mas uma tradução que acrescenta nível ("Júnior" → "Senior"), gestão, números ou palavras demais é descartada e o original fica.
 
-### Prevenção de seções vazias no PDF
+**7. Conferências.** Resumo que cita tecnologia que a vaga pede e você não tem, ou anos de experiência em primeiro emprego, volta para a IA com instruções de correção; o que continuar errado é cortado frase a frase. Pontos fortes da análise que citam tecnologia fora do perfil são removidos.
 
-O gerador de PDF (`scripts/gerar_pdf.py`) usa um mecanismo de buffer para cabeçalhos de seção: um `<h2>` só é emitido no HTML quando há conteúdo seguinte. Isso evita que seções como `EXPERIENCE`, `EDUCATION` ou `CERTIFICATIONS` apareçam no PDF sem conteúdo abaixo — problema comum quando o LLM opta por omitir uma seção mas ainda emite o título.
+**8. PDF.** Gerado sob demanda por um servidor WeasyPrint persistente (`scripts/gerar_pdf.py`) em quatro modelos: Clássico, Executivo, Compacto (1 página) e Primeiro emprego. Trocar de modelo só reformata.
+
+**Resiliência do worker:** ciclo configurável (padrão 30 s, até 5 vagas em paralelo); leitura e seleção do perfil rodam em paralelo; HTTP 429 do provedor pausa a fila e devolve a vaga para `pending`; vagas presas em `processing` por mais que `WORKER_RECOVERY_TIMEOUT` voltam sozinhas para a fila.
+
+---
+
+## Descobrir: o catálogo de vagas
+
+O Descobrir lê fontes públicas e mantém um catálogo próprio de vagas de tecnologia (`internal/discovery`).
+
+| Tipo | Fontes |
+|---|---|
+| Busca por termo | Gupy |
+| Listas | ProgramaThor, repositórios de vagas no GitHub, Himalayas (remotas abertas ao Brasil) |
+| Quadros de empresas (ATS) | Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Recruitee — empresas cadastradas no painel |
+
+Cada fonte só entrou depois de verificar os termos de uso; as avaliadas e recusadas (LinkedIn, Remotive, APIs que exigem cartão) estão em [`docs/fontes.md`](docs/fontes.md).
+
+**Varredura.** Automática a cada 12 h (intervalo configurável no painel), pelo botão do usuário com os termos dele, ou pelo admin. Pausa entre pedidos ao mesmo site, respeito ao `Retry-After`, limite de 60 s por pedido com uma nova tentativa em caso de lentidão. Só entram vagas no Brasil ou remotas abertas para cá.
+
+**Indexação na entrada, não na leitura.** Ao gravar uma vaga, o sistema calcula as tecnologias citadas (`techs TEXT[]`, com regras de contexto: "go-to" não é Go), o idioma e o nível (júnior/pleno/sênior). Habilidades fora da lista de tecnologias ("APIs REST") são buscadas num `tsvector` do texto. As duas colunas têm índice GIN: a lista de 9 mil vagas sai em ~60–90 ms, contra ~0,6–1,8 s da versão que lia o texto a cada pedido.
+
+**Ranking.** Todas as vagas candidatas são avaliadas pelo mesmo JobFit da aba Vagas e ordenadas por faixa de compatibilidade, tecnologias cobertas com nível forte, cobertura e coincidências. Cada linha mostra "62% da stack · você cobre 3 de 7 · falta: Kafka, AWS".
+
+**Higiene do catálogo.** Vaga que some das buscas sai da lista em 36 h e é apagada em 7 dias; vaga publicada há mais de 45 dias não entra (e é removida, com log por fonte); vagas repetidas (mesmo título e empresa) aparecem uma vez.
+
+---
+
+## Importar currículo
+
+O usuário envia um PDF, DOCX ou TXT (ou o PDF exportado do LinkedIn). A IA separa experiências, formação, habilidades, projetos, certificados e idiomas; o usuário revisa, ajusta níveis e escolhe o que salvar — itens já existentes vêm desmarcados para não duplicar. Cada importação fica registrada (modelos tentados, duração, motivo de falha) e aparece no painel admin.
+
+---
+
+## Painel admin
+
+| Aba | O que mostra |
+|---|---|
+| Log de erros | Falhas de leitura, perfil vazio, erros e limites da IA, por vaga |
+| Usuários | Contas, último acesso, quem é admin |
+| Importações | Histórico de importações de currículo, ao vivo |
+| Busca de vagas | Sites ligados, termos do catálogo, intervalo, empresas nos ATS (com busca por nome ou link em todos os ATS) |
+| Configurações de IA *(master)* | Cadeia de provedores por finalidade (geração, leitura de vagas, importação), pausa do worker |
+| Métricas | Vagas, IA (chamadas, latência, tokens), usuários e a varredura de vagas em andamento, por site |
+
+O **admin master** vê também a versão do app no rodapé da barra lateral, com o selo "nova" quando há deploy novo.
 
 ---
 
@@ -117,288 +125,43 @@ O gerador de PDF (`scripts/gerar_pdf.py`) usa um mecanismo de buffer para cabeç
 
 ```mermaid
 graph TB
-    Browser["Browser\n(Vanilla JS + SSE)"]
-    API["API Server\nGo net/http"]
-    Worker["Worker\nGoroutines (max 5 conc.)"]
-    DB[("PostgreSQL\npgx v5 + sqlc")]
-    Cache[("Redis\ncache + revocation\n+ rate limit flag")]
-    LLM["LLM\nClaude / Gemini / Ollama"]
-    PDF["WeasyPrint\n(Python subprocess)"]
-    Scraper["Scraper\nHTTP + LLM NL"]
+    Browser["Browser<br/>JS puro + SSE<br/>rotas #/aba"]
+    API["API<br/>Go net/http"]
+    Worker["Worker<br/>goroutines"]
+    Disc["Descobrir<br/>varredura agendada"]
+    DB[("PostgreSQL<br/>pgx v5 + sqlc<br/>migrations goose")]
+    Cache[("Redis<br/>perfil, respostas da IA,<br/>revogação, pausa")]
+    LLM["IA<br/>Gemini · Ollama ·<br/>OpenAI-compatible"]
+    PDF["WeasyPrint<br/>processo persistente"]
+    Sources["Fontes de vagas<br/>APIs públicas"]
 
     Browser -- "REST + SSE" --> API
-    API -- "queries type-safe" --> DB
-    API -- "cache / JWT revocation" --> Cache
-    Worker -- "SELECT pending LIMIT 20" --> DB
-    Worker -- "cache perfil usuário" --> Cache
-    Worker --> Scraper
-    Scraper -- "enriquece vaga" --> LLM
-    Worker -- "gera currículo" --> LLM
-    Worker -- "UPDATE status / INSERT resume" --> DB
-    Worker -- "Publish evento" --> SSEBus["SSE Bus\n(channels por user)"]
-    SSEBus --> Browser
+    API --> DB
+    API --> Cache
+    Worker --> DB
+    Worker --> Cache
+    Worker -- "estrutura e escreve" --> LLM
+    Worker -- "eventos" --> SSE["Bus SSE<br/>por usuário"] --> Browser
+    Disc -- "lê" --> Sources
+    Disc -- "upsert + índices" --> DB
     API -- "gera PDF" --> PDF
-    PDF -- "salva /output/" --> Disk[("Disco\n/output/{user_id}/...")]
-    Browser -- "download autenticado" --> Disk
-    API -- "expõe /metrics" --> Prom["Prometheus\n(scrape + Grafana)"]
 ```
-
----
-
-## Stack
 
 | Camada | Tecnologia |
 |---|---|
-| Backend | Go 1.24+ — `net/http` puro, sem framework |
-| Banco de dados | PostgreSQL com `pgx v5` |
-| Query builder | sqlc — queries SQL compiladas para Go type-safe |
-| Cache | Redis — cache de perfil, flag de rate limit, revogação de JWT |
-| LLM | Claude (Anthropic) · Gemini · Ollama — configurável por variável |
-| PDF | WeasyPrint (Python) — processo persistente chamado via subprocess |
-| Auth | JWT HS256 + Argon2id + Redis revocation list |
-| Real-time | Server-Sent Events (SSE) — bus in-memory por `user_id` |
-| Logging | Uber Zap |
-| Observabilidade | Prometheus client (metrics) — endpoint `/api/v1/admin/metrics/raw` (exige admin), compatível com Grafana; histórico das chamadas de IA em `/api/v1/admin/metrics/ai` |
-| Testes | `go test` — handler, middleware, worker, security, services, util |
-| CI/CD | GitHub Actions (self-hosted) — test gate → deploy → healthcheck → smoke test |
-| Infra | Docker + Docker Compose |
+| Backend | Go 1.26 — `net/http` puro, sem framework |
+| Banco | PostgreSQL com `pgx v5`; queries em SQL compiladas pelo **sqlc**; migrations **goose** embutidas no binário e aplicadas na subida |
+| Cache | Redis — perfil por tópico, respostas da IA, revogação de JWT, pausa por limite da IA |
+| IA | Cadeia de provedores com fallback: Gemini, Ollama e qualquer API OpenAI-compatible (Groq, OpenRouter…), configurável no painel |
+| PDF | WeasyPrint (Python), processo persistente |
+| Frontend | HTML/CSS/JS sem framework; assets com `?v=<hash>` e cache imutável; rotas por hash |
+| Tempo real | Server-Sent Events, bus em memória por usuário |
+| Logs e métricas | Zap; Prometheus |
+| Infra | Docker Compose (app, PostgreSQL, Redis) num servidor próprio, exposto por Cloudflare Tunnel |
 
 ---
 
-## Pipeline em Detalhe
-
-### 1. Cadastro da vaga
-
-O usuário envia uma URL (ex: LinkedIn, Amazon Jobs, Jobright) ou preenche os dados manualmente. O backend valida a URL contra uma lista de domínios públicos permitidos e insere o job no banco com `status = pending`.
-
-Se a URL já foi cadastrada pelo mesmo usuário, o banco retorna `UNIQUE constraint` e a API responde `409 Conflict`.
-
-### 2. Worker — ciclo configurável
-
-```mermaid
-sequenceDiagram
-    participant Ticker as Ticker (30s)
-    participant Worker
-    participant DB as PostgreSQL
-    participant Cache as Redis
-    participant Scraper
-    participant LLM
-    participant SSE as SSE Bus
-
-    Ticker->>Worker: tick (WORKER_INTERVAL, padrão 30s)
-    Worker->>DB: UPDATE jobs SET status='pending' WHERE status='processing' AND updated_at < now()-RECOVERY_TIMEOUT
-    Note over Worker,DB: recoverStuckJobs — recupera jobs travados por crash/timeout
-    Worker->>Cache: IsRateLimited?
-    alt rate limit ativo
-        Worker-->>Ticker: aguarda próximo tick
-    end
-    Worker->>DB: SELECT jobs WHERE status='pending' LIMIT {WORKER_BATCH_SIZE}
-    loop até {WORKER_MAX_CONCURRENT} goroutines simultâneas
-        Worker->>DB: UPDATE status = 'processing'
-        Worker->>SSE: Publish {id, status: processing}
-        par scraper e match em paralelo
-            Worker->>Scraper: doScraper(job)
-            Scraper->>DB: UPDATE status = 'scraping_basic'
-            Scraper->>SSE: Publish scraping_basic
-            Scraper->>Scraper: HTTP scrape → empresa, título, HTML bruto
-            Scraper->>DB: UPDATE status = 'scraping_nl'
-            Scraper->>SSE: Publish scraping_nl
-            Scraper->>LLM: GenerateScrapeSite(html_bruto)
-            LLM-->>Scraper: {stack[], requisitos[], descrição limpa}
-        and
-            Worker->>Cache: GET perfil usuário (por tópico)
-            alt cache miss
-                Cache-->>Worker: miss
-                Worker->>DB: SELECT experiências / habilidades / projetos…
-                Worker->>Cache: SET (TTL configurável)
-            end
-        end
-        Worker->>Worker: calcularQualidade(stack_vaga, filtros_usuario, aliases)
-        Worker->>Worker: analisarGap(stack_vaga, habilidades_usuario, aliases)
-        Worker->>Worker: buildUserPrompt(job, match) — inclui modo e idioma
-        Worker->>LLM: GenerateCurriculum(system_prompt, user_prompt_json)
-        LLM-->>Worker: {curriculo, cover_letter}
-        Worker->>Worker: validar token {{CANDIDATO_NOME}} presente
-        Worker->>Worker: aplicar modo (resume_only → cover_letter="", cover_only → curriculo="")
-        Worker->>Worker: substituir placeholders pelos dados reais
-        Worker->>DB: INSERT generated_resumes (content_json)
-        Worker->>DB: UPDATE job quality + status = 'completed'
-        Worker->>SSE: Publish {id, status: completed, quality, company, title, gap}
-    end
-```
-
-### 3. Scraping em dois estágios
-
-**scraping_basic** — scraper HTTP por plataforma:
-
-| Plataforma | Extrai |
-|---|---|
-| LinkedIn | `?currentJobId=` ou `/jobs/view/{id}` — título, empresa, corpo da vaga |
-| Amazon Jobs | HTML estruturado |
-| GeekHunter | HTML + metadados |
-| Jobright | API JSON pública |
-
-**scraping_nl** — LLM lê o HTML bruto e extrai:
-- `stack[]` — tecnologias e ferramentas mencionadas
-- `requisitos[]` — competências e pré-requisitos
-- `descrição` — versão limpa e comprimida
-
-Os dois estágios são separados para permitir que plataformas sem scraper nativo ainda funcionem: o usuário cola a descrição manualmente e o `scraping_nl` estrutura o conteúdo.
-
-### 4. Match com o perfil
-
-O worker busca **todos** os dados do usuário sem filtrar por tags no banco, pois a LLM faz seleção de relevância melhor do que heurísticas locais. Para evitar consultas repetidas durante o processamento em lote, cada entidade é cacheada no Redis por tópico:
-
-```
-cache key: {user_id}:{topic}
-tópicos: experiences · skills · projects · academic · certificates
-```
-
-O cache é invalidado quando o usuário altera o perfil (upsert/delete em qualquer entidade).
-
-Junto com os dados do perfil, o worker busca:
-- **Exemplos excelentes** — currículos com feedback `excellent` injetados no prompt como referência de qualidade
-- **Feedbacks anteriores** — comentários de avaliações `poor/fair` injetados como proibições
-
-### 5. Score de qualidade
-
-```mermaid
-flowchart LR
-    A["stack[] da vaga\n(ex: Go, Kafka, Redis, k8s)"] --> C
-    B["filtros do usuário\n(ex: go, kafka, postgresql)"] --> C
-    C["normalização\n+ aliases globais\n(Golang → Go)"] --> D
-    D["matching word-boundary\nexato, prefix, token"] --> E
-    E{"ratio\nmatched/total"}
-    E -- "≥ 70%" --> High["high\n✅ gera currículo"]
-    E -- "30–69%" --> Mid["mid\n✅ gera currículo"]
-    E -- "< 30%" --> Low["low\n⚠️ currículo marcado como low"]
-```
-
-O matching é **word-boundary aware**: o filtro `go` não bate em `gorilla` ou `django`. As regras de verificação em ordem:
-1. Match exato: `"go" == "go"`
-2. Prefix com separador: `"go"` bate em `"go.uber.org"` (próximo char é `.`)
-3. Token exato: split por ` `, `.`, `-`, `/`, `_` e compara cada token
-
-A tabela `stack_aliases` no banco normaliza variações globalmente: `Golang → Go`, `Postgres → PostgreSQL`, etc.
-
-### 6. Construção do prompt
-
-`buildUserPrompt` monta um JSON com os dados de entrada para o LLM, aplicando limites de truncamento:
-
-| Campo | Limite |
-|---|---|
-| Experiências | máx. 5 (mais recentes) |
-| Conquistas por experiência | máx. 4 |
-| Projetos | máx. 6 |
-| Exemplos excelentes | máx. 1 |
-
-Seções com arrays vazios são **omitidas do JSON** via `omitempty` — o LLM não recebe o campo e, portanto, não gera a seção no currículo. Isso garante que usuários sem projetos, formação ou certificados não recebam seções vazias no documento final.
-
-### 7. Geração via LLM
-
-O system prompt (PT-BR e EN) instrui o modelo a:
-- Retornar **somente JSON válido** `{ "curriculo": "...", "cover_letter": "..." }`
-- Preservar literalmente os tokens `{{CANDIDATO_NOME}}`, `{{CANDIDATO_EMAIL}}`, etc.
-- Nunca inventar dados não presentes no input (regra de anti-alucinação)
-- Seguir regras rígidas de bullet points (O QUÊ + COMO + IMPACTO)
-- Usar feedbacks anteriores como proibições
-
-Após receber a resposta, o worker valida que `{{CANDIDATO_NOME}}` está presente no texto gerado. Se o LLM substituiu os tokens por texto descritivo, a resposta é **rejeitada** e o job vai para `error`.
-
-### 8. Substituição de placeholders
-
-```go
-strings.NewReplacer(
-    "{{CANDIDATO_NOME}}",      profile.FullName,
-    "{{CANDIDATO_EMAIL}}",     profile.ContactEmail || profile.Email,
-    "{{CANDIDATO_LINKEDIN}}",  profile.LinkedinUrl,
-    "{{CANDIDATO_GITHUB}}",    profile.GithubUrl,
-    "{{CANDIDATO_PORTFOLIO}}", portfolioStr,  // portfolio + other_links concatenados
-    "{{CANDIDATO_TELEFONE}}",  profile.Phone,
-    "{{VAGA_EMPRESA}}",        job.CompanyName,
-    "{{VAGA_TITULO}}",         job.JobTitle,
-)
-```
-
-Placeholders não preenchidos pelo usuário (ex: GitHub em branco) são removidos junto com separadores adjacentes via regex — o PDF nunca exibe `| | |` no cabeçalho.
-
-### 9. Geração de PDF
-
-O PDF não é gerado automaticamente — o usuário solicita explicitamente para cada currículo. Isso evita custo de processamento em currículos que o usuário não pretende usar.
-
-O servidor Python (`gerar_pdf.py`) roda como **processo persistente** e recebe chamadas via `subprocess`. Isso elimina o overhead de inicialização do interpretador a cada geração. O WeasyPrint renderiza HTML/CSS e gera dois arquivos:
-
-```
-/output/{user_id}/{company}/{resume_id}/resume.pdf
-/output/{user_id}/{company}/{resume_id}/cover_letter.pdf
-```
-
-O download é protegido: o middleware verifica que o `user_id` no path é o mesmo do JWT antes de servir o arquivo.
-
-### 10. Rate limit do LLM
-
-Quando a LLM retorna HTTP 429, o worker:
-1. Seta uma flag no Redis com TTL de 12 horas
-2. Reverte o job para `pending`
-3. No próximo tick, verifica a flag antes de processar qualquer job
-
-Isso protege a fila de jobs de tentativas em loop e respeita a janela de rate limit da API.
-
-### 11. Recovery de jobs travados
-
-Se o processo cair no meio de um processamento (`status = processing`), o job fica bloqueado e nunca avança. Em cada tick, o worker executa:
-
-```sql
-UPDATE jobs SET status = 'pending', updated_at = now()
-WHERE status = 'processing'
-  AND deleted_at IS NULL
-  AND updated_at < now() - @cutoff
-```
-
-O `@cutoff` é `WORKER_RECOVERY_TIMEOUT` (padrão `10m`). Jobs travados há mais do que esse tempo voltam automaticamente para a fila. O contador `hackton_jobs_processed_total{status="recovered"}` do Prometheus registra cada recuperação.
-
-A recovery roda **antes** do `processarPendentes` — assim os jobs recuperados são elegíveis já no mesmo tick.
-
-### 12. Observabilidade — Prometheus
-
-O servidor expõe `GET /metrics` no formato de texto Prometheus. As métricas disponíveis:
-
-| Métrica | Tipo | Labels | O que mede |
-|---|---|---|---|
-| `hackton_jobs_processed_total` | Counter | `status` (`completed`, `error`, `recovered`) | Total de jobs finalizados por resultado |
-| `hackton_llm_duration_seconds` | Histogram | `status` (`ok`, `error`, `rate_limit`) | Latência das chamadas ao LLM principal (buckets: 1s–5m) |
-| `hackton_scraper_duration_seconds` | Histogram | `status` (`ok`, `error`) | Duração total do scraper por job — HTTP + NL (buckets: 500ms–1m) |
-| `hackton_worker_active_goroutines` | Gauge | — | Goroutines processando jobs no momento |
-
-Além das métricas da aplicação, o endpoint publica automaticamente as métricas padrão do Go runtime (GC, heap, goroutines do processo, etc.) via `promauto`.
-
-Para conectar o Grafana, configure um datasource Prometheus apontando para `http://<host>:8080/metrics`.
-
----
-
-## SSE — Real-time
-
-O browser abre uma conexão `GET /api/v1/jobs/events` logo após o login. O servidor mantém um channel Go por `user_id` em um bus in-memory. Quando o worker publica um evento, o handler SSE do usuário o serializa e envia.
-
-```
-Eventos publicados pelo worker:
-  { id, status: "processing" }
-  { id, status: "scraping_basic" }
-  { id, status: "scraping_nl" }
-  { id, status: "completed", quality, company_name, job_title,
-      gap: { missing_skills: ["react", "graphql"], coverage_pct: 65 } }
-  { id, status: "error" }
-```
-
-O campo `gap` está presente apenas no evento `completed` e só quando há habilidades faltando no perfil do usuário em relação ao stack da vaga. O frontend usa esse dado para exibir a análise de gap no painel de detalhes da qualidade.
-
-O endpoint SSE fica fora do `TimeoutMiddleware` — é uma conexão longa por design. Um keepalive de `: keepalive\n\n` é enviado a cada 20 segundos para evitar que proxies fechem a conexão por inatividade.
-
----
-
-## Banco de Dados
-
-### Modelo de entidades
+## Dados
 
 ```mermaid
 erDiagram
@@ -409,390 +172,136 @@ erDiagram
     user_accounts ||--o{ user_projects : "1:N"
     user_accounts ||--o{ user_academic_histories : "1:N"
     user_accounts ||--o{ user_certificates : "1:N"
+    user_accounts ||--o{ user_languages : "1:N"
     user_accounts ||--o{ jobs : "1:N"
-    user_accounts ||--o{ user_job_filters : "1:N"
+    user_accounts ||--o| user_discovery_preferences : "1:1"
     jobs ||--o{ generated_resumes : "1:N"
     generated_resumes ||--o| resumes_feedback : "1:1"
+    discovered_jobs ||--o{ discovered_job_keywords : "1:N"
+    discovery_runs ||--o{ discovery_run_sources : "1:N"
 ```
 
-### Tabelas principais
-
-| Tabela | Descrição |
+| Tabela | Para quê |
 |---|---|
-| `user_accounts` | Conta com email único e hash Argon2id |
-| `user_profiles` | Dados pessoais: nome, telefone, about, email de contato |
-| `user_links` | LinkedIn, GitHub, portfólio, outros links (JSONB) |
-| `user_experiences` | Experiências com `tech_stack[]`, `achievements[]`, `tags[]` |
-| `user_skills` | Habilidades com nível (`basic/intermediate/advanced/expert`) |
-| `user_projects` | Projetos com `tags[]` e flag `is_academic` |
-| `user_academic_histories` | Formação com período e descrição |
-| `user_certificates` | Certificados com emissor, data e URL de verificação |
-| `jobs` | Vagas com status enum, quality enum, stack[], requirements[], mode (full/resume_only/cover_only) |
-| `generated_resumes` | Currículos gerados em JSONB + caminhos dos PDFs |
-| `resumes_feedback` | Avaliação única por currículo (`poor/fair/good/excellent`) |
-| `user_job_filters` | Keywords de filtro de compatibilidade por usuário |
-| `stack_aliases` | Mapa global de normalização de tecnologias (`Golang → Go`) |
-| `security_events` | Log de eventos de segurança (login falho, rate limit, PDF gerado) |
+| `user_*` | Perfil: dados, links, experiências (stack, conquistas, tags), habilidades com nível, projetos, formação, certificados, idiomas |
+| `jobs` | Vagas do usuário: status, compatibilidade, stack, requisitos, idioma, modo, análise da IA, descrição lida |
+| `generated_resumes` / `resumes_feedback` | Currículos gerados (JSON estruturado) e avaliações |
+| `discovered_jobs` | Catálogo do Descobrir, com `techs[]`, `search_vec`, idioma e nível indexados |
+| `discovery_settings`, `discovery_runs`, `discovery_run_sources` | Configuração da varredura (sites, termos, intervalo, empresas nos ATS) e histórico por site |
+| `ai_providers`, `ai_calls` | Cadeia de IA configurada no painel e registro de cada chamada |
+| `profile_imports`, `error_logs`, `security_events` | Importações, erros do pipeline e eventos de segurança |
+| `stack_aliases` | Normalização global de tecnologias |
 
-### Índices relevantes
-
-```sql
--- Busca de jobs pendentes: lê só o que importa para o worker
-CREATE INDEX idx_jobs_pending_status ON jobs(status)
-WHERE status = 'pending' AND deleted_at IS NULL;
-
--- Login: busca por email só em contas ativas
-CREATE UNIQUE INDEX idx_active_users_email ON user_accounts(email)
-WHERE deleted_at IS NULL;
-
--- Busca em arrays de tecnologias e tags (GIN)
-CREATE INDEX idx_user_experiences_stack_gin ON user_experiences USING GIN(tech_stack);
-CREATE INDEX idx_user_skills_tags_gin       ON user_skills      USING GIN(tags);
-CREATE INDEX idx_jobs_tech_stack_gin        ON jobs             USING GIN(tech_stack);
-```
-
-### Queries e sqlc
-
-As queries SQL ficam em `repository/query/*.sql`. O sqlc lê esses arquivos e gera código Go type-safe em `internal/db/`. O Go nunca monta queries por concatenação de string — toda interação com o banco passa por structs gerados.
-
-Exemplo — busca de vagas com filtros opcionais por enum sem concatenação:
-
-```sql
--- name: QuerySelectJobsForUser :many
-SELECT j.*, COUNT(*) OVER() AS total_count
-FROM jobs j
-WHERE
-    j.user_id = @user_id AND
-    j.deleted_at IS NULL AND
-    (NULLIF(@status::TEXT, '') IS NULL  OR j.status  = @status::job_status)  AND
-    (NULLIF(@quality::TEXT, '') IS NULL OR j.quality = @quality::job_quality)
-ORDER BY j.created_at DESC
-LIMIT @size OFFSET @cursor;
-```
-
-`NULLIF(@status, '')` converte string vazia em NULL, evitando o cast `''::job_status` que o PostgreSQL rejeita com erro de enum inválido. O `COUNT(*) OVER()` retorna o total de registros sem uma segunda query — a paginação é resolvida em uma única roundtrip ao banco.
+Toda consulta passa por structs gerados pelo sqlc a partir de `repository/query/*.sql` — nada de SQL montado por concatenação. O schema evolui por migrations em `repository/migrations/`, aplicadas automaticamente quando o app sobe.
 
 ---
 
-## Auth e Segurança
-
-### Fluxo de autenticação
-
-```mermaid
-sequenceDiagram
-    participant C as Cliente
-    participant API
-    participant DB as PostgreSQL
-    participant Redis
-
-    C->>API: POST /auth/login {email, password}
-    API->>DB: SELECT user WHERE email = ?
-    API->>API: Argon2id.Verify(password, hash)
-    alt senha incorreta
-        API->>DB: INSERT security_events (login_failed)
-        API->>Redis: INCR lockout_counter (TTL 15min)
-        API-->>C: 401
-    end
-    API->>API: JWT.Generate(user_id)
-    API-->>C: {token, expires_at}
-
-    C->>API: GET /api/v1/... Authorization: Bearer token
-    API->>API: JWT.Validate(token)
-    API->>Redis: EXISTS revoked:{jti}
-    alt token revogado
-        API-->>C: 401
-    end
-    API->>API: context.WithValue(user_id)
-```
-
-### Camadas de segurança
+## Segurança
 
 | Mecanismo | Implementação |
 |---|---|
-| Senha | Argon2id com pepper + salt aleatório |
-| Token | JWT HS256 com expiração configurável |
-| Logout | JTI adicionado ao Redis — revocation list |
-| Lockout | Contador no Redis por IP, bloqueio após N tentativas |
-| Rate limit LLM | Flag no Redis com TTL de 12h após HTTP 429 |
-| Download de PDF | Middleware verifica `owner_id == user_id` do JWT |
-| Log de segurança | Tabela `security_events` com IP, user_id, metadata |
-| CORS | Middleware configurável por ambiente |
+| Senha | Argon2id com pepper e salt aleatório |
+| Sessão | JWT HS256 com expiração; logout revoga o `jti` no Redis |
+| Login | Bloqueio por IP após tentativas falhas, registrado em `security_events` |
+| Admin | Rotas `/admin/*` exigem admin; configurações de IA exigem master |
+| Arquivos | Download de PDF só pelo dono (`user_id` do caminho = do token) |
+| Navegador | CSP restritiva, `nosniff`, CORS por ambiente |
 
 ---
 
-## Middleware Stack
+## Observabilidade
 
-```
-Request
-  │
-  ├─ CORS
-  ├─ Panic Recovery
-  ├─ Logger (Zap)
-  ├─ Timeout (configurável por rota)
-  ├─ Rate Limit (lockout por IP)
-  ├─ Auth (JWT validate)
-  ├─ Revocation (Redis check)
-  └─ Handler
-```
+Métricas Prometheus em `GET /api/v1/admin/metrics/raw` (exige admin):
 
-O endpoint SSE (`GET /api/v1/jobs/events`) é registrado com match exato fora do `TimeoutMiddleware`, pois é uma conexão de longa duração que não pode ser encerrada por timeout.
+| Métrica | O que mede |
+|---|---|
+| `hackton_jobs_processed_total{status}` | Vagas concluídas, com erro ou recuperadas |
+| `hackton_llm_duration_seconds{status}` | Latência das chamadas de escrita à IA |
+| `hackton_llm_cache_total{result}` | Gerações servidas pelo cache (`hit`), sem cache (`miss`) ou com versão nova pedida (`fresh`) |
+| `hackton_scraper_duration_seconds{status}` | Leitura da vaga (site + estruturação) |
+| `hackton_worker_active_goroutines` | Vagas sendo processadas agora |
+
+O painel de Métricas mostra ainda o histórico das chamadas de IA, usuários ativos e a varredura do Descobrir em tempo real.
 
 ---
 
-## CI/CD
+## Versões e deploy
 
 ```mermaid
 flowchart LR
-    Push["git push main"] --> Version
-    Version["Versão\nversion.json maior que a do ar\ndata ≥ a da versão no ar"] --> Test
-    Version -- "mesma versão ou dia anterior" --> Abort
-    Test["Tests\ndocker run golang:alpine\ngo test ./... -count=1"] --> Deploy
-    Deploy["Deploy\nrsync → /opt/app/\ndocker compose up --build"] --> Health
-    Health["Healthcheck\n20 tentativas × 3s\nstatus = healthy"] --> Smoke
-    Smoke["Smoke test\ncurl POST /auth/login\nespera 400/401/422"] --> Done["✅ Produção"]
-    Test -- "falha" --> Abort["❌ Deploy bloqueado"]
-    Health -- "timeout 60s" --> Rollback["❌ logs + exit 1"]
+    Push["git push main"] --> Version["Check version<br/>maior que a do ar,<br/>data ≥ a dela"]
+    Version --> Test["Testes<br/>go test + race detector"]
+    Test --> Deploy["Deploy<br/>backup do banco → rsync →<br/>docker compose up --build"]
+    Deploy --> Health["Healthcheck"] --> Smoke["Smoke test"] --> Done["✅ Produção"]
+    Version -- "mesma versão ou dia anterior" --> Abort["❌ bloqueado"]
+    Test -- "falha" --> Abort
 ```
 
-O pipeline roda em **self-hosted runner** — o servidor de produção é o próprio executor. O deploy usa `rsync --delete` para sincronizar os arquivos e exclui `.env` e `data/` para não sobrescrever dados e segredos do servidor. O `docker compose up --build --remove-orphans` recria apenas os containers que tiveram mudança na imagem.
-
-**Versão:** todo deploy precisa atualizar o `version.json` da raiz (`{"version": "X.Y.Z", "date": "AAAA-MM-DD"}`). O passo *Check version* (`cmd/checkversion`) compara com o `version.json` que está no ar e barra o deploy se a versão não for maior ou se a data for anterior à da versão no ar. A versão vai embutida no binário, aparece nos logs e, para o admin master, no rodapé da barra lateral, com o selo "nova" até ser vista.
-
----
-
-## Testes
-
-```
-internal/
-├── handler/
-│   ├── logout_test.go        — revogação de token no logout
-│   ├── response_test.go      — helpers de serialização JSON
-│   └── validation_test.go    — validação de campos obrigatórios
-├── middleware/
-│   ├── cors_test.go          — headers CORS por método e origem
-│   ├── middleware_test.go    — AuthMiddleware com stub de TokenProvider
-│   └── revocation_test.go   — checagem de JTI revogado no Redis
-├── worker/
-│   ├── build_prompt_test.go  — truncamentos, datas, tokens de sistema, JSON válido
-│   └── calculate_quality_test.go — ratios, word-boundary matching, aliases
-├── security/
-│   └── security_test.go      — hash Argon2id, JWT generate/validate
-├── services/
-│   └── service_test.go, util_test.go
-└── util/
-    └── url_test.go, util_test.go
-```
-
-Rodar todos os testes:
-
-```bash
-go test ./... -count=1 -timeout 60s
-```
+- **Versão:** todo deploy atualiza o [`version.json`](version.json) (`{"version": "X.Y.Z", "date": "AAAA-MM-DD"}`). O passo *Check version* (`cmd/checkversion`) compara com o que está no ar e barra versão igual ou menor, ou data anterior. A versão vai embutida no binário e aparece nos logs e para o admin master.
+- **Runner próprio:** o servidor de produção (um notebook) é o executor. Os testes rodam com 2 núcleos e prioridade mínima, com cache de módulos e de build entre execuções.
+- **Banco:** backup (`pg_dump`) antes de cada deploy, mantendo os 10 mais recentes; as migrations rodam na subida.
 
 ---
 
 ## API
 
-Todos os endpoints protegidos exigem:
-```
-Authorization: Bearer <jwt>
-```
+Base `/api/v1`. Rotas protegidas exigem `Authorization: Bearer <jwt>`; as respostas vêm em `{"data": …}`.
 
-### Auth
+**Auth:** `POST /auth/register` · `POST /auth/login` · `POST /auth/logout` · `GET /me`
 
-| Método | Endpoint | Descrição |
+**Perfil** (`/users/me/...`): `GET` do perfil; `PUT profile` e `PUT links`; CRUD de `experiences`, `skills`, `projects`, `academic`, `certificates`, `languages`; importação em `POST import`, `GET/DELETE import/{id}` e `POST import/apply`.
+
+**Vagas e currículos:**
+
+| Método | Rota | Descrição |
 |---|---|---|
-| POST | `/api/v1/auth/register` | Cria conta |
-| POST | `/api/v1/auth/login` | Autentica, retorna JWT |
-| POST | `/api/v1/auth/logout` | Revoga o token atual |
+| GET / POST | `/jobs` | Listar (filtros de status e compatibilidade) / cadastrar `{url, company_name?, job_title?, description?, language, mode}` |
+| GET / PUT / DELETE | `/jobs/{id}` | Ver / editar / remover |
+| PUT | `/jobs/{id}/retry` | Refazer `{mode?, language?, fresh?}` |
+| GET | `/jobs/{id}/resumes[/{resume_id}]` | Currículos da vaga |
+| DELETE | `/jobs/{id}/resumes/{resume_id}` | Remover currículo |
+| POST | `/jobs/{id}/resumes/{resume_id}/pdf` | Gerar PDF (modelo) |
+| POST | `/jobs/{id}/resumes/{resume_id}/feedback` | Avaliar |
+| GET | `/jobs/events` | SSE |
 
-### Perfil
+**Descobrir:** `GET /discovery/jobs` (filtros, paginação, ordenado por compatibilidade) · `GET /discovery/technologies` · `GET/PUT /discovery/preferences` · `POST /discovery/refresh` · `GET /discovery/status`
 
-| Método | Endpoint | Descrição |
-|---|---|---|
-| GET / PUT | `/api/v1/users/me/profile` | Dados pessoais |
-| PUT | `/api/v1/users/me/links` | Links (LinkedIn, GitHub, portfólio, outros) |
-| GET / POST | `/api/v1/users/me/experiences` | Experiências profissionais |
-| PUT / DELETE | `/api/v1/users/me/experiences/{id}` | Editar / remover |
-| GET / POST | `/api/v1/users/me/skills` | Habilidades |
-| PUT / DELETE | `/api/v1/users/me/skills/{id}` | Editar / remover |
-| GET / POST | `/api/v1/users/me/projects` | Projetos |
-| PUT / DELETE | `/api/v1/users/me/projects/{id}` | Editar / remover |
-| GET / POST | `/api/v1/users/me/academic` | Formação acadêmica |
-| PUT / DELETE | `/api/v1/users/me/academic/{id}` | Editar / remover |
-| GET / POST | `/api/v1/users/me/certificates` | Certificados |
-| PUT / DELETE | `/api/v1/users/me/certificates/{id}` | Editar / remover |
+**Filtros e segurança:** `GET/POST /filters`, `DELETE /filters/{id}` · `GET /security/events`
 
-Todos os endpoints de listagem suportam paginação por cursor (`?offset=0&size=20`) e busca textual (`?search=golang`).
-
-### Vagas e currículos
-
-| Método | Endpoint | Descrição |
-|---|---|---|
-| GET | `/api/v1/jobs` | Listar vagas (`?status=completed&quality=high`) |
-| POST | `/api/v1/jobs` | Cadastrar vaga |
-| PUT / DELETE | `/api/v1/jobs/{id}` | Atualizar / remover vaga |
-| PUT | `/api/v1/jobs/{id}/retry` | Reprocessar vaga (aceita `{"mode":"resume_only"}` no body) |
-| GET | `/api/v1/jobs/{id}/resumes` | Listar currículos da vaga |
-| GET | `/api/v1/jobs/{id}/resumes/{resume_id}` | Ver currículo |
-| DELETE | `/api/v1/jobs/{id}/resumes/{resume_id}` | Remover currículo |
-| POST | `/api/v1/jobs/{id}/resumes/{resume_id}/pdf` | Gerar PDF |
-| POST | `/api/v1/jobs/{id}/resumes/{resume_id}/feedback` | Avaliar currículo |
-| GET | `/api/v1/jobs/events` | SSE stream de eventos em tempo real |
-
-**Cadastro de vaga — campos aceitos:**
-
-```json
-{
-  "url": "https://...",
-  "company_name": "Acme (opcional)",
-  "job_title": "Eng. Sr. (opcional)",
-  "description": "Descrição manual (opcional)",
-  "language": "ptbr | en",
-  "mode": "full | resume_only | cover_only"
-}
-```
-
-**Resposta do cadastro:**
-
-```json
-{
-  "id": "uuid-da-vaga",
-  "warnings": [
-    "Nenhuma habilidade técnica cadastrada no perfil.",
-    "Perfil sem experiências profissionais e sem projetos."
-  ]
-}
-```
-
-`warnings` é um array vazio quando o perfil está completo. Quando presente, indica seções incompletas que podem prejudicar a qualidade do currículo gerado — o job é criado normalmente independente dos avisos.
-
-### Filtros de qualidade
-
-| Método | Endpoint | Descrição |
-|---|---|---|
-| GET / POST | `/api/v1/filters` | Listar / adicionar keyword de compatibilidade |
-| DELETE | `/api/v1/filters/{id}` | Remover filtro |
-
-Filtros são keywords técnicas (`golang`, `grpc`, `kubernetes`) que o worker usa para calcular o score de compatibilidade de cada vaga com o perfil do usuário.
-
-### Observabilidade
-
-| Método | Endpoint | Descrição |
-|---|---|---|
-| GET | `/metrics` | Métricas Prometheus (jobs, LLM latency, scraper, goroutines) |
-
-O endpoint não requer autenticação — destinado a ser exposto apenas na rede interna ou via scrape do Prometheus.
-
----
-
-## Pré-requisitos
-
-- Docker + Docker Compose
-- VS Code com a extensão Dev Containers (para desenvolvimento local)
+**Admin** (`/admin/...`): `errors`, `users`, `PATCH users/{id}`, `imports`, `metrics/ai`, `metrics/users`, `metrics/raw`, `metrics/discovery`, `discovery/settings` (GET/PUT), `discovery/run`, `discovery/boards/check`, `debug/gc`; master: `ai-settings` (GET/PUT), `ai-settings/resume`, `PATCH users/{id}/master`.
 
 ---
 
 ## Rodando localmente
 
-O ambiente de desenvolvimento roda inteiramente dentro de um Dev Container.
+Pré-requisitos: Docker e Docker Compose; VS Code com Dev Containers (recomendado).
 
 ```bash
-# Abra o projeto no VS Code e aceite "Reopen in Container"
-# ou via linha de comando:
+# Abra no VS Code e aceite "Reopen in Container", ou:
 devcontainer open .
 ```
 
-O container sobe automaticamente com Go, PostgreSQL, Redis e todas as dependências instaladas via `.devcontainer/install-tools.sh`.
+O container sobe Go, PostgreSQL e Redis. Crie o `.env` a partir do [`.env.example`](.env.example) — os grupos principais:
 
-### Variáveis de ambiente
+| Grupo | Variáveis |
+|---|---|
+| Servidor | `SERVER_HOST`, `SERVER_PORT`, `CORS_ALLOWED_ORIGIN`, `CONTEXT_TIMEOUT` |
+| PostgreSQL / Redis | `POSTGRES_*`, `REDIS_ADDR`, `REDIS_PASSWORD` |
+| IA de escrita | `API_PROVIDER` (`gemini`, `ollama` ou OpenAI-compatible), `API_KEY_AI`, `API_MODEL_AI`, `API_URL_AI` |
+| IA de leitura (opcional) | `SCRAPE_AI_ACTIVATE`, `SCRAPE_AI_PROVIDER`, `SCRAPE_AI_KEY`, `SCRAPE_AI_MODEL` |
+| Worker | `WORKER_MAX_CONCURRENT`, `WORKER_BATCH_SIZE`, `WORKER_INTERVAL`, `WORKER_RECOVERY_TIMEOUT` |
+| Auth e hash | `JWT_SECRET`, `JWT_EXPIRATION`, `HASH_ARGON2_*` |
 
-Crie um arquivo `.env` na raiz com base no `.env.example`:
-
-```env
-# Servidor
-SERVER_HOST=0.0.0.0
-SERVER_PORT=8080
-CONTEXT_TIMEOUT=60s
-
-# PostgreSQL
-POSTGRES_HOST=db
-POSTGRES_PORT=5432
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_DB=hackton
-POSTGRES_SSL_MODE=disable
-POSTGRES_MAX_CONNECTIONS=10
-
-# Redis
-REDIS_ADDR=cache:6379
-REDIS_PASSWORD=
-
-# LLM principal (geração de currículo)
-API_PROVIDER=claude          # claude | gemini | ollama
-API_KEY_AI=sk-ant-...
-API_URL_AI=https://api.anthropic.com/v1/messages
-API_MODEL_AI=claude-sonnet-4-5
-
-# LLM de scraping (opcional)
-SCRAPE_AI_ACTIVATE=false
-SCRAPE_AI_PROVIDER=claude
-SCRAPE_AI_KEY=sk-ant-...
-SCRAPE_AI_MODEL=claude-haiku-4-5-20251001
-
-# Worker
-WORKER_MAX_CONCURRENT=5    # goroutines simultâneas (gargalo real: rate limit da LLM)
-WORKER_BATCH_SIZE=20       # jobs buscados por tick
-WORKER_INTERVAL=30s        # intervalo entre verificações
-WORKER_RECOVERY_TIMEOUT=10m  # jobs em 'processing' por mais de X voltam para 'pending'
-
-# Autenticação
-JWT_SECRET=troque-isso
-JWT_EXPIRATION=24h
-
-# Hashing (Argon2id)
-HASH_ARGON2_PEPPER=troque-isso
-HASH_ARGON2_MEMORY=65536
-HASH_ARGON2_ITERATIONS=3
-HASH_ARGON2_PARALLELISM=2
-HASH_ARGON2_SALT_LEN=16
-HASH_ARGON2_KEY_LEN=32
-
-# Misc
-DEBUG=false
-PROJECT_NAME=hackton-treino
-VERSION=0.1.0
-```
-
-### Banco de dados
+A cadeia de IA também pode ser configurada no painel (Configurações de IA), que tem prioridade sobre o `.env`.
 
 ```bash
-# Aplicar schema
-psql -U postgres -d hackton -f repository/schema.sql
-
-# Popular com dados de seed (opcional)
-psql -U postgres -d hackton -f .vscode/seed.sql
+make air        # app com hot reload (as migrations rodam na subida)
+make test       # testes
+make test-race  # testes com race detector
+make sqlc       # regenera internal/db a partir de repository/query
 ```
 
-### Rodando a aplicação
-
-```bash
-# Com hot reload (air):
-make air
-
-# Sem hot reload:
-go run ./cmd/server
-```
-
----
-
-## Build de produção
-
-```bash
-docker compose up -d --build
-```
-
-O Dockerfile usa multi-stage build: compila o binário Go em `golang:alpine` e copia apenas o binário + assets para uma imagem final `python:3.12-slim` com WeasyPrint instalado. O `entrypoint.sh` inicia o servidor Python de PDF e em seguida o binário Go.
+Build de produção: `docker compose up -d --build` (imagem multi-stage: binário Go + Alpine com Python/WeasyPrint).
 
 ---
 
@@ -800,42 +309,29 @@ O Dockerfile usa multi-stage build: compila o binário Go em `golang:alpine` e c
 
 ```
 .
-├── cmd/server/              # Entrypoint — inicializa DB, Redis, Worker, HTTP server
-├── config/                  # Configuração via variáveis de ambiente
-├── database/                # Pool pgxpool + cliente Redis
+├── cmd/
+│   ├── server/            # Entrada: config, banco, Redis, worker, Descobrir, HTTP
+│   └── checkversion/      # Regra de versão do deploy
+├── config/                # Variáveis de ambiente
 ├── internal/
-│   ├── db/                  # Código gerado pelo sqlc (type-safe, não editar)
-│   ├── handler/             # Handlers HTTP + helpers genéricos (GenericList, GenericCreate…)
-│   │   └── profile_check.go # Verificação de perfil fraco — retornada em POST /jobs
-│   ├── lockout/             # Rate limit de login por IP via Redis
-│   ├── metrics/             # Métricas Prometheus (promauto — registro automático)
-│   ├── middleware/          # Auth, CORS, logger, timeout, panic recovery, revocation
-│   ├── repository/          # Interfaces e implementações de acesso a dados
-│   │   ├── cache/           # Abstração Redis (GetTyped/SetTyped + tópicos)
-│   │   ├── jobs/            # Repositório de vagas e currículos
-│   │   ├── users/           # Repositório de perfil do usuário
-│   │   ├── feedbacks/       # Repositório de feedbacks e exemplos excelentes
-│   │   ├── aliases/         # Repositório de aliases de tecnologias
-│   │   ├── worker/          # Repositório exclusivo do worker (pipeline + recovery)
-│   │   └── secevents/       # Log de eventos de segurança
-│   ├── routes/              # Registro de rotas e middlewares
-│   ├── scraper/             # Scrapers por plataforma (LinkedIn, Amazon, Jobright…)
-│   ├── security/            # JWT (HS256) + Argon2id + revogação
-│   ├── services/            # Integração com LLMs (Claude, Gemini, Ollama)
-│   ├── sse/                 # Bus in-memory de Server-Sent Events
-│   ├── util/                # Helpers (UUID parse, normalização de stack, IP, datas…)
-│   └── worker/              # Pipeline assíncrono
-│       ├── gap_analysis.go  # Análise de gap: habilidades faltando + coverage_pct
-│       └── prompts/         # System prompts (system_ptbr.txt, system_en.txt)
+│   ├── aiconfig/          # Cadeia de provedores de IA configurada no painel
+│   ├── appversion/        # version.json embutido
+│   ├── discovery/         # Fontes de vagas, varredura, indexação (techs, idioma, nível)
+│   ├── handler/           # HTTP: vagas, perfil, Descobrir, admin, UI e cache de assets
+│   ├── jobfit/            # Compatibilidade stack × habilidades (cálculo único)
+│   ├── profileimport/     # Importação de currículo
+│   ├── repository/        # Acesso a dados por domínio (interfaces + sqlc)
+│   ├── resume/            # Documento do currículo: montagem, conferências, tradução
+│   ├── scraper/           # Leitores de vagas por site + genérico (JSON-LD)
+│   ├── services/          # Cliente de IA com fallback e registro de chamadas
+│   ├── worker/            # Pipeline: leitura → escrita → montagem; prompts; cache da IA
+│   ├── middleware/ security/ sse/ metrics/ util/ db/ (gerado pelo sqlc)
 ├── repository/
-│   ├── schema.sql           # DDL completo (tabelas, tipos, índices)
-│   └── query/               # Queries SQL (input do sqlc)
-├── scripts/
-│   └── gerar_pdf.py         # Servidor WeasyPrint (processo persistente)
-├── static/                  # Frontend (HTML, CSS, JS vanilla)
-├── .github/workflows/
-│   └── deploy.yml           # CI/CD — test → deploy → healthcheck → smoke test
-├── Dockerfile               # Multi-stage: Go build + Python/WeasyPrint runtime
-├── docker-compose.yml       # app + db (PostgreSQL) + cache (Redis)
-└── sqlc.yaml                # Configuração do gerador de código sqlc
+│   ├── migrations/        # Migrations goose (embutidas)
+│   └── query/             # SQL de entrada do sqlc
+├── scripts/gerar_pdf.py   # Servidor WeasyPrint e modelos de PDF
+├── static/                # Frontend
+├── docs/fontes.md         # Fontes de vagas e verificação de termos
+├── version.json           # Versão e data do deploy
+└── .github/workflows/     # CI/CD
 ```
