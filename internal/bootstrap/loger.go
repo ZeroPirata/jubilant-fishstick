@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"fmt"
 	"hackton-treino/config"
+	"hackton-treino/internal/appversion"
 	"os"
 	"strings"
 
@@ -25,7 +26,7 @@ func InitZapLog(cfg *config.Config) (*zap.Logger, func(), error) {
 
 	logger = logger.With(
 		zap.String("service", cfg.Project.Name),
-		zap.String("version", cfg.Project.Version),
+		zap.String("version", appversion.Current().Version),
 	)
 
 	flush := func() {

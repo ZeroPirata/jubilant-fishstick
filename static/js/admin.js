@@ -597,8 +597,40 @@ async function checkAdminStatus() {
     localStorage.setItem('jp_is_admin', isAdmin ? '1' : '0');
     applyAdminVisibility(isAdmin);
     document.querySelectorAll('.master-only').forEach(el => el.classList.toggle('hidden', !_isMaster));
+    showAppVersion(_isMaster ? d.data?.version : null);
     if (d.data?.profile_empty) impWelcome();
   } catch (_) {}
+}
+
+// ── Versão do app (só o master; vem do version.json pelo /me) ──
+// Versão diferente da última vista ganha o selo "nova" e um aviso, uma vez por sessão,
+// até o master clicar nela.
+let _appVersion = null;
+
+function showAppVersion(v) {
+  const el = document.getElementById('app-version');
+  if (!el) return;
+  _appVersion = v?.version ? v : null;
+  el.classList.toggle('hidden', !_appVersion);
+  if (!_appVersion) return;
+  let seen = '';
+  try { seen = localStorage.getItem('jp_seen_version') || ''; } catch (_) {}
+  const isNew = seen !== v.version;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(v.date || '') ? v.date.split('-').reverse().join('/') : '';
+  el.innerHTML = `<span>v${escHtml(v.version)}</span>${date ? `<span class="app-version-date">${date}</span>` : ''}${isNew ? '<span class="app-version-new">nova</span>' : ''}`;
+  el.title = isNew ? 'Versão nova no ar. Clique para marcar como vista.' : `Versão do app no ar, atualizada em ${date}`;
+  if (!isNew) return;
+  try {
+    if (sessionStorage.getItem('jp_version_toast') === v.version) return;
+    sessionStorage.setItem('jp_version_toast', v.version);
+  } catch (_) {}
+  toast(`Versão nova no ar: v${v.version}${date ? ` (${date})` : ''}.`);
+}
+
+function markVersionSeen() {
+  if (!_appVersion) return;
+  try { localStorage.setItem('jp_seen_version', _appVersion.version); } catch (_) {}
+  showAppVersion(_appVersion);
 }
 
 function applyAdminVisibility(isAdmin) {

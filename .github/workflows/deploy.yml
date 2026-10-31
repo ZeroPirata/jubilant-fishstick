@@ -14,6 +14,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4.2.2
 
+      # Todo deploy precisa de versão nova no version.json: maior que a do ar e com data
+      # igual ou posterior à dela (cmd/checkversion). O runner é o servidor, então a
+      # versão no ar é o version.json da pasta do deploy.
+      - name: Check version
+        run: |
+          GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
+          LIVE=/opt/jubilant-fishstick/version.json
+          MOUNT=""
+          [ -f "$LIVE" ] && MOUNT="-v $LIVE:/live/version.json:ro"
+          docker run --rm --cpus=2 \
+            -v "$(pwd):/app" $MOUNT \
+            -v jubilant-ci-gomod:/go/pkg/mod \
+            -v jubilant-ci-gocache:/root/.cache/go-build \
+            -w /app \
+            "golang:${GO_VERSION}-alpine" \
+            nice -n 19 go run ./cmd/checkversion /live/version.json
+
       # O runner é o próprio servidor (um notebook): os testes rodam com no máximo 2
       # núcleos e prioridade mínima (nice 19), para não esquentar a máquina nem
       # disputar CPU com o app. Os volumes guardam módulos e cache de build entre

@@ -8,6 +8,7 @@ import (
 	"hackton-treino/database/cache"
 	"hackton-treino/database/postgres"
 	"hackton-treino/internal/aiconfig"
+	"hackton-treino/internal/appversion"
 	"hackton-treino/internal/bootstrap"
 	"hackton-treino/internal/discovery"
 	"hackton-treino/internal/middleware"
@@ -58,7 +59,7 @@ func run() error {
 	zap.ReplaceGlobals(logger)
 
 	zap.L().Info("Aplicação iniciada com sucesso",
-		zap.String("version", cfg.Project.Version),
+		zap.String("version", appversion.Current().Version),
 		zap.String("env", cfg.Project.Name),
 		zap.String("hostname", cfg.Server.Host),
 		zap.String("port", cfg.Server.Port),

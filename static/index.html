@@ -112,6 +112,7 @@
 
     <div class="sidebar-foot">
       <div class="sys-line" id="sse-status"><span class="pulse"></span><span id="sse-status-text">conectando…</span></div>
+      <button type="button" class="sys-line app-version hidden" id="app-version" onclick="markVersionSeen()"></button>
       <button class="btn-help" data-tab="ajuda"><svg class="ico"><use href="#i-help"/></svg><span>Ajuda</span><kbd>guia rápido</kbd></button>
       <button class="btn-logout" onclick="doLogout()"><svg class="ico"><use href="#i-logout"/></svg>Sair</button>
     </div>
@@ -1205,7 +1206,6 @@
                 <tbody id="dadm-boards"></tbody>
               </table>
             </div>
-          </div>
           </div>
 
           <div class="form-card">

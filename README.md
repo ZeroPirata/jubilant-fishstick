@@ -543,7 +543,9 @@ O endpoint SSE (`GET /api/v1/jobs/events`) é registrado com match exato fora do
 
 ```mermaid
 flowchart LR
-    Push["git push main"] --> Test
+    Push["git push main"] --> Version
+    Version["Versão\nversion.json maior que a do ar\ndata ≥ a da versão no ar"] --> Test
+    Version -- "mesma versão ou dia anterior" --> Abort
     Test["Tests\ndocker run golang:alpine\ngo test ./... -count=1"] --> Deploy
     Deploy["Deploy\nrsync → /opt/app/\ndocker compose up --build"] --> Health
     Health["Healthcheck\n20 tentativas × 3s\nstatus = healthy"] --> Smoke
@@ -553,6 +555,8 @@ flowchart LR
 ```
 
 O pipeline roda em **self-hosted runner** — o servidor de produção é o próprio executor. O deploy usa `rsync --delete` para sincronizar os arquivos e exclui `.env` e `data/` para não sobrescrever dados e segredos do servidor. O `docker compose up --build --remove-orphans` recria apenas os containers que tiveram mudança na imagem.
+
+**Versão:** todo deploy precisa atualizar o `version.json` da raiz (`{"version": "X.Y.Z", "date": "AAAA-MM-DD"}`). O passo *Check version* (`cmd/checkversion`) compara com o `version.json` que está no ar e barra o deploy se a versão não for maior ou se a data for anterior à da versão no ar. A versão vai embutida no binário, aparece nos logs e, para o admin master, no rodapé da barra lateral, com o selo "nova" até ser vista.
 
 ---
 

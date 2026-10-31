@@ -72,3 +72,23 @@ func TestStaticCache(t *testing.T) {
 		}
 	}
 }
+
+// Um </div> a mais numa aba tira os blocos seguintes de dentro da <section> e eles
+// somem (section sem .active fica escondida). Já aconteceu no painel admin.
+func TestIndexHTML_DivsBalanceadosPorSecao(t *testing.T) {
+	page, err := os.ReadFile("../../static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := regexp.MustCompile(`(?s)<!--.*?-->`).ReplaceAllString(string(page), "")
+	sections := regexp.MustCompile(`(?s)<section id="([^"]+)".*?</section>`).FindAllStringSubmatch(html, -1)
+	if len(sections) < 5 {
+		t.Fatalf("achei só %d seções", len(sections))
+	}
+	open, closing := regexp.MustCompile(`<div\b`), regexp.MustCompile(`</div>`)
+	for _, s := range sections {
+		if o, c := len(open.FindAllString(s[0], -1)), len(closing.FindAllString(s[0], -1)); o != c {
+			t.Errorf("seção %s: %d <div> e %d </div>", s[1], o, c)
+		}
+	}
+}

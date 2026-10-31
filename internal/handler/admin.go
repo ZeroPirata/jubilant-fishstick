@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"hackton-treino/internal/appversion"
 	"hackton-treino/internal/middleware"
 	"hackton-treino/internal/repository/admin"
 	"net/http"
@@ -40,7 +41,12 @@ func (h *AdminHandler) Me(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.Logger.Warn("me: falha ao verificar perfil vazio", zap.Error(err))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"is_admin": isAdmin, "is_master": isMaster, "profile_empty": empty})
+	body := map[string]any{"is_admin": isAdmin, "is_master": isMaster, "profile_empty": empty}
+	// Versão do app (version.json): só o master vê, para saber quando há deploy novo.
+	if isMaster {
+		body["version"] = appversion.Current()
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 func (h *AdminHandler) ListErrorLogs(w http.ResponseWriter, r *http.Request) {
