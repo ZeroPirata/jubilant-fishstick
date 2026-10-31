@@ -584,8 +584,8 @@ func (h *JobHandler) RetryJobProcessing(w http.ResponseWriter, r *http.Request) 
 	}
 
 	errR = h.Jobs.QueryReprocessJob(r.Context(), db.QueryReprocessJobParams{
-		ID:       pgJobId,
-		UserID:   userId,
+		ID:              pgJobId,
+		UserID:          userId,
 		Mode:            body.Mode,
 		Language:        body.Language,
 		FreshGeneration: body.Fresh,

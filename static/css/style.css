@@ -1277,6 +1277,7 @@ nav button.nav-ready::after { background: var(--green); box-shadow: 0 0 0 0 rgba
 .disc-area-add select { width: auto; min-width: 240px; max-width: 100%; }
 .disc-area-add input { max-width: 260px; }
 .disc-status { font: 400 11.5px var(--font-mono); color: var(--muted); }
+.dm-no-boards { color: var(--yellow); max-width: 220px; white-space: normal; }
 .disc-title { font-weight: 600; color: var(--text); }
 .disc-company { color: var(--muted); font-size: 12px; margin-top: 2px; }
 .disc-snippet { color: var(--muted); font-size: 12px; margin-top: 6px; max-width: 520px; }

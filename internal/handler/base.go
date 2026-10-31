@@ -23,4 +23,3 @@ func NewBaseHandler(logger *zap.Logger) *BaseHandler {
 		Logger: logger,
 	}
 }
-

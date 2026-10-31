@@ -204,10 +204,14 @@ function renderDmSources(sources) {
       : s.keywords_ok === 0     ? `<span class="badge badge-error">falhou</span> ${relativeTime(s.last_run_at)}`
       : `<span class="badge badge-mid">${s.keywords_failed} falha${s.keywords_failed > 1 ? 's' : ''}</span> ${relativeTime(s.last_run_at)}`;
     const newJobs = s.last_run_at ? `<div class="disc-status">${s.jobs_new} novas na última</div>` : '';
+    // ATS sem empresa cadastrada não lê nada: a varredura sai "ok" com 0 vagas.
+    const boards = s.boards == null ? ''
+      : s.boards === 0 ? '<div class="disc-status dm-no-boards">nenhuma empresa cadastrada: adicione em Busca de vagas → Empresas nos ATS</div>'
+      : `<div class="disc-status">${s.boards} empresa${s.boards > 1 ? 's' : ''}</div>`;
     return `
       <tr>
         <td data-label="Site"><b>${escDisc(dadmSourceName(s.name))}</b>${s.kind ? `<div class="dadm-kind">${DADM_KINDS[s.kind] || ''}</div>` : ''}</td>
-        <td data-label="Situação">${state}</td>
+        <td data-label="Situação">${state}${boards}</td>
         <td data-label="Última varredura">${last}</td>
         <td data-label="Vagas ativas">${s.jobs_active} <span style="color:var(--muted)">/ ${s.jobs_total}</span>${newJobs}</td>
         <td data-label="Último sucesso">${s.last_success_at ? relativeTime(s.last_success_at) : '—'}</td>

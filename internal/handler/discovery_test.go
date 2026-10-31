@@ -162,6 +162,7 @@ func TestBuildSourceStatus(t *testing.T) {
 	got := buildSourceStatus(
 		testSources[:2],
 		[]string{"linkedin"},
+		nil,
 		[]db.DiscoveryCatalogStatsRow{{Source: "gupy", Total: 10, Active: 8}, {Source: "catho", Total: 3}},
 		[]db.DiscoveryLastSourceResultsRow{{Source: "gupy", KeywordsOk: 5, KeywordsFailed: 1, LastError: "timeout"}},
 	)
@@ -177,6 +178,28 @@ func TestBuildSourceStatus(t *testing.T) {
 	}
 	if catho.Name != "catho" || catho.Enabled || catho.Registered {
 		t.Errorf("fonte fora do código não pode aparecer ligada: %+v", catho)
+	}
+}
+
+func TestBuildSourceStatus_EmpresasDosATS(t *testing.T) {
+	got := buildSourceStatus(testSources, nil,
+		map[string][]discovery.Board{"greenhouse": {{Token: "stone"}, {Token: "vtex"}}}, nil, nil)
+	for _, s := range got {
+		switch s.Name {
+		case "greenhouse":
+			if s.Boards == nil || *s.Boards != 2 {
+				t.Errorf("greenhouse: boards = %v, quero 2", s.Boards)
+			}
+		default:
+			if s.Boards != nil {
+				t.Errorf("%s não usa empresas, mas veio boards = %d", s.Name, *s.Boards)
+			}
+		}
+	}
+	// ATS sem nenhuma empresa: 0, não omitido (a tela avisa).
+	empty := buildSourceStatus(testSources[2:], nil, nil, nil, nil)
+	if empty[0].Boards == nil || *empty[0].Boards != 0 {
+		t.Errorf("ATS sem empresas: boards = %v, quero 0", empty[0].Boards)
 	}
 }
 

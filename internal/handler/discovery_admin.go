@@ -72,6 +72,9 @@ type discoverySourceStatus struct {
 	JobsSaved      int32      `json:"jobs_saved"`
 	JobsNew        int32      `json:"jobs_new"`
 	LastError      string     `json:"last_error"`
+	// Boards: empresas cadastradas, só nas fontes de ATS. Sem empresas a fonte não lê
+	// nada e a varredura sai "ok" com 0 vagas.
+	Boards *int `json:"boards,omitempty"`
 }
 
 type discoveryRunSource struct {
@@ -164,6 +167,11 @@ func (h *DiscoveryAdminHandler) Metrics(w http.ResponseWriter, r *http.Request) 
 		writeRepositoryError(w, errR)
 		return
 	}
+	// Coluna inválida não derruba a tela: só some a contagem de empresas.
+	boards, err := discovery.ParseBoards(settings.Boards)
+	if err != nil {
+		h.Logger.Warn("métricas da descoberta: empresas dos ATS ilegíveis", zap.Error(err))
+	}
 	lastResults, errR := h.Repo.LastSourceResults(ctx)
 	if errR != nil {
 		writeRepositoryError(w, errR)
@@ -188,14 +196,14 @@ func (h *DiscoveryAdminHandler) Metrics(w http.ResponseWriter, r *http.Request) 
 		Enabled:         settings.Enabled,
 		IntervalMinutes: int(settings.IntervalMinutes),
 		Scheduler:       h.Service.Scheduler(),
-		Sources:         buildSourceStatus(h.Service.SourceInfos(), settings.DisabledSources, stats, lastResults),
+		Sources:         buildSourceStatus(h.Service.SourceInfos(), settings.DisabledSources, boards, stats, lastResults),
 		Runs:            buildRunViews(runs, runSources),
 	})
 }
 
 // buildSourceStatus junta as fontes registradas no código com as que só existem no
 // histórico (removidas do código, mas ainda com vagas no banco).
-func buildSourceStatus(infos []discovery.SourceInfo, disabled []string, stats []db.DiscoveryCatalogStatsRow, last []db.DiscoveryLastSourceResultsRow) []discoverySourceStatus {
+func buildSourceStatus(infos []discovery.SourceInfo, disabled []string, boards map[string][]discovery.Board, stats []db.DiscoveryCatalogStatsRow, last []db.DiscoveryLastSourceResultsRow) []discoverySourceStatus {
 	byName := map[string]*discoverySourceStatus{}
 	kinds := map[string]string{}
 	for _, info := range infos {
@@ -213,7 +221,11 @@ func buildSourceStatus(infos []discovery.SourceInfo, disabled []string, stats []
 		return s
 	}
 	for _, info := range infos {
-		get(info.Name)
+		s := get(info.Name)
+		if info.UsesBoards {
+			n := len(boards[info.Name])
+			s.Boards = &n
+		}
 	}
 	for _, st := range stats {
 		s := get(st.Source)
