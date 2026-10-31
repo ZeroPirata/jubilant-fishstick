@@ -124,10 +124,9 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 			"heap_after":  after.HeapAlloc,
 			"freed_bytes": int64(before.HeapAlloc) - int64(after.HeapAlloc),
 		})
+	})
 	adminHandler := middleware.AdminMiddleware(adminR)(adminMux)
 	protectedMux.Handle("/admin/", http.StripPrefix("/admin", adminHandler))
-
-	})
 
 	// ActivityMiddleware depois do Auth: precisa do usuário no contexto para registrar o último acesso.
 	activity := middleware.ActivityMiddleware(userMetrics, 5*time.Minute)
