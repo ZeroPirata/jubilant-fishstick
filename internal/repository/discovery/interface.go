@@ -4,6 +4,7 @@ import (
 	"context"
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/repository"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -44,6 +45,12 @@ type Repository interface {
 	SelectAlerts(ctx context.Context, userID pgtype.UUID) (db.AlertsSelectRow, *repository.RepositoryError)
 	UpsertAlertSettings(ctx context.Context, args db.AlertsUpsertSettingsParams) *repository.RepositoryError
 	MarkAlertsSeen(ctx context.Context, userID pgtype.UUID) *repository.RepositoryError
+	DismissedIDs(ctx context.Context, userID pgtype.UUID) (map[[16]byte]bool, *repository.RepositoryError)
+	Dismiss(ctx context.Context, userID, jobID pgtype.UUID) (bool, *repository.RepositoryError)
+	Undismiss(ctx context.Context, userID, jobID pgtype.UUID) *repository.RepositoryError
+	SaveAlertFeedback(ctx context.Context, args db.AlertsFeedbackUpsertParams) *repository.RepositoryError
+	AlertFeedbackStats(ctx context.Context, since time.Time) ([]db.AlertsFeedbackStatsRow, *repository.RepositoryError)
+	PruneAlertFeedback(ctx context.Context, before time.Time) *repository.RepositoryError
 }
 
 func New(conn *pgxpool.Pool) Repository {

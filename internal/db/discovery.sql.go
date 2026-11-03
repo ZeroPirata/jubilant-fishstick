@@ -11,6 +11,81 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const alertsFeedbackPrune = `-- name: AlertsFeedbackPrune :exec
+DELETE FROM job_alert_feedback WHERE created_at < $1
+`
+
+func (q *Queries) AlertsFeedbackPrune(ctx context.Context, cutoff pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, alertsFeedbackPrune, cutoff)
+	return err
+}
+
+const alertsFeedbackStats = `-- name: AlertsFeedbackStats :many
+SELECT quality,
+       count(*) FILTER (WHERE relevant)::bigint     AS relevant,
+       count(*) FILTER (WHERE NOT relevant)::bigint AS not_relevant
+FROM job_alert_feedback
+WHERE created_at >= $1
+GROUP BY quality
+ORDER BY quality
+`
+
+type AlertsFeedbackStatsRow struct {
+	Quality     string `json:"quality"`
+	Relevant    int64  `json:"relevant"`
+	NotRelevant int64  `json:"not_relevant"`
+}
+
+// Avaliações desde @since por faixa de compatibilidade.
+func (q *Queries) AlertsFeedbackStats(ctx context.Context, since pgtype.Timestamptz) ([]AlertsFeedbackStatsRow, error) {
+	rows, err := q.db.Query(ctx, alertsFeedbackStats, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AlertsFeedbackStatsRow
+	for rows.Next() {
+		var i AlertsFeedbackStatsRow
+		if err := rows.Scan(&i.Quality, &i.Relevant, &i.NotRelevant); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const alertsFeedbackUpsert = `-- name: AlertsFeedbackUpsert :exec
+INSERT INTO job_alert_feedback(user_id, job_id, relevant, quality, coverage_pct)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id, job_id) DO UPDATE SET
+    relevant     = EXCLUDED.relevant,
+    quality      = EXCLUDED.quality,
+    coverage_pct = EXCLUDED.coverage_pct,
+    created_at   = now()
+`
+
+type AlertsFeedbackUpsertParams struct {
+	UserID      pgtype.UUID `json:"user_id"`
+	JobID       pgtype.UUID `json:"job_id"`
+	Relevant    bool        `json:"relevant"`
+	Quality     string      `json:"quality"`
+	CoveragePct int32       `json:"coverage_pct"`
+}
+
+func (q *Queries) AlertsFeedbackUpsert(ctx context.Context, arg AlertsFeedbackUpsertParams) error {
+	_, err := q.db.Exec(ctx, alertsFeedbackUpsert,
+		arg.UserID,
+		arg.JobID,
+		arg.Relevant,
+		arg.Quality,
+		arg.CoveragePct,
+	)
+	return err
+}
+
 const alertsMarkSeen = `-- name: AlertsMarkSeen :exec
 INSERT INTO user_job_alerts(user_id, seen_at)
 VALUES ($1, now())
@@ -1004,4 +1079,67 @@ func (q *Queries) DiscoveryUpsertPreferences(ctx context.Context, arg DiscoveryU
 		arg.SeniorityUnknown,
 	)
 	return err
+}
+
+const dismissedDelete = `-- name: DismissedDelete :exec
+DELETE FROM user_dismissed_jobs WHERE user_id = $1 AND job_id = $2
+`
+
+type DismissedDeleteParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	JobID  pgtype.UUID `json:"job_id"`
+}
+
+func (q *Queries) DismissedDelete(ctx context.Context, arg DismissedDeleteParams) error {
+	_, err := q.db.Exec(ctx, dismissedDelete, arg.UserID, arg.JobID)
+	return err
+}
+
+const dismissedInsert = `-- name: DismissedInsert :execrows
+INSERT INTO user_dismissed_jobs(user_id, job_id)
+SELECT $1, d.id FROM discovered_jobs d WHERE d.id = $2
+ON CONFLICT DO NOTHING
+`
+
+type DismissedInsertParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	JobID  pgtype.UUID `json:"job_id"`
+}
+
+// 0 linhas: a vaga não está no catálogo.
+func (q *Queries) DismissedInsert(ctx context.Context, arg DismissedInsertParams) (int64, error) {
+	result, err := q.db.Exec(ctx, dismissedInsert, arg.UserID, arg.JobID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const dismissedSelectIDs = `-- name: DismissedSelectIDs :many
+
+
+SELECT job_id FROM user_dismissed_jobs WHERE user_id = $1
+`
+
+// =============================================================================
+// VAGAS DISPENSADAS e AVALIAÇÃO DOS ALERTAS
+// =============================================================================
+func (q *Queries) DismissedSelectIDs(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, dismissedSelectIDs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var job_id pgtype.UUID
+		if err := rows.Scan(&job_id); err != nil {
+			return nil, err
+		}
+		items = append(items, job_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

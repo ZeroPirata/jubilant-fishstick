@@ -100,12 +100,29 @@ func TestEvaluate_Qualidade(t *testing.T) {
 		},
 		{
 			label: "100% match resulta em high",
+			stack: []string{"Go", "PostgreSQL", "Docker"},
+			filtros: []db.UserSkill{
+				{SkillName: "go"}, {SkillName: "postgresql"}, {SkillName: "docker"},
+			},
+			aliases: noAliases,
+			want:    db.JobQualityHigh,
+		},
+		// Vaga que cita só 1 ou 2 tecnologias diz pouco: no máximo média.
+		{
+			label: "100% com so 2 tecnologias fica mid",
 			stack: []string{"Go", "PostgreSQL"},
 			filtros: []db.UserSkill{
 				{SkillName: "go"}, {SkillName: "postgresql"},
 			},
 			aliases: noAliases,
-			want:    db.JobQualityHigh,
+			want:    db.JobQualityMid,
+		},
+		{
+			label:   "100% com so 1 tecnologia fica mid",
+			stack:   []string{"Go"},
+			filtros: []db.UserSkill{{SkillName: "go"}},
+			aliases: noAliases,
+			want:    db.JobQualityMid,
 		},
 		{
 			label: "70% match (7/10) resulta em high",
@@ -136,9 +153,9 @@ func TestEvaluate_Qualidade(t *testing.T) {
 		// "golang" → "go" via alias bate em item "go"; "postgresql" bate diretamente
 		{
 			label: "alias normaliza filtro antes do match",
-			stack: []string{"Go", "PostgreSQL"},
+			stack: []string{"Go", "PostgreSQL", "Redis"},
 			filtros: []db.UserSkill{
-				{SkillName: "go"}, {SkillName: "postgresql"},
+				{SkillName: "golang"}, {SkillName: "postgresql"}, {SkillName: "redis"},
 			},
 			aliases: map[string]string{"golang": "go"},
 			want:    db.JobQualityHigh,

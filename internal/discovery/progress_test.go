@@ -64,6 +64,9 @@ func (f *fakeRepo) LinkKeyword(context.Context, db.DiscoveryLinkKeywordParams) *
 func (f *fakeRepo) DeleteStale(context.Context, db.DiscoveryDeleteStaleParams) ([]db.DiscoveryDeleteStaleRow, *repository.RepositoryError) {
 	return nil, nil
 }
+func (f *fakeRepo) PruneAlertFeedback(context.Context, time.Time) *repository.RepositoryError {
+	return nil
+}
 func (f *fakeRepo) PruneRuns(context.Context, pgtype.Timestamptz) (int64, *repository.RepositoryError) {
 	return 0, nil
 }

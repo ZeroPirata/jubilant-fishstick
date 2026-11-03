@@ -32,6 +32,11 @@ const (
 	midFrom  = 30
 )
 
+// minItemsForHigh: com menos tecnologias que isso a vaga não fica com compatibilidade
+// alta, mesmo cobrindo 100%. Uma vaga que só cita "Go" diz pouco sobre o que ela pede
+// (e às vezes nem é de desenvolvimento): não deve passar na frente nem gerar alerta.
+const minItemsForHigh = 3
+
 type Item struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
@@ -132,7 +137,7 @@ func (e *Evaluator) Evaluate(stack []string) Fit {
 
 	fit.CoveragePct = int(math.Round(score * 100 / float64(len(fit.Items))))
 	switch {
-	case fit.CoveragePct >= highFrom:
+	case fit.CoveragePct >= highFrom && len(fit.Items) >= minItemsForHigh:
 		fit.Quality = db.JobQualityHigh
 	case fit.CoveragePct >= midFrom:
 		fit.Quality = db.JobQualityMid

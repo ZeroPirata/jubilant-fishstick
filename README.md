@@ -94,9 +94,13 @@ Cada fonte só entrou depois de verificar os termos de uso; as avaliadas e recus
 
 **Indexação na entrada, não na leitura.** Ao gravar uma vaga, o sistema calcula as tecnologias citadas (`techs TEXT[]`, com regras de contexto: "go-to" não é Go), o idioma e o nível (júnior/pleno/sênior). Habilidades fora da lista de tecnologias ("APIs REST") são buscadas num `tsvector` do texto. As duas colunas têm índice GIN: a lista de 9 mil vagas sai em ~60–90 ms, contra ~0,6–1,8 s da versão que lia o texto a cada pedido.
 
-**Ranking.** Todas as vagas candidatas são avaliadas pelo mesmo JobFit da aba Vagas e ordenadas por faixa de compatibilidade, tecnologias cobertas com nível forte, cobertura e coincidências. Cada linha mostra "62% da stack · você cobre 3 de 7 · falta: Kafka, AWS".
+**Ranking.** Todas as vagas candidatas são avaliadas pelo mesmo JobFit da aba Vagas e ordenadas por faixa de compatibilidade, tecnologias cobertas com nível forte, cobertura e coincidências. Cada linha mostra "62% da stack · você cobre 3 de 7 · falta: Kafka, AWS". Compatibilidade alta exige pelo menos 3 tecnologias conhecidas na vaga: uma vaga que só cita "Go" fica como média. A mesma vaga em mais de um site (empresa e título iguais) aparece uma vez, com "também em: Lever, Gupy" levando às outras.
 
-**Avisos de vagas novas.** O sininho no topo conta as vagas que entraram no catálogo (`first_seen_at`) desde a última olhada do usuário, com compatibilidade alta (ou alta e média, à escolha) e dentro do local e nível salvos. Usa o mesmo ranking da lista. Abrir o sininho ou o Descobrir avança a marca (`user_job_alerts.seen_at`): nenhuma vaga é avisada duas vezes. Por enquanto só na plataforma; Telegram e e-mail podem reaproveitar a mesma lista.
+**Dispensar.** Cada vaga tem *Dispensar*: some da lista e dos avisos só para quem dispensou (`user_dismissed_jobs`) e fica em *Dispensadas*, de onde pode ser restaurada. A vaga continua no catálogo.
+
+**Limpeza.** Vaga que some dos sites sai da lista em 36 h e é apagada em 7 dias; publicada há mais de 45 dias, também. O histórico de varreduras guarda 30 dias, e as avaliações dos avisos, 180.
+
+**Avisos de vagas novas.** O sininho no topo conta as vagas que entraram no catálogo (`first_seen_at`) desde a última olhada do usuário, com compatibilidade alta (ou alta e média, à escolha) e dentro do local e nível salvos. Usa o mesmo ranking da lista. Para não virar ruído, o aviso também exige uma skill avançada/expert do perfil na stack da vaga (Git, SQL e Docker sozinhos não bastam), publicação nos últimos 7 dias (vaga velha que só agora entrou por uma fonte nova não é novidade) e que a vaga não tenha sido dispensada. Empresa com 3 vagas novas ou mais vira um grupo no painel. Cada aviso pode ser avaliado (👍/👎, `job_alert_feedback`); o resultado por faixa aparece em Métricas → Busca de vagas. Abrir o sininho ou o Descobrir avança a marca (`user_job_alerts.seen_at`): nenhuma vaga é avisada duas vezes. Por enquanto só na plataforma; Telegram e e-mail podem reaproveitar a mesma lista.
 
 **Higiene do catálogo.** Vaga que some das buscas sai da lista em 36 h e é apagada em 7 dias; vaga publicada há mais de 45 dias não entra (e é removida, com log por fonte); vagas repetidas (mesmo título e empresa) aparecem uma vez.
 
@@ -190,6 +194,7 @@ erDiagram
 | `generated_resumes` / `resumes_feedback` | Currículos gerados (JSON estruturado) e avaliações |
 | `discovered_jobs` | Catálogo do Descobrir, com `techs[]`, `search_vec`, idioma e nível indexados |
 | `user_job_alerts` | Alertas de vagas novas: ligado, limite de compatibilidade e quando o usuário viu por último |
+| `user_dismissed_jobs`, `job_alert_feedback` | Vagas do Descobrir dispensadas pelo usuário e avaliações dos avisos (útil / não útil) |
 | `discovery_settings`, `discovery_runs`, `discovery_run_sources` | Configuração da varredura (sites, termos, intervalo, empresas nos ATS) e histórico por site |
 | `ai_providers`, `ai_calls` | Cadeia de IA configurada no painel e registro de cada chamada |
 | `profile_imports`, `error_logs`, `security_events` | Importações, erros do pipeline e eventos de segurança |
@@ -269,7 +274,7 @@ Base `/api/v1`. Rotas protegidas exigem `Authorization: Bearer <jwt>`; as respos
 | POST | `/jobs/{id}/resumes/{resume_id}/feedback` | Avaliar |
 | GET | `/jobs/events` | SSE |
 
-**Descobrir:** `GET /discovery/jobs` (filtros, paginação, ordenado por compatibilidade) · `GET /discovery/technologies` · `GET/PUT /discovery/preferences` · `POST /discovery/refresh` · `GET /discovery/status` · `GET/PUT /discovery/alerts` · `POST /discovery/alerts/seen`
+**Descobrir:** `GET /discovery/jobs` (filtros, paginação, ordenado por compatibilidade) · `GET /discovery/technologies` · `GET/PUT /discovery/preferences` · `POST /discovery/refresh` · `GET /discovery/status` · `GET/PUT /discovery/alerts` · `POST /discovery/alerts/seen` · `POST /discovery/alerts/feedback` · `POST/DELETE /discovery/jobs/{id}/dismiss` (`?dismissed=1` lista as dispensadas)
 
 **Filtros e segurança:** `GET/POST /filters`, `DELETE /filters/{id}` · `GET /security/events`
 

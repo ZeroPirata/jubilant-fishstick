@@ -175,3 +175,46 @@ func (r *discoveryRepository) UpsertAlertSettings(ctx context.Context, args db.A
 func (r *discoveryRepository) MarkAlertsSeen(ctx context.Context, userID pgtype.UUID) *repository.RepositoryError {
 	return repository.HandleDatabaseError(r.Q.AlertsMarkSeen(ctx, userID))
 }
+
+// DismissedIDs: as vagas que o usuário dispensou, para tirar da lista e dos alertas.
+func (r *discoveryRepository) DismissedIDs(ctx context.Context, userID pgtype.UUID) (map[[16]byte]bool, *repository.RepositoryError) {
+	ids, err := r.Q.DismissedSelectIDs(ctx, userID)
+	if err != nil {
+		return nil, repository.HandleDatabaseError(err)
+	}
+	out := make(map[[16]byte]bool, len(ids))
+	for _, id := range ids {
+		out[id.Bytes] = true
+	}
+	return out, nil
+}
+
+// Dismiss devolve false quando a vaga não está no catálogo.
+func (r *discoveryRepository) Dismiss(ctx context.Context, userID, jobID pgtype.UUID) (bool, *repository.RepositoryError) {
+	if _, err := r.Q.DismissedInsert(ctx, db.DismissedInsertParams{UserID: userID, JobID: jobID}); err != nil {
+		return false, repository.HandleDatabaseError(err)
+	}
+	// 0 linhas também quando já estava dispensada: confere se a vaga existe.
+	ids, errR := r.DismissedIDs(ctx, userID)
+	if errR != nil {
+		return false, errR
+	}
+	return ids[jobID.Bytes], nil
+}
+
+func (r *discoveryRepository) Undismiss(ctx context.Context, userID, jobID pgtype.UUID) *repository.RepositoryError {
+	return repository.HandleDatabaseError(r.Q.DismissedDelete(ctx, db.DismissedDeleteParams{UserID: userID, JobID: jobID}))
+}
+
+func (r *discoveryRepository) SaveAlertFeedback(ctx context.Context, args db.AlertsFeedbackUpsertParams) *repository.RepositoryError {
+	return repository.HandleDatabaseError(r.Q.AlertsFeedbackUpsert(ctx, args))
+}
+
+func (r *discoveryRepository) AlertFeedbackStats(ctx context.Context, since time.Time) ([]db.AlertsFeedbackStatsRow, *repository.RepositoryError) {
+	rows, err := r.Q.AlertsFeedbackStats(ctx, pgtype.Timestamptz{Time: since, Valid: true})
+	return rows, repository.HandleDatabaseError(err)
+}
+
+func (r *discoveryRepository) PruneAlertFeedback(ctx context.Context, before time.Time) *repository.RepositoryError {
+	return repository.HandleDatabaseError(r.Q.AlertsFeedbackPrune(ctx, pgtype.Timestamptz{Time: before, Valid: true}))
+}

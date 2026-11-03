@@ -58,6 +58,12 @@ var nonTechFollowers = map[string]bool{
 	"home": true, "fast": true, "green": true, "big": true,
 }
 
+// nonTechNames: termo + palavra seguinte que formam o nome de outra coisa. Vagas de
+// vendas citam o CRM "Go High Level" ao lado de HubSpot e Zoho.
+var nonTechNames = map[string]bool{
+	"go high": true, "go highlevel": true,
+}
+
 // containsTerm é o containsWord que, para termo ambíguo, exige contexto de
 // tecnologia. lower é o texto em minúsculas; orig, o original, serve para ver se o
 // termo veio com maiúscula.
@@ -93,6 +99,10 @@ func techContext(lower, orig string, start, end int) bool {
 
 	prev, prevAt, prevSep := wordBefore(lower, start)
 	next, nextAt, nextSep := wordAfter(lower, end)
+	// Nome de produto que começa com o termo: "Go High Level" (CRM de vendas).
+	if !nextSep && nonTechNames[lower[start:end]+" "+next] {
+		return false
+	}
 	switch {
 	case !prevSep && techLeadWords[prev]:
 		return true

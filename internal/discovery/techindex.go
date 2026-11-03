@@ -15,7 +15,7 @@ import (
 
 // techRulesRevision muda quando as regras de casamento mudam sem mudar o catálogo
 // (techword.go): força o recálculo de techs de todas as vagas.
-const techRulesRevision = 1
+const techRulesRevision = 2 // 2: "Go High Level" (CRM) não é Go
 
 // TechsVersion identifica o catálogo e as regras com que techs foi calculada. Vaga
 // gravada com outra versão é recalculada por Service.BackfillTechs.

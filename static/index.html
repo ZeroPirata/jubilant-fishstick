@@ -517,17 +517,22 @@
           <div class="panel-head"><div class="metric-card-title" style="margin:0">Sites</div>
             <button class="btn-more" onclick="goToDiscoverySettings()">configurar →</button></div>
           <div class="table-wrap" style="margin:0">
-            <table class="routes-table table-cards">
+            <table class="routes-table table-cards table-cards-flow">
               <thead><tr><th>Site</th><th>Situação</th><th>Última varredura</th><th>Vagas ativas</th><th>Último sucesso</th><th>Último erro</th></tr></thead>
               <tbody id="dm-sources"></tbody>
             </table>
           </div>
         </div>
 
+        <div class="metric-card" style="margin-bottom:16px">
+          <div class="metric-card-title">Alertas: avaliações dos últimos 30 dias</div>
+          <div id="dm-feedback"></div>
+        </div>
+
         <div class="metric-card">
           <div class="metric-card-title">Últimas varreduras</div>
           <div class="table-wrap" style="margin:0">
-            <table class="routes-table table-cards">
+            <table class="routes-table table-cards table-cards-flow">
               <thead><tr><th>Início</th><th>Gatilho</th><th>Status</th><th>Duração</th><th>Termos</th><th>Vagas</th><th>Sites</th></tr></thead>
               <tbody id="dm-runs"><tr><td colspan="7" class="empty">Carregando...</td></tr></tbody>
             </table>
@@ -747,6 +752,8 @@
           <span class="page-info" id="disc-page-info">—</span>
           <button class="btn-page" id="disc-next" onclick="discoveryNextPage()">›</button>
         </div>
+        <button type="button" class="btn btn-ghost btn-sm disc-dismissed-toggle hidden" id="disc-dismissed-toggle" onclick="toggleDiscDismissed()"
+          title="Vagas que você dispensou: não aparecem na lista nem nos alertas"></button>
       </div>
       <div class="table-wrap">
         <table class="table-cards">

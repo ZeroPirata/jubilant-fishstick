@@ -367,6 +367,15 @@ type Job struct {
 	FreshGeneration    bool               `json:"fresh_generation"`
 }
 
+type JobAlertFeedback struct {
+	UserID      pgtype.UUID        `json:"user_id"`
+	JobID       pgtype.UUID        `json:"job_id"`
+	Relevant    bool               `json:"relevant"`
+	Quality     string             `json:"quality"`
+	CoveragePct int32              `json:"coverage_pct"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type ProfileImport struct {
 	ID         string             `json:"id"`
 	UserID     pgtype.UUID        `json:"user_id"`
@@ -453,6 +462,12 @@ type UserDiscoveryPreference struct {
 	Technologies     []string           `json:"technologies"`
 	Seniorities      []string           `json:"seniorities"`
 	SeniorityUnknown bool               `json:"seniority_unknown"`
+}
+
+type UserDismissedJob struct {
+	UserID    pgtype.UUID        `json:"user_id"`
+	JobID     pgtype.UUID        `json:"job_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type UserExperience struct {

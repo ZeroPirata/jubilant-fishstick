@@ -693,7 +693,9 @@ a.link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 @media (max-width: 860px) {
   /* minmax(0, 1fr): sem isso a faixa de navegação (rolável) alarga a coluna e a página inteira rola para o lado */
-  #app { grid-template-columns: minmax(0, 1fr); }
+  /* align-content: start — com min-height 100vh e pouco conteúdo (lista curta ou
+     carregando), a grade esticava as linhas e abria um vão embaixo da navegação. */
+  #app { grid-template-columns: minmax(0, 1fr); align-content: start; }
   .sidebar, nav { min-width: 0; }
   /* a sidebar vira uma faixa de navegação rolável no topo */
   .sidebar { position: sticky; top: 0; z-index: 30; height: auto; flex-direction: column; gap: 8px; padding: 10px 12px 8px; border-right: 0; border-bottom: 1px solid var(--border); }
@@ -703,6 +705,9 @@ a.link:hover { text-decoration: underline; text-underline-offset: 3px; }
   .sidebar-head .btn-logout-compact { display: flex; padding: 5px 9px; }
   nav { flex-direction: row; overflow-x: auto; gap: 4px; margin: 0 -12px; padding: 0 12px 2px; scroll-snap-type: x proximity; }
   nav button { width: auto; flex-shrink: 0; padding: 6px 11px; font-size: 12.5px; scroll-snap-align: start; border-color: var(--border); }
+  /* Só ícones; a aba aberta mostra o nome. */
+  nav button:not(.active) > span { display: none; }
+  nav button:not(.active) { padding: 7px 10px; }
   nav button.active::before { display: none; }
   .topbar { display: none; }
   main { padding: 14px 14px 32px; }
@@ -742,6 +747,20 @@ a.link:hover { text-decoration: underline; text-underline-offset: 3px; }
   .table-cards tr.job-resumes-row td, .table-cards tr.quality-details-row td { display: block; text-align: left; }
   .table-cards td .truncate, .table-cards td.truncate { max-width: 62%; }
   .table-cards td { overflow-wrap: anywhere; }
+  /* Células com texto e vários elementos (números, tags): em flex, cada pedaço virava
+     uma coluna espremida. Aqui o conteúdo corre como texto e o rótulo fica à esquerda. */
+  /* Célula com bloco de conteúdo (título, empresa, trecho): rótulo em cima, conteúdo
+     à esquerda, na largura toda. */
+  .table-cards td.td-block { display: block; text-align: left; }
+  .table-cards td.td-block::before { display: block; margin-bottom: 6px; }
+  .table-cards-flow td { display: block; text-align: right; }
+  .table-cards-flow td::before { float: left; margin-right: 12px; padding-top: 2px; }
+  .table-cards-flow td::after { content: ''; display: block; clear: both; }
+  .table-cards-flow td .disc-status, .table-cards-flow td .dadm-kind { display: block; width: fit-content; margin-left: auto; }
+  .table-cards-flow td .dadm-err { display: block; clear: both; text-align: left; margin-top: 4px; max-width: none; }
+  .table-cards-flow td[data-label="Sites"] { text-align: left; }
+  .table-cards-flow td[data-label="Sites"]::before { float: none; display: block; margin-bottom: 6px; }
+  .table-cards-flow td[data-label="Sites"] > span { display: inline-block; margin: 0 4px 4px 0; }
   /* no card, o que só polui: o ID da vaga e as tags das entradas do perfil */
   .table-cards td[data-label="ID"], .table-cards td[data-label="Tags"] { display: none; }
   #tab-metricas .section-header { flex-wrap: wrap; gap: 10px; }
@@ -1284,6 +1303,13 @@ nav button.nav-ready::after { background: var(--green); box-shadow: 0 0 0 0 rgba
 .dm-no-boards { color: var(--yellow); max-width: 220px; white-space: normal; }
 .disc-title { font-weight: 600; color: var(--text); }
 .disc-company { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.disc-also { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.disc-also .link { font-size: inherit; }
+.disc-dismissed-toggle { margin-left: auto; }
+.dm-feedback-row { display: flex; align-items: center; gap: 10px; font-size: 12.5px; padding: 4px 0; }
+.dm-feedback-row b { min-width: 64px; }
+.dm-feedback-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.dm-feedback-bar > span { display: block; height: 100%; background: var(--green); }
 .disc-snippet { color: var(--muted); font-size: 12px; margin-top: 6px; max-width: 520px; }
 .disc-skills { display: flex; flex-wrap: wrap; gap: 4px; max-width: 260px; }
 .disc-stack { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
@@ -1425,11 +1451,29 @@ tr.job-row-link:hover .job-title-link { color: var(--accent); text-decoration: u
 .alerts-close:hover { color: var(--text); }
 .alerts-sub, .alerts-empty { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
 .alerts-list { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: min(420px, 55vh); overflow-y: auto; overscroll-behavior: contain; }
-.alerts-list li { display: flex; gap: 10px; align-items: flex-start; padding: 7px 4px; border-top: 1px solid var(--border); }
-.alerts-job { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.alerts-job a, .alerts-job span { color: var(--text); font-size: 13px; text-decoration: none; overflow-wrap: anywhere; }
-.alerts-job a:hover { color: var(--accent); }
+.alerts-item { border-top: 1px solid var(--border); }
+.alerts-row { display: flex; gap: 10px; align-items: flex-start; width: 100%; padding: 7px 4px; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.alerts-row:hover .alerts-title, .alerts-item.open .alerts-title { color: var(--accent); }
+.alerts-job { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.alerts-title { color: var(--text); font-size: 13px; overflow-wrap: anywhere; }
 .alerts-job small { color: var(--muted); font-size: 11px; }
+.alerts-chevron { color: var(--muted); font-size: 16px; line-height: 1; transition: transform .15s; padding-top: 1px; }
+.alerts-item.open .alerts-chevron, .alerts-group.open > .alerts-row .alerts-chevron { transform: rotate(90deg); }
+.alerts-group { border-top: 1px solid var(--border); }
+.alerts-group.open > .alerts-row .alerts-title, .alerts-group > .alerts-row:hover .alerts-title { color: var(--accent); }
+.alerts-sublist { list-style: none; margin: 0 0 6px 18px; padding: 0; border-left: 2px solid var(--border); }
+.alerts-sublist .alerts-item:first-child { border-top: 0; }
+.alerts-feedback { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+.alerts-vote { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; cursor: pointer; font-size: 13px; line-height: 1.3; filter: grayscale(1); opacity: .7; }
+.alerts-vote:hover { opacity: 1; filter: none; }
+.alerts-vote.on { filter: none; opacity: 1; border-color: var(--accent-line); background: var(--accent-soft); }
+.alerts-dismiss { margin-left: auto; }
+.alerts-detail { padding: 2px 4px 10px 52px; display: flex; flex-direction: column; gap: 8px; }
+.alerts-detail[hidden], .alerts-sublist[hidden] { display: none; }
+.alerts-meta { font-size: 11.5px; color: var(--text-2); }
+.alerts-snippet { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.alerts-actions { justify-content: flex-start; flex-wrap: wrap; }
+@media (max-width: 640px) { .alerts-detail { padding-left: 4px; } }
 .alerts-pct { flex: 0 0 auto; min-width: 38px; text-align: right; font: 500 12px var(--font-mono); color: var(--text-2); padding-top: 1px; }
 .alerts-pct.q-high { color: var(--green); }
 .alerts-pct.q-mid { color: var(--yellow); }

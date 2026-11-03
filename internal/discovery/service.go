@@ -43,6 +43,9 @@ const (
 	// na varredura completa: muitos sites deixam a vaga listada meses depois de
 	// preenchida. Vaga sem data de publicação não é afetada.
 	MaxJobAge = 45 * 24 * time.Hour
+	// alertFeedbackRetention: avaliações dos alertas (útil / não útil) mais velhas que
+	// isso são apagadas na limpeza; as métricas olham só os últimos 30 dias.
+	alertFeedbackRetention = 180 * 24 * time.Hour
 	// Histórico de varreduras mantido no painel.
 	runsRetention = 30 * 24 * time.Hour
 
@@ -734,6 +737,9 @@ func (s *Service) deleteStale(ctx context.Context) int64 {
 	if errR != nil {
 		s.Logger.Warn("Descoberta: erro ao apagar vagas antigas", zap.String("erro", errR.Message))
 		return 0
+	}
+	if errP := s.Repo.PruneAlertFeedback(ctx, now.Add(-alertFeedbackRetention)); errP != nil {
+		s.Logger.Warn("Descoberta: erro ao apagar avaliações antigas dos alertas", zap.String("erro", errP.Message))
 	}
 	var total int64
 	for _, r := range rows {

@@ -326,10 +326,53 @@ func TestNewAlerts_NovasAcimaDoLimite(t *testing.T) {
 		}
 		return out
 	}
-	if got := ids(newAlerts(jobs, since, db.JobQualityHigh)); !slices.Equal(got, []string{"alta-nova"}) {
+	rule := alertRule{since: since, minQuality: db.JobQualityHigh}
+	if got := ids(newAlerts(jobs, rule)); !slices.Equal(got, []string{"alta-nova"}) {
 		t.Errorf("high: %v", got)
 	}
-	if got := ids(newAlerts(jobs, since, db.JobQualityMid)); !slices.Equal(got, []string{"alta-nova", "media-nova"}) {
+	rule.minQuality = db.JobQualityMid
+	if got := ids(newAlerts(jobs, rule)); !slices.Equal(got, []string{"alta-nova", "media-nova"}) {
 		t.Errorf("mid: %v", got)
+	}
+}
+
+func TestNewAlerts_SkillForteEPublicacaoRecente(t *testing.T) {
+	since := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	recent, old := since.Add(-24*time.Hour), since.Add(-30*24*time.Hour)
+	high := func(strong int) jobfit.Fit {
+		return jobfit.Fit{Quality: db.JobQualityHigh, Strong: strong, Partial: 3 - strong, Items: make([]jobfit.Item, 3)}
+	}
+	jobs := []DiscoveredJob{
+		{ID: "forte-recente", firstSeen: since.Add(time.Hour), PublishedAt: &recent, fit: high(1)},
+		{ID: "so-parcial", firstSeen: since.Add(time.Hour), PublishedAt: &recent, fit: high(0)},
+		{ID: "publicada-ha-30-dias", firstSeen: since.Add(time.Hour), PublishedAt: &old, fit: high(2)},
+		{ID: "sem-data", firstSeen: since.Add(time.Hour), fit: high(3)},
+	}
+	ids := func(js []DiscoveredJob) []string {
+		out := []string{}
+		for _, j := range js {
+			out = append(out, j.ID)
+		}
+		return out
+	}
+	rule := alertRule{since: since, minQuality: db.JobQualityHigh, requireStrong: true, publishedFrom: since.Add(-7 * 24 * time.Hour)}
+	if got := ids(newAlerts(jobs, rule)); !slices.Equal(got, []string{"forte-recente", "sem-data"}) {
+		t.Errorf("com skill forte: %v", got)
+	}
+	// Sem skill avançada/expert no perfil, a regra da skill forte não se aplica.
+	rule.requireStrong = false
+	if got := ids(newAlerts(jobs, rule)); !slices.Equal(got, []string{"forte-recente", "so-parcial", "sem-data"}) {
+		t.Errorf("sem skill forte no perfil: %v", got)
+	}
+}
+
+func TestAddAlsoOn(t *testing.T) {
+	j := DiscoveredJob{Source: "gupy", Url: "https://a"}
+	j.addAlsoOn("gupy", "https://outra-cidade")
+	j.addAlsoOn("lever", "https://b")
+	j.addAlsoOn("lever", "https://c")
+	j.addAlsoOn("ashby", "")
+	if want := []JobLink{{Source: "lever", Url: "https://b"}}; !slices.Equal(j.AlsoOn, want) {
+		t.Errorf("AlsoOn = %v, want %v", j.AlsoOn, want)
 	}
 }

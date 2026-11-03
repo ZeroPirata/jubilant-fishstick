@@ -17,6 +17,11 @@ func TestMatchTechs(t *testing.T) {
 		{"Java 17 e Spring Boot", []string{"Java"}},
 		{"Usamos MySQL", nil}, // "sql" não bate dentro de "mysql"
 		{"C# e .NET 8", []string{"C#"}},
+		// CRM de vendas, não a linguagem.
+		{"Experience in Zoho and Go High Level preferred.", nil},
+		{"Maintain accurate records in Go High Level.", nil},
+		{"Tools: GoHighLevel, HubSpot", nil},
+		{"Backend em Go, HubSpot no comercial", []string{"Go"}},
 	}
 	names := []string{"Go", "Kubernetes", "JavaScript", "Node.js", "Java", "SQL", "C#"}
 	for _, tc := range cases {

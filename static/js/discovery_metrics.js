@@ -83,6 +83,29 @@ function renderDiscoveryMetrics(d) {
   renderDmProgress(d.scheduler);
   renderDmSources(d.sources);
   renderDmRuns(d.runs);
+  renderDmFeedback(d.alert_feedback || []);
+}
+
+// Avaliações do sino (👍/👎) por faixa de compatibilidade: quanto do que o alerta
+// mandou foi útil. Base para ajustar a regra dos alertas.
+function renderDmFeedback(rows) {
+  const box = document.getElementById('dm-feedback');
+  if (!box) return;
+  const names = { high: 'Alta', mid: 'Média', low: 'Baixa' };
+  const shown = ['high', 'mid', 'low'].map(q => rows.find(r => r.quality === q)).filter(Boolean);
+  if (!shown.length) {
+    box.innerHTML = '<p class="metric-sub" style="margin:0">Nenhuma avaliação ainda. No sino, abra uma vaga e marque 👍 ou 👎.</p>';
+    return;
+  }
+  box.innerHTML = shown.map(r => {
+    const total = r.relevant + r.not_relevant;
+    const pct = total ? Math.round(100 * r.relevant / total) : 0;
+    return `<div class="dm-feedback-row">
+      <b>${names[r.quality]}</b>
+      <div class="dm-feedback-bar" title="${pct}% úteis"><span style="width:${pct}%"></span></div>
+      <span>${pct}% úteis · ${r.relevant} 👍 · ${r.not_relevant} 👎</span>
+    </div>`;
+  }).join('');
 }
 
 function renderDmCards(d) {

@@ -290,3 +290,48 @@ ON CONFLICT (user_id) DO UPDATE SET
 INSERT INTO user_job_alerts(user_id, seen_at)
 VALUES (@user_id, now())
 ON CONFLICT (user_id) DO UPDATE SET seen_at = now();
+
+
+-- =============================================================================
+-- VAGAS DISPENSADAS e AVALIAÇÃO DOS ALERTAS
+-- =============================================================================
+
+
+-- name: DismissedSelectIDs :many
+SELECT job_id FROM user_dismissed_jobs WHERE user_id = @user_id;
+
+
+-- name: DismissedInsert :execrows
+-- 0 linhas: a vaga não está no catálogo.
+INSERT INTO user_dismissed_jobs(user_id, job_id)
+SELECT @user_id, d.id FROM discovered_jobs d WHERE d.id = @job_id
+ON CONFLICT DO NOTHING;
+
+
+-- name: DismissedDelete :exec
+DELETE FROM user_dismissed_jobs WHERE user_id = @user_id AND job_id = @job_id;
+
+
+-- name: AlertsFeedbackUpsert :exec
+INSERT INTO job_alert_feedback(user_id, job_id, relevant, quality, coverage_pct)
+VALUES (@user_id, @job_id, @relevant, @quality, @coverage_pct)
+ON CONFLICT (user_id, job_id) DO UPDATE SET
+    relevant     = EXCLUDED.relevant,
+    quality      = EXCLUDED.quality,
+    coverage_pct = EXCLUDED.coverage_pct,
+    created_at   = now();
+
+
+-- name: AlertsFeedbackStats :many
+-- Avaliações desde @since por faixa de compatibilidade.
+SELECT quality,
+       count(*) FILTER (WHERE relevant)::bigint     AS relevant,
+       count(*) FILTER (WHERE NOT relevant)::bigint AS not_relevant
+FROM job_alert_feedback
+WHERE created_at >= @since
+GROUP BY quality
+ORDER BY quality;
+
+
+-- name: AlertsFeedbackPrune :exec
+DELETE FROM job_alert_feedback WHERE created_at < @cutoff;

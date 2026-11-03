@@ -4,6 +4,8 @@
 // vagas vêm de sites de terceiros: tudo passa por escDisc antes de ir para o HTML.
 
 const _discPg = { offset: 0, size: 20 };
+// Lista das vagas dispensadas (para restaurar) em vez da lista normal.
+let _discShowDismissed = false;
 let _discPollTimer = null;
 // Cada clique em filtro recarrega a lista; só a resposta do último pedido é desenhada.
 let _discLoadSeq = 0;
@@ -404,6 +406,7 @@ async function loadDiscoveryJobs() {
     const qs = new URLSearchParams({ offset: _discPg.offset, size: _discPg.size });
     _discFilters.sources.forEach(s => qs.append('source', s));
     _discFilters.skills.forEach(s => qs.append('skill', s));
+    if (_discShowDismissed) qs.set('dismissed', '1');
     const res = await api.get(`/discovery/jobs?${qs}`);
     if (seq !== _discLoadSeq) return;
     if (!res.ok) { tbody.innerHTML = '<tr><td colspan="5" class="empty">Erro ao carregar vagas.</td></tr>'; return; }
@@ -415,7 +418,12 @@ async function loadDiscoveryJobs() {
     renderDiscFacets(json.facets || {});
     renderDiscLevels((json.facets || {}).levels || []);
     renderDiscoveryPagination(meta.total ?? 0, meta.cursor ?? _discPg.offset, meta.size ?? _discPg.size);
+    renderDiscDismissedToggle(json.dismissed_count ?? 0);
 
+    if (!jobs.length && _discShowDismissed) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">Nenhuma vaga dispensada.</td></tr>';
+      return;
+    }
     if (!jobs.length) {
       const filtered = _discFilters.sources.length || _discFilters.skills.length || _discLevels.length;
       tbody.innerHTML = filtered
@@ -451,12 +459,16 @@ function renderDiscoveryRow(j) {
   const action = j.pipeline_job_id
     ? discPipeline(j.pipeline_job_id, j.pipeline_status)
     : discGenerateButton(url, j.language);
+  const dismiss = j.dismissed
+    ? `<button type="button" class="btn btn-ghost btn-sm" onclick="restoreDiscJob('${escDisc(j.id)}', this)">Restaurar</button>`
+    : `<button type="button" class="btn btn-ghost btn-sm disc-dismiss" onclick="dismissDiscJob('${escDisc(j.id)}', this)" title="Some da lista e dos alertas só para você (dá para restaurar em Dispensadas)">Dispensar</button>`;
 
   return `
     <tr>
-      <td data-label="Vaga">
+      <td data-label="Vaga" class="td-block">
         <div class="disc-title">${escDisc(j.title)}${level}</div>
         <div class="disc-company">${[j.company, _discSourceNames[j.source] || j.source].filter(Boolean).map(escDisc).join(' · ')}</div>
+        ${discAlsoOn(j.also_on)}
         ${discFitLine(j.fit)}
         <div class="disc-snippet clamp-3">${escDisc(j.snippet)}</div>
       </td>
@@ -467,9 +479,65 @@ function renderDiscoveryRow(j) {
         <div class="disc-actions">
           ${action}
           ${url ? `<a class="link" href="${escDisc(url)}" target="_blank" rel="noopener noreferrer">↗ abrir</a>` : ''}
+          ${dismiss}
         </div>
       </td>
     </tr>`;
+}
+
+// A mesma vaga (empresa e título iguais) em outros sites: a lista mostra uma só, com
+// os links das outras.
+function discAlsoOn(links) {
+  const ok = (links || []).filter(l => safeHttpUrl(l.url));
+  if (!ok.length) return '';
+  return `<div class="disc-also">também em: ${ok.map(l =>
+    `<a class="link" href="${escDisc(safeHttpUrl(l.url))}" target="_blank" rel="noopener noreferrer">${escDisc(_discSourceNames[l.source] || l.source)}</a>`).join(', ')}</div>`;
+}
+
+function renderDiscDismissedToggle(n) {
+  const b = document.getElementById('disc-dismissed-toggle');
+  if (!b) return;
+  b.classList.toggle('hidden', !n && !_discShowDismissed);
+  b.textContent = _discShowDismissed ? '← Voltar à lista' : `Dispensadas (${n})`;
+}
+
+function toggleDiscDismissed() {
+  _discShowDismissed = !_discShowDismissed;
+  _discPg.offset = 0;
+  loadDiscoveryJobs();
+}
+
+// Dispensar some com a vaga da lista e dos alertas só para você; ela continua no
+// catálogo e volta em "Dispensadas".
+async function dismissDiscJob(id, btn) {
+  btn.disabled = true;
+  try {
+    const res = await api.post(`/discovery/jobs/${encodeURIComponent(id)}/dismiss`, {});
+    if (!res.ok) { btn.disabled = false; toast('Não foi possível dispensar.', 'error'); return; }
+    const row = btn.closest('tr');
+    if (row) row.remove();
+    const b = document.getElementById('disc-dismissed-toggle');
+    const n = (parseInt((b?.textContent.match(/\d+/) || ['0'])[0], 10) || 0) + 1;
+    renderDiscDismissedToggle(n);
+    toast('Vaga dispensada. Ela fica em "Dispensadas".');
+    if (typeof loadAlerts === 'function') loadAlerts();
+  } catch (e) {
+    btn.disabled = false;
+    toast(e.message || 'Erro de conexão.', 'error');
+  }
+}
+
+async function restoreDiscJob(id, btn) {
+  btn.disabled = true;
+  try {
+    const res = await api.delete(`/discovery/jobs/${encodeURIComponent(id)}/dismiss`);
+    if (!res.ok) { btn.disabled = false; toast('Não foi possível restaurar.', 'error'); return; }
+    toast('Vaga restaurada.');
+    loadDiscoveryJobs();
+  } catch (e) {
+    btn.disabled = false;
+    toast(e.message || 'Erro de conexão.', 'error');
+  }
 }
 
 // Compatibilidade da vaga (o mesmo JobFit da aba Vagas): cobertura da stack pelo

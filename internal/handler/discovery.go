@@ -77,10 +77,20 @@ type DiscoveredJob struct {
 	Language string `json:"language,omitempty"`
 	// Fit: compatibilidade da stack da vaga com o perfil (o mesmo JobFit da aba Vagas),
 	// que ordena a lista. Só vai na resposta para as vagas da página.
-	Fit       *jobfit.Fit `json:"fit,omitempty"`
+	Fit *jobfit.Fit `json:"fit,omitempty"`
+	// AlsoOn: a mesma vaga (empresa e título iguais) publicada em outros sites. A
+	// lista mostra uma só, com os links das outras, em vez de repetir.
+	AlsoOn []JobLink `json:"also_on,omitempty"`
+	// Dismissed: o usuário dispensou a vaga (só aparece em ?dismissed=1).
+	Dismissed bool `json:"dismissed,omitempty"`
 	techs     []string
 	fit       jobfit.Fit
 	firstSeen time.Time
+}
+
+type JobLink struct {
+	Source string `json:"source"`
+	Url    string `json:"url"`
 }
 
 // ListJobs devolve as vagas do catálogo que citam skills em que o usuário é forte
@@ -93,6 +103,7 @@ type DiscoveredJob struct {
 //
 // Filtros: o local de interesse e o nível salvos (/discovery/preferences) e, na query string,
 // ?source= (plataformas) e ?skill= (a vaga precisa citar todas), ambos repetíveis.
+// As vagas dispensadas ficam de fora; ?dismissed=1 lista só elas (para restaurar).
 func (h *DiscoveryHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserID(r.Context())
 	if !ok {
@@ -102,13 +113,17 @@ func (h *DiscoveryHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	cursor, size := getPaginationParams(r)
 
-	rk, errR := h.rankedJobs(ctx, userID)
+	view := hideDismissed
+	if r.URL.Query().Get("dismissed") == "1" {
+		view = onlyDismissed
+	}
+	rk, errR := h.rankedJobs(ctx, userID, view)
 	if errR != nil {
 		writeRepositoryError(w, errR)
 		return
 	}
 	if rk.jobs == nil {
-		writeDiscoveryList(w, discoveryResult{Jobs: []DiscoveredJob{}, Facets: emptyFacets()}, size, cursor, rk.onlyStrong)
+		writeDiscoveryList(w, discoveryResult{Jobs: []DiscoveredJob{}, Facets: emptyFacets()}, size, cursor, rk)
 		return
 	}
 
@@ -120,8 +135,16 @@ func (h *DiscoveryHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 		writeRepositoryError(w, errR)
 		return
 	}
-	writeDiscoveryList(w, result, size, cursor, rk.onlyStrong)
+	writeDiscoveryList(w, result, size, cursor, rk)
 }
+
+// dismissView: o que fazer com as vagas que o usuário dispensou.
+type dismissView int
+
+const (
+	hideDismissed dismissView = iota
+	onlyDismissed
+)
 
 // ranked: as vagas candidatas do usuário já ranqueadas, e o filtro salvo (local e
 // nível) para aplicar nelas. jobs nil = o perfil não tem skills nem tecnologias de
@@ -130,11 +153,13 @@ type ranked struct {
 	jobs       []DiscoveredJob
 	filter     discoveryFilter
 	onlyStrong bool
+	// dismissed: quantas candidatas o usuário dispensou (a tela mostra "N dispensadas").
+	dismissed int
 }
 
 // rankedJobs faz a parte comum da lista do Descobrir e dos alertas: candidatas do
 // catálogo, casamento com as skills e as tecnologias de interesse, e o ranking.
-func (h *DiscoveryHandler) rankedJobs(ctx context.Context, userID pgtype.UUID) (ranked, *repository.RepositoryError) {
+func (h *DiscoveryHandler) rankedJobs(ctx context.Context, userID pgtype.UUID, view dismissView) (ranked, *repository.RepositoryError) {
 	var out ranked
 	skills, errR := h.Users.QuerySelectAllSkills(ctx, userID.String())
 	if errR != nil {
@@ -186,30 +211,49 @@ func (h *DiscoveryHandler) rankedJobs(ctx context.Context, userID pgtype.UUID) (
 		aliasMap = map[string]string{}
 	}
 	eval := jobfit.NewEvaluator(skills, aliasMap)
+	dismissed, errR := h.Repo.DismissedIDs(ctx, userID)
+	if errR != nil {
+		return out, errR
+	}
 
-	// A mesma vaga costuma ser publicada uma vez por cidade: fica a mais recente (a
-	// query vem da mais recente para a mais antiga).
+	// A mesma vaga costuma ser publicada uma vez por cidade, e às vezes em mais de um
+	// site: fica a mais recente (a query vem da mais recente para a mais antiga), com
+	// os links dos outros sites em AlsoOn. Nenhuma se perde: só não se repete.
 	jobs := make([]DiscoveredJob, 0, len(rows))
-	seen := map[string]bool{}
+	kept := map[string]int{} // chave → índice em jobs; -1 = a primeira não casou
 	for _, row := range rows {
 		// Sem empresa (issues do GitHub) o título sozinho juntaria vagas diferentes.
-		key := strings.ToLower(row.Title + "|" + row.Company)
+		key := strings.ToLower(strings.TrimSpace(row.Title) + "|" + strings.TrimSpace(row.Company))
 		if row.Company == "" {
 			key = row.Url
 		}
-		if seen[key] {
+		if i, ok := kept[key]; ok {
+			if i >= 0 {
+				jobs[i].addAlsoOn(row.Source, row.Url)
+			}
 			continue
 		}
-		seen[key] = true
+		kept[key] = -1
 		matched := plan.Matched(row.Techs, hits[row.ID.Bytes])
 		matchedTechs := intersect(interest, row.Techs)
 		if (len(interest) > 0 && len(matchedTechs) == 0) || (len(interest) == 0 && len(matched) == 0) {
 			continue
 		}
+		if isDismissed := dismissed[row.ID.Bytes]; isDismissed != (view == onlyDismissed) {
+			if isDismissed {
+				out.dismissed++
+			}
+			continue
+		}
 		job := toDiscoveredJob(row, matched)
 		job.MatchedTechs = matchedTechs
+		job.Dismissed = view == onlyDismissed
 		job.fit = eval.Evaluate(row.Techs)
+		kept[key] = len(jobs)
 		jobs = append(jobs, job)
+	}
+	if view == onlyDismissed {
+		out.dismissed = len(jobs)
 	}
 	rankDiscovered(jobs)
 	out.jobs = jobs
@@ -290,6 +334,20 @@ func (h *DiscoveryHandler) fillPage(ctx context.Context, userID pgtype.UUID, job
 		j.Fit = &fit
 	}
 	return nil
+}
+
+// addAlsoOn guarda o link da mesma vaga em outro site (uma vez por site; outra cidade
+// no mesmo site não entra).
+func (j *DiscoveredJob) addAlsoOn(source, url string) {
+	if source == j.Source || url == "" {
+		return
+	}
+	for _, l := range j.AlsoOn {
+		if l.Source == source {
+			return
+		}
+	}
+	j.AlsoOn = append(j.AlsoOn, JobLink{Source: source, Url: url})
 }
 
 func pageBounds(total, cursor, size int32) (int32, int32) {
@@ -438,8 +496,9 @@ func sortedFacets(counts map[string]int) []facetCount {
 }
 
 // writeDiscoveryList é o writeList com only_strong_skills (a tela avisa quando o
-// casamento caiu para todas as skills) e as contagens dos filtros.
-func writeDiscoveryList(w http.ResponseWriter, res discoveryResult, size, cursor int32, onlyStrong bool) {
+// casamento caiu para todas as skills), as contagens dos filtros e quantas vagas o
+// usuário dispensou.
+func writeDiscoveryList(w http.ResponseWriter, res discoveryResult, size, cursor int32, rk ranked) {
 	total := int32(len(res.Jobs))
 	start, end := pageBounds(total, cursor, size)
 
@@ -448,8 +507,9 @@ func writeDiscoveryList(w http.ResponseWriter, res discoveryResult, size, cursor
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"data":               res.Jobs[start:end],
 		"meta":               meta{Size: size, Cursor: cursor, Total: total},
-		"only_strong_skills": onlyStrong,
+		"only_strong_skills": rk.onlyStrong,
 		"facets":             res.Facets,
+		"dismissed_count":    rk.dismissed,
 	})
 }
 

@@ -120,6 +120,9 @@ type discoveryMetricsView struct {
 	Scheduler       discovery.SchedulerState `json:"scheduler"`
 	Sources         []discoverySourceStatus  `json:"sources"`
 	Runs            []discoveryRunView       `json:"runs"`
+	// AlertFeedback: avaliações dos alertas (útil / não útil) nos últimos 30 dias,
+	// por faixa de compatibilidade.
+	AlertFeedback []alertFeedbackStat `json:"alert_feedback"`
 }
 
 // GetSettings é o que o painel admin edita: liga/desliga, intervalo, termos e quais
@@ -192,12 +195,23 @@ func (h *DiscoveryAdminHandler) Metrics(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Sem as avaliações a tela continua: só some o quadro delas.
+	feedback := []alertFeedbackStat{}
+	if rows, errF := h.Repo.AlertFeedbackStats(ctx, time.Now().Add(-30*24*time.Hour)); errF != nil {
+		h.Logger.Warn("métricas da descoberta: avaliações dos alertas", zap.String("erro", errF.Message))
+	} else {
+		for _, row := range rows {
+			feedback = append(feedback, alertFeedbackStat{Quality: row.Quality, Relevant: row.Relevant, NotRelevant: row.NotRelevant})
+		}
+	}
+
 	writeJSON(w, http.StatusOK, discoveryMetricsView{
 		Enabled:         settings.Enabled,
 		IntervalMinutes: int(settings.IntervalMinutes),
 		Scheduler:       h.Service.Scheduler(),
 		Sources:         buildSourceStatus(h.Service.SourceInfos(), settings.DisabledSources, boards, stats, lastResults),
 		Runs:            buildRunViews(runs, runSources),
+		AlertFeedback:   feedback,
 	})
 }
 
