@@ -19,7 +19,7 @@ const _discSourceNames = {
 
 // Níveis na ordem da API; o filtro de nível é salvo nas preferências, como o local.
 const _discLevelNames = {
-  intern: 'Estágio', junior: 'Júnior', mid: 'Pleno', senior: 'Sênior', expert: 'Especialista',
+  intern: 'Estágio', junior: 'Júnior', mid: 'Pleno', senior: 'Sênior', expert: 'Especialista', manager: 'Gestão',
 };
 let _discLevels = [];
 let _discLevelUnknown = true;

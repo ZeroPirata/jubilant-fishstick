@@ -14,9 +14,13 @@ const (
 	LevelMid    = "mid"
 	LevelSenior = "senior"
 	LevelExpert = "expert"
+	// LevelManager: cargos de gestão (gerente, diretor, head, coordenador...). Não é
+	// um degrau acima de especialista, é outra trilha; fica separado para quem procura
+	// vaga técnica poder deixar de fora.
+	LevelManager = "manager"
 )
 
-var SeniorityLevels = []string{LevelIntern, LevelJunior, LevelMid, LevelSenior, LevelExpert}
+var SeniorityLevels = []string{LevelIntern, LevelJunior, LevelMid, LevelSenior, LevelExpert, LevelManager}
 
 // Marcadores em minúsculas e sem acento, procurados como palavra inteira. Ficaram de
 // fora os que dão falso positivo demais: "mid" sozinho ("mid-market") e "specialist"
@@ -31,6 +35,10 @@ var seniorityMarkers = []struct {
 	{LevelMid, []string{"pleno", "plena", "pl", "mid-level", "mid level", "mid-senior", "ii"}},
 	{LevelSenior, []string{"senior", "sr", "mid-senior", "iii"}},
 	{LevelExpert, []string{"especialista", "staff", "principal", "lead", "leader", "lider", "tech lead", "arquiteto", "arquiteta", "architect"}},
+	// "Product/Account Manager" entram aqui também: não gerem pessoas, mas também não
+	// são vaga de entrada. "Head" é palavra inteira ("headless" não casa).
+	{LevelManager, []string{"manager", "gerente", "gestor", "gestora", "director", "diretor", "diretora", "head", "vp", "vice president", "vice-president",
+		"coordenador", "coordenadora", "coordinator", "supervisor", "supervisora", "superintendente", "cto", "cio", "ciso", "ceo"}},
 }
 
 // romanLevel: "Analista I", "Specialist I | Investimentos", "Engineer IV". O numeral

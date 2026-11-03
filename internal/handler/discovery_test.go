@@ -233,7 +233,7 @@ func TestFilterDiscovered_Nivel(t *testing.T) {
 		counts[f.Name] = f.Count
 		order = append(order, f.Name)
 	}
-	names(t, order, "intern", "junior", "mid", "senior", "expert", "unknown")
+	names(t, order, "intern", "junior", "mid", "senior", "expert", "manager", "unknown")
 	if counts["mid"] != 2 || counts["senior"] != 2 || counts["unknown"] != 1 {
 		t.Errorf("contagem de níveis: %v", counts)
 	}

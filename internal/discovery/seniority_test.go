@@ -21,7 +21,7 @@ func TestClassifySeniority(t *testing.T) {
 		"Desenvolvedor Back-end":                {},
 		"Mid-market Account Executive":          {},
 		"Customer Support Specialist":           {},
-		"Senior Leadership Coordinator":         {LevelSenior},
+		"Senior Leadership Coordinator":         {LevelSenior, LevelManager},
 		"Desenvolvedora Python Júnior (Remoto)": {LevelJunior},
 		"Arquiteto de Soluções Cloud":           {LevelExpert},
 		// Numeral romano: I = júnior, IV = sênior.
@@ -33,6 +33,15 @@ func TestClassifySeniority(t *testing.T) {
 		"Software Engineer IV (Remote)":             {LevelSenior},
 		"I Love Code Engineer":                      {},
 		"Site Reliability Engineering (SRE)":        {},
+		// Gestão.
+		"Engineering Manager":                 {LevelManager},
+		"Gerente de Projetos de TI":           {LevelManager},
+		"Head of Data":                        {LevelManager},
+		"Coordenador SRE e DevOps":            {LevelManager},
+		"Associate Director of Sales - LATAM": {LevelManager},
+		"VP of Engineering":                   {LevelManager},
+		"Senior Product Manager":              {LevelSenior, LevelManager},
+		"Desenvolvedor Headless CMS":          {},
 	}
 	for title, want := range cases {
 		if got := ClassifySeniority(title); !slices.Equal(got, want) {
