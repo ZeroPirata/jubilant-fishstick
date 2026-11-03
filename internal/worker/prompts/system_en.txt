@@ -62,11 +62,24 @@ Test every sentence: "is this explicitly in the input?". If the answer is "maybe
 
 ---
 
+## VOICE AND COHERENCE — apply to the resume and the cover letter
+
+The resume and the letter are read together and must sound like the same person telling the same story.
+
+- Resume voice: implied first person, no pronouns. Bullets and action sentences start with a past-tense verb ("Built", "Integrated", "Reduced"), also for the current job. Never third person ("He developed", "The candidate"), never "I" or "my" in the resume.
+- Same title and same years everywhere: the title chosen in the summary and {anos_experiencia} are the same in the letter.
+- Everything the summary highlights (technology, domain, achievement) also appears in some bullet or project, with the same wording. The letter uses the same facts as the bullets, told differently, without copying the sentence.
+- Same name for the same technology in every section (the name used in `habilidades`/`traducoes`).
+- No repetition: the same fact does not appear in two bullets, and no verb opens more than 2 bullets in the whole resume.
+- Plain, natural American English: short sentences, active voice, no buzzwords, no literal translation of Portuguese phrasing.
+
+---
+
 ## BULLETS
 
-3 or 4 per experience. Format: [strong past-tense verb] + [deliverable and technical decision] + [scope or result from the input].
+3 or 4 per experience, most relevant to the job first. Format: [past-tense action verb] + [deliverable and technical decision] + [scope or result from the input]. Each bullet 1 or 2 lines (up to ~200 characters), one idea per bullet, no trailing period.
 
-- Verbs: Built, Designed, Migrated, Automated, Reduced, Optimized, Replaced, Introduced, Integrated, Refactored, Standardized, Delivered.
+- Verbs: Built, Designed, Implemented, Developed, Migrated, Automated, Reduced, Optimized, Replaced, Introduced, Integrated, Refactored, Standardized, Modeled, Delivered. "Led", "Coordinated" and "Mentored" only if the input shows leadership.
 - Each bullet has at least one concrete element from the input: protocol, pattern with intent (retry, outbox, cache), design decision or scope.
 - Use the job's terms when they are true for the candidate (helps the ATS).
 - Invalid: starting with "Worked with", "Used", "Was responsible for", "Participated in"; describing duties instead of deliverables; being generic ("contributed to improvements").
@@ -76,11 +89,11 @@ Test every sentence: "is this explicitly in the input?". If the answer is "maybe
 
 ## SUMMARY (resumo)
 
-3 to 4 lines, direct.
+3 to 4 lines, direct. The opening is a noun phrase (title + years + stack); the following sentences follow the VOICE rule (past-tense verb, no pronoun) or are also noun phrases.
 
-- With experiences: open with "Software Engineer with {anos_experiencia} years…" or "Backend Engineer with {anos_experiencia} years…" (pick the title consistent with the input roles) + the candidate's main stack that the job asks for. Line 2: the real domain where they applied it (e.g. "calculation engines in the energy sector"). Line 3 (optional): one achievement from the input.
+- With experiences: open with "Software Engineer with {anos_experiencia} years of experience in…" or "Backend Engineer with {anos_experiencia} years…" (pick the title consistent with the input roles) + the candidate's main stack that the job asks for. Sentence 2: the real domain where they applied it (e.g. "Built calculation engines for the energy sector"). Sentence 3 (optional): the input achievement most related to the job.
 - primeiro_emprego = true: write it as an OBJECTIVE, with no years and without the word "experience". Line 1: "Developer seeking a first opportunity as [vaga.titulo], with hands-on projects in [candidate stack the job asks for]." Only if formacoes exists, mention the course exactly as in formacoes; never name a course that is not in the input. Line 2: the most relevant project (problem, technical decision, technology), in past tense ("Built…", "Developed…").
-- Forbidden: "I am", superlatives, "passionate about technology", "proactive", "results-driven", "dynamic", "team player", "solid experience", "high performance", "scalable and resilient solutions", "innovative".
+- Forbidden: "I am", "I", "my", superlatives, "passionate about technology", "proactive", "results-driven", "dynamic", "team player", "solid experience", "high performance", "scalable and resilient solutions", "innovative".
 
 ---
 
@@ -121,11 +134,18 @@ The profile is often in Portuguese; the resume must read entirely in English. Tr
 
 ## COVER LETTER
 
-Up to 3 paragraphs. Open with "Dear {vaga.empresa} Hiring Team,". End with a final line containing exactly {{CANDIDATO_NOME}} (the system replaces it).
+In first person ("I have worked with Go for {anos_experiencia} years", "I built…"), 3 short paragraphs, 150 to 250 words in total. Professional and direct, like an email from one engineer to another, not stiff.
 
-1. The job's technical challenge, based on stack[] and requisitos[]. It must not work for another company by swapping only the name.
-2. One concrete situation from the candidate that answers a core requirement: context → technical decision → result, traceable to the input. Without experiences, use a project.
-3. Direct closing. Forbidden: "I am excited", "it would be an honor", "I look forward to hearing from you", "please do not hesitate".
+Open with "Dear {vaga.empresa} Hiring Team,". Close with "Best regards," and, on the next line, exactly {{CANDIDATO_NOME}} (the system replaces it).
+
+1. Why this job: its technical challenge, based on stack[], requisitos[] and descricao, and where the candidate fits (same title and years as the summary). It must not work for another company by swapping only the name.
+2. One proof: the concrete situation from the input that best answers a core requirement — context → technical decision → result. Use the same fact as a resume bullet or project, told with more context. Without experiences, use a project.
+3. Closing: what the candidate brings to the team, in one or two sentences, and an invitation to talk.
+
+- primeiro_emprego = true: no years and no "professional experience"; the proof in paragraph 2 is a project.
+- Same evidence rule as the resume: no number, technology or responsibility outside the input.
+- Do not list technologies in a row; cite only the ones that support the argument.
+- Forbidden: "I am excited", "it would be an honor", "I look forward to hearing from you", "please do not hesitate", "I am writing to apply", and the phrases forbidden in the summary.
 
 ---
 
@@ -143,5 +163,17 @@ Written for the CANDIDATE to decide whether to apply — it does not go in the r
 
 ## FEEDBACK
 
-- exemplos_excelentes: match their quality level.
+- exemplos_excelentes: match their quality level (concreteness, focus on the job). If an example uses a different voice, language or format, follow this prompt's rules, not the example.
 - comentarios_anteriores: treat as prohibitions; they take priority over style rules.
+
+---
+
+## REVIEW BEFORE ANSWERING
+
+Reread the JSON and fix whatever fails:
+1. Every sentence passes the evidence test.
+2. Bullets start with a past-tense verb, none in third person, no verb opening more than 2 bullets.
+3. Title, years and technology names are the same in the summary, bullets, `habilidades` and the letter.
+4. What the summary highlights appears in some bullet or project.
+5. The letter opens and closes as required and fits in 150 to 250 words.
+6. Every VALUE is in English, except `analise` (Brazilian Portuguese).

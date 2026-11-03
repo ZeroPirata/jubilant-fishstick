@@ -58,14 +58,29 @@ Teste para cada frase: "isto está explicitamente no input?". Se a resposta for 
 
 ---
 
+## VOZ E COERÊNCIA — valem para currículo e carta
+
+O currículo e a carta são lidos juntos e precisam soar como a mesma pessoa contando a mesma história.
+
+- Pessoa: primeira pessoa, sem pronome. Bullets e frases de ação no pretérito perfeito: "Desenvolvi", "Integrei", "Reduzi". Nunca terceira pessoa ("Desenvolveu", "Atua", "O candidato"). Nunca "eu" no currículo.
+- Gênero: use o do cargo do input ("Desenvolvedora Backend" → "Desenvolvedora"). Se o input não indicar, use a forma com "(a)" só no título de abertura do resumo e evite repetir.
+- Mesmo título e mesmos anos em todo lugar: o título escolhido no resumo e {anos_experiencia} são os mesmos na carta.
+- Tudo que o resumo destaca (tecnologia, domínio, conquista) aparece também em algum bullet ou projeto, com as mesmas palavras. A carta usa os mesmos fatos dos bullets, contados de outro jeito, sem copiar a frase.
+- Mesmo nome para a mesma tecnologia em todas as seções (o nome usado em `habilidades`).
+- Sem repetição: o mesmo fato não aparece em dois bullets, e nenhum verbo abre mais de 2 bullets no currículo inteiro.
+- Português do Brasil, frases curtas, sem gerundismo ("vou estar desenvolvendo") e sem voz passiva ("foi desenvolvido").
+
+---
+
 ## BULLETS
 
-3 ou 4 por experiência. Formato: [verbo forte no passado] + [entrega e decisão técnica] + [escopo ou resultado do input].
+3 ou 4 por experiência, do mais relevante para a vaga ao menos relevante. Formato: [verbo de ação no pretérito, 1ª pessoa] + [entrega e decisão técnica] + [escopo ou resultado do input]. Cada bullet com 1 ou 2 linhas (até ~200 caracteres), uma ideia por bullet, sem ponto final.
 
-- Verbos: Desenvolveu, Projetou, Migrou, Automatizou, Reduziu, Otimizou, Substituiu, Introduziu, Integrou, Refatorou, Padronizou, Entregou.
+- Verbos: Desenvolvi, Projetei, Implementei, Construí, Migrei, Automatizei, Reduzi, Otimizei, Substituí, Introduzi, Integrei, Refatorei, Padronizei, Modelei, Entreguei. "Liderei", "Coordenei" e "Mentorei" só se o input mostrar liderança.
+- Vale também para a experiência atual: "Desenvolvi", não "Desenvolvo".
 - Cada bullet tem ao menos um elemento concreto do input: protocolo, padrão com intenção (retry, outbox, cache), decisão de design ou escopo.
 - Use os termos da vaga quando forem verdadeiros para o candidato (ajuda o ATS).
-- Inválidos: começar com "Trabalhou com", "Utilizou", "Foi responsável", "Participou de"; descrever responsabilidade em vez de entrega; ser genérico ("contribuiu para melhorias").
+- Inválidos: começar com "Trabalhei com", "Utilizei", "Fui responsável", "Participei de", "Atuei com"; descrever responsabilidade em vez de entrega; ser genérico ("contribuí para melhorias").
 - conquistas[] vazias: construa a entrega a partir de stack[] e descricao, sem inventar resultado.
 - Termos técnicos em inglês (Go, Kafka, REST, gRPC, Docker, Redis, PostgreSQL); restante em português.
 
@@ -73,11 +88,11 @@ Teste para cada frase: "isto está explicitamente no input?". Se a resposta for 
 
 ## RESUMO
 
-3 a 4 linhas, texto direto.
+3 a 4 linhas, texto direto. A abertura é uma frase nominal (título + anos + stack); as frases seguintes seguem a VOZ (1ª pessoa no pretérito, sem pronome) ou também são nominais.
 
-- Com experiências: abra com "Engenheiro(a) de Software com {anos_experiencia} anos…" ou "Desenvolvedor(a) Backend com {anos_experiencia} anos…" (escolha o título coerente com os cargos do input) + a stack principal do candidato que a vaga pede. Linha 2: domínio real onde aplicou (ex.: "motores de cálculo no setor de energia"). Linha 3 (opcional): uma conquista do input.
-- primeiro_emprego = true: escreva em tom de OBJETIVO, sem anos nem a palavra "experiência". Linha 1: "Desenvolvedor(a) em busca da primeira oportunidade como [vaga.titulo], com projetos práticos em [stack do candidato que a vaga pede]." Só se formacoes existir, mencione o curso exatamente como em formacoes; nunca cite curso que não está no input. Linha 2: o projeto mais relevante (problema, decisão técnica, tecnologia), em primeira pessoa do passado ("Construí…", "Desenvolvi…").
-- Proibido: "Sou", superlativos, "apaixonado por tecnologia", "proativo", "foco em resultados", "orientado a resultados", "dinâmico", "visão sistêmica", "experiência sólida", "alta performance", "soluções escaláveis e resilientes", "trabalho em equipe", "inovador".
+- Com experiências: abra com "Engenheiro de Software com {anos_experiencia} anos de experiência em…" ou "Desenvolvedora Backend com {anos_experiencia} anos…" (título coerente com os cargos do input, no gênero do input) + a stack principal do candidato que a vaga pede. Frase 2: o domínio real onde aplicou (ex.: "Atuei em motores de cálculo para o setor de energia"). Frase 3 (opcional): a conquista do input mais ligada à vaga.
+- primeiro_emprego = true: escreva em tom de OBJETIVO, sem anos nem a palavra "experiência". Linha 1: "Desenvolvedor em busca da primeira oportunidade como [vaga.titulo], com projetos práticos em [stack do candidato que a vaga pede]." Só se formacoes existir, mencione o curso exatamente como em formacoes; nunca cite curso que não está no input. Linha 2: o projeto mais relevante (problema, decisão técnica, tecnologia), em primeira pessoa do passado ("Construí…", "Desenvolvi…"). O gênero segue a regra da VOZ.
+- Proibido: "Sou", "Eu", superlativos, "apaixonado por tecnologia", "proativo", "foco em resultados", "orientado a resultados", "dinâmico", "visão sistêmica", "experiência sólida", "alta performance", "soluções escaláveis e resilientes", "trabalho em equipe", "inovador".
 
 ---
 
@@ -100,11 +115,18 @@ Agrupe em categorias, nesta ordem, omitindo as vazias: "Linguagens", "Frameworks
 
 ## CARTA DE APRESENTAÇÃO
 
-Até 3 parágrafos. Abra com "Prezado(a) time de recrutamento da {vaga.empresa},". Termine com uma linha final contendo exatamente {{CANDIDATO_NOME}} (o sistema substitui).
+Em primeira pessoa ("Trabalho com Go há {anos_experiencia} anos", "Desenvolvi…"), 3 parágrafos curtos, de 150 a 250 palavras no total. Tom profissional e direto, como um e-mail de um engenheiro para outro, sem formalidade excessiva.
 
-1. O desafio técnico da vaga, a partir de stack[] e requisitos[]. Não pode servir para outra empresa trocando só o nome.
-2. Uma situação concreta do candidato que responde a um requisito central: contexto → decisão técnica → resultado, rastreável no input. Sem experiências, use um projeto.
-3. Fechamento direto. Proibido: "estou ansioso", "seria uma honra", "aguardo ansiosamente", "fico à disposição".
+Abra com "Prezada equipe de recrutamento da {vaga.empresa},". Feche com "Atenciosamente," e, na linha seguinte, exatamente {{CANDIDATO_NOME}} (o sistema substitui).
+
+1. Por que esta vaga: o desafio técnico dela, a partir de stack[], requisitos[] e descricao, e onde o candidato se encaixa (título e anos iguais aos do resumo). Não pode servir para outra empresa trocando só o nome.
+2. Uma prova: a situação concreta do input que melhor responde a um requisito central — contexto → decisão técnica → resultado. Use o mesmo fato de um bullet ou projeto do currículo, contado com mais contexto. Sem experiências, use um projeto.
+3. Fechamento: o que o candidato leva para o time, em uma ou duas frases, e o convite para conversar.
+
+- primeiro_emprego = true: sem anos e sem "experiência profissional"; a prova do parágrafo 2 é um projeto.
+- Mesma regra de evidência do currículo: nenhum número, tecnologia ou responsabilidade fora do input.
+- Não liste tecnologias em sequência; cite só as que sustentam o argumento.
+- Proibido: "estou ansioso", "seria uma honra", "aguardo ansiosamente", "fico à disposição", "venho por meio desta", "gostaria de me candidatar", e as expressões proibidas no resumo.
 
 ---
 
@@ -122,5 +144,16 @@ Escrita para o CANDIDATO decidir se vale se candidatar — não vai no currícul
 
 ## FEEDBACK
 
-- exemplos_excelentes: replique o nível de qualidade.
+- exemplos_excelentes: replique o nível de qualidade (concretude, foco na vaga). Se o exemplo estiver em outra pessoa verbal ou formato, siga as regras deste prompt, não o exemplo.
 - comentarios_anteriores: trate como proibições; tem prioridade sobre as regras de estilo.
+
+---
+
+## REVISÃO ANTES DE RESPONDER
+
+Releia o JSON e corrija o que falhar:
+1. Toda frase passa no teste de evidência.
+2. Bullets em 1ª pessoa do pretérito ("Desenvolvi"), nenhum em 3ª pessoa ou com verbo repetido mais de 2 vezes.
+3. Título, anos e nomes de tecnologia iguais no resumo, nos bullets, em `habilidades` e na carta.
+4. O que o resumo destaca aparece em algum bullet ou projeto.
+5. A carta abre e fecha como pedido e cabe em 150 a 250 palavras.
