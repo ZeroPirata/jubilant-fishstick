@@ -116,9 +116,34 @@ async function loadMetrics() {
     const m = parsePrometheus(text);
     renderMetrics(m);
     renderDBMetrics(m);
+    loadWorkerStatus();
     set('metrics-error', '');
   } catch (e) {
     set('metrics-error', 'Erro ao carregar métricas: ' + e.message);
+  }
+}
+
+// Worker: processa a fila de vagas (leitura, IA, PDF). Não tem liga/desliga: pausa
+// sozinho quando todas as IAs da cadeia respondem com rate limit e volta quando o prazo
+// acaba. "Retomar agora" (só master) serve para quando a cota já voltou antes.
+async function loadWorkerStatus() {
+  const box = document.getElementById('m-worker-status');
+  if (!box) return;
+  try {
+    const res = await api.get('/admin/worker');
+    if (!res.ok) throw new Error('status ' + res.status);
+    const secs = (await res.json()).data?.paused_secs || 0;
+    if (secs > 0) {
+      const h = Math.floor(secs / 3600), m = Math.ceil((secs % 3600) / 60);
+      box.innerHTML = `<span class="metric-chip chip-red">Worker pausado por rate limit da IA · volta em ${h}h${m}m</span>
+        ${_isMaster ? '<button class="btn btn-ghost btn-sm" onclick="aiResume()">Retomar agora</button>' : ''}
+        <span class="worker-status-help">As vagas ficam na fila e são processadas quando ele voltar.</span>`;
+    } else {
+      box.innerHTML = `<span class="metric-chip chip-green">Worker ativo</span>
+        <span class="worker-status-help">Processa a fila de vagas. Pausa sozinho se todas as IAs derem rate limit.</span>`;
+    }
+  } catch (e) {
+    box.innerHTML = `<span class="metric-chip chip-muted">Worker: situação indisponível (${escHtml(e.message)})</span>`;
   }
 }
 
@@ -466,10 +491,10 @@ function renderAIMetrics(d, range) {
   const wasOpen = new Set([...failures.querySelectorAll('tr.err-row.open')].map(tr => failKey(_aiFailures[+tr.dataset.i])));
   _aiFailures = d.failures;
   failures.innerHTML = d.failures.length ? d.failures.map((f, i) => `<tr class="err-row" data-i="${i}" onclick="toggleAIFailure(this)" title="Clique para ver o erro completo">
-      <td style="white-space:nowrap" data-label="Quando">${new Date(f.at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+      <td style="white-space:nowrap" data-label="Quando" class="td-sum">${new Date(f.at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
       <td data-label="Finalidade">${AI_PURPOSE_LABELS[f.purpose] || escHtml(f.purpose)}</td>
       <td data-label="Modelo"><code>${escHtml(f.model || f.provider)}</code></td>
-      <td data-label="Tipo"><span class="metric-chip chip-red" style="white-space:nowrap">${escHtml(AI_STATUS_LABELS[f.status] || f.status)}</span><span class="err-chevron">▶</span></td>
+      <td data-label="Tipo" class="td-sum"><span class="metric-chip chip-red" style="white-space:nowrap">${escHtml(AI_STATUS_LABELS[f.status] || f.status)}</span><span class="err-chevron">▶</span></td>
       <td class="rt-num" data-label="Tempo">${fmtMs(f.ms)}</td>
       <td style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${aiEsc(f.error)}" data-label="Erro">${escHtml(f.error)}</td>
     </tr>`).join('') : '<tr><td colspan="6" class="empty">Nenhuma falha no período.</td></tr>';

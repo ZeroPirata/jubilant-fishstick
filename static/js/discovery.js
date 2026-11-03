@@ -42,7 +42,36 @@ function safeHttpUrl(url) {
   return /^https?:\/\//i.test(url || '') ? url : '';
 }
 
+// Preferências e filtros ficam recolhidos no celular (abertos no computador), com um
+// resumo do que está escolhido na linha do título.
+let _discFoldInit = false;
+function initDiscFolds() {
+  if (_discFoldInit) return;
+  _discFoldInit = true;
+  const wide = window.matchMedia('(min-width: 861px)').matches;
+  ['disc-prefs', 'disc-filters-box'].forEach(id => { const d = document.getElementById(id); if (d) d.open = wide; });
+}
+
+function updateDiscFoldSummaries() {
+  const modes = [...document.querySelectorAll('input[name="disc-mode"]:checked')]
+    .map(cb => cb.closest('label').textContent.trim());
+  const cities = splitCsv(document.getElementById('disc-cities')?.value || '');
+  const areas = document.querySelectorAll('#disc-keywords .disc-keyword').length;
+  const parts = [
+    modes.length ? modes.join(', ') : 'qualquer local',
+    cities.length ? `${cities.length} cidade${cities.length > 1 ? 's' : ''}` : '',
+    _discTechs.length ? `${_discTechs.length} tecnologia${_discTechs.length > 1 ? 's' : ''}` : 'skills do perfil',
+    areas ? `${areas} área${areas > 1 ? 's' : ''}` : '',
+  ].filter(Boolean);
+  const p = document.getElementById('disc-prefs-sum');
+  if (p) p.textContent = parts.join(' · ');
+  const n = _discLevels.length + _discFilters.sources.length + _discFilters.skills.length;
+  const f = document.getElementById('disc-filters-sum');
+  if (f) f.textContent = n ? `${n} ativo${n > 1 ? 's' : ''}` : 'nível, plataforma, skills';
+}
+
 function loadDiscovery() {
+  initDiscFolds();
   loadDiscoveryTechCatalog().then(loadDiscoveryPreferences);
   loadDiscoveryKeywords();
   loadDiscoveryJobs();
@@ -118,6 +147,7 @@ function renderDiscTechs() {
       const has = _discTechs.includes(t.name);
       return `<option value="${escDisc(t.name)}"${has ? ' disabled' : ''}>${escDisc(t.name)}${has ? ' ✓' : ''}</option>`;
     }).join('')}</optgroup>`).join('');
+  updateDiscFoldSummaries();
 }
 
 async function addDiscoveryTech(name) {
@@ -277,6 +307,7 @@ async function loadDiscoveryKeywords() {
         <button class="disc-keyword-x" aria-label="Remover ${escDisc(label)}" title="Remover" onclick="deleteDiscoveryKeyword('${escDisc(f.id)}', this)">✕</button>
       </span>`;
     }).join('');
+    updateDiscFoldSummaries();
   } catch (_) {
     box.innerHTML = '<span class="card-note" style="margin:0">Erro ao carregar as áreas.</span>';
   }
@@ -419,6 +450,7 @@ async function loadDiscoveryJobs() {
     renderDiscLevels((json.facets || {}).levels || []);
     renderDiscoveryPagination(meta.total ?? 0, meta.cursor ?? _discPg.offset, meta.size ?? _discPg.size);
     renderDiscDismissedToggle(json.dismissed_count ?? 0);
+    updateDiscFoldSummaries();
 
     if (!jobs.length && _discShowDismissed) {
       tbody.innerHTML = '<tr><td colspan="5" class="empty">Nenhuma vaga dispensada.</td></tr>';

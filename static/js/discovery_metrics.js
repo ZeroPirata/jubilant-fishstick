@@ -216,6 +216,8 @@ function dmSourceResult(s) {
 
 function renderDmSources(sources) {
   const tbody = document.getElementById('dm-sources');
+  // A atualização automática redesenha a tabela: mantém abertos os cartões abertos.
+  const wasOpen = new Set([...tbody.querySelectorAll('tr.open')].map(tr => tr.dataset.key));
   if (!sources.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhum site registrado.</td></tr>'; return; }
 
   tbody.innerHTML = sources.map(s => {
@@ -232,10 +234,10 @@ function renderDmSources(sources) {
       : s.boards === 0 ? '<div class="disc-status dm-no-boards">nenhuma empresa cadastrada: adicione em Busca de vagas → Empresas nos ATS</div>'
       : `<div class="disc-status">${s.boards} empresa${s.boards > 1 ? 's' : ''}</div>`;
     return `
-      <tr>
-        <td data-label="Site"><b>${escDisc(dadmSourceName(s.name))}</b>${s.kind ? `<div class="dadm-kind">${DADM_KINDS[s.kind] || ''}</div>` : ''}</td>
+      <tr data-key="${escDisc(s.name)}"${wasOpen.has(s.name) ? ' class="open"' : ''}>
+        <td data-label="Site" class="td-sum"><b>${escDisc(dadmSourceName(s.name))}</b>${s.kind ? `<div class="dadm-kind">${DADM_KINDS[s.kind] || ''}</div>` : ''}</td>
         <td data-label="Situação">${state}${boards}</td>
-        <td data-label="Última varredura">${last}</td>
+        <td data-label="Última varredura" class="td-sum">${last}</td>
         <td data-label="Vagas ativas">${s.jobs_active} <span style="color:var(--muted)">/ ${s.jobs_total}</span>${newJobs}</td>
         <td data-label="Último sucesso">${s.last_success_at ? relativeTime(s.last_success_at) : '—'}</td>
         <td data-label="Último erro">${s.last_error ? `<div class="dadm-err">${escDisc(s.last_error)}</div>` : '—'}</td>
@@ -245,6 +247,7 @@ function renderDmSources(sources) {
 
 function renderDmRuns(runs) {
   const tbody = document.getElementById('dm-runs');
+  const wasOpen = new Set([...tbody.querySelectorAll('tr.open')].map(tr => tr.dataset.key));
   if (!runs.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhuma varredura ainda.</td></tr>'; return; }
 
   tbody.innerHTML = runs.map(r => {
@@ -254,13 +257,13 @@ function renderDmRuns(runs) {
       return `<span class="${cls}" title="${escDisc(tip)}">${escDisc(dadmSourceName(s.source))} ${dmSourceResult(s)}</span>`;
     }).join(' ') || '<span style="color:var(--muted)">—</span>';
     return `
-      <tr>
-        <td data-label="Início">${fmtDate(r.started_at)}</td>
+      <tr data-key="${escDisc(r.started_at)}"${wasOpen.has(r.started_at) ? ' class="open"' : ''}>
+        <td data-label="Início" class="td-sum">${fmtDate(r.started_at)}</td>
         <td data-label="Gatilho">${DM_TRIGGERS[r.trigger] || escDisc(r.trigger)}${r.partial ? ' <span class="badge badge-mid" title="Só parte dos sites ou só o catálogo: não conta para o agendamento">parcial</span>' : ''}</td>
-        <td data-label="Status">${dmStatusBadge(r.status)}</td>
+        <td data-label="Status" class="td-sum">${dmStatusBadge(r.status)}</td>
         <td data-label="Duração">${r.status === 'running' ? dmSecs((Date.now() - new Date(r.started_at)) / 1000) + '…' : dmDuration(r.started_at, r.finished_at)}</td>
         <td data-label="Termos">${r.keywords}</td>
-        <td data-label="Vagas"><b>${r.jobs_new}</b> novas <span style="color:var(--muted)">· ${r.jobs_saved} lidas${r.jobs_removed ? ` · −${r.jobs_removed}` : ''}</span></td>
+        <td data-label="Vagas" class="td-sum"><b>${r.jobs_new}</b> novas <span style="color:var(--muted)">· ${r.jobs_saved} lidas${r.jobs_removed ? ` · −${r.jobs_removed}` : ''}</span></td>
         <td data-label="Sites">${sources}</td>
       </tr>`;
   }).join('');

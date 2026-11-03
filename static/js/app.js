@@ -256,3 +256,23 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
   for (const l of Object.values(_live)) if (l.timer && !l.paused) l.fn();
 });
+
+// Cartões recolhidos no celular (tabelas .cards-collapse): tocar na linha abre o resto.
+// Linhas com o próprio onclick (abrem um detalhe embaixo) já cuidam da classe open.
+document.addEventListener('click', ev => {
+  const tr = ev.target.closest('table.cards-collapse > tbody > tr');
+  if (!tr || tr.hasAttribute('onclick') || !tr.querySelector(':scope > td.td-sum')) return;
+  if (ev.target.closest('a, button, input, select, label, summary')) return;
+  if (!window.matchMedia('(max-width: 640px)').matches) return;
+  tr.classList.toggle('open');
+});
+
+// Botão "?": mostra/esconde o texto de ajuda do cartão (ou da seção) onde está.
+function toggleHelp(btn) {
+  const scope = btn.closest('.form-card') || btn.closest('section');
+  const help = scope && scope.querySelector('.help-text');
+  if (!help) return;
+  help.hidden = !help.hidden;
+  btn.setAttribute('aria-expanded', !help.hidden);
+  btn.classList.toggle('on', !help.hidden);
+}

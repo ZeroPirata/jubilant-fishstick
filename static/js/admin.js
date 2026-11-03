@@ -82,10 +82,10 @@ function renderAdminImports() {
     const chain = steps.join('<span class="imp-chain-arrow">→</span>') || '<span style="color:var(--muted)">—</span>';
     const secs = importSecs(it);
     return `<tr class="err-row" data-id="${aiEsc(it.id)}" onclick="toggleImportDetail(this)" title="Clique para ver as tentativas">
-      <td data-label="Quando">${new Date(it.started_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+      <td data-label="Quando" class="td-sum">${new Date(it.started_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
       <td data-label="Usuário">${aiEsc(it.user_email || '—')}</td>
       <td data-label="Arquivo"><span><span class="mono">${aiEsc((it.file_kind || '?').toUpperCase())}</span> · ${fmtBytes(it.file_size)}</span></td>
-      <td data-label="Resultado"><span class="metric-chip ${cls}">${label}</span>${it.applied_at ? ' <span class="metric-chip chip-green" title="A pessoa salvou no perfil">salva no perfil</span>' : ''}<span class="err-chevron">▶</span></td>
+      <td data-label="Resultado" class="td-sum"><span class="metric-chip ${cls}">${label}</span>${it.applied_at ? ' <span class="metric-chip chip-green" title="A pessoa salvou no perfil">salva no perfil</span>' : ''}<span class="err-chevron">▶</span></td>
       <td data-label="Tentativas"><div class="imp-chain">${chain}</div></td>
       <td class="rt-num" data-label="Duração">${secs == null ? '—' : fmtDur(secs)}</td>
     </tr>`;
@@ -183,12 +183,12 @@ function renderAdminErrors() {
     const when   = new Date(r.CreatedAt).toLocaleString('pt-BR');
     const msg    = `<span class="truncate" style="max-width:300px;display:inline-block">${aiEsc(r.ErrorMessage)}</span>`;
     return `<tr class="err-row" data-i="${start + i}" onclick="toggleErrorDetail(this)" title="Clique para ver a mensagem completa">
-      <td data-label="Tipo">${badge}<span class="err-chevron">▶</span></td>
-      <td data-label="URL">${url}</td>
-      <td data-label="Mensagem">${msg}</td>
-      <td data-label="Job">${jobID}</td>
-      <td style="color:var(--muted);font-size:12px" data-label="Usuário">${aiEsc(r.UserEmail ?? '—')}</td>
-      <td style="color:var(--muted);font-size:12px;white-space:nowrap" data-label="Quando">${when}</td>
+      <td data-label="Tipo" class="td-sum">${badge}<span class="err-chevron">▶</span></td>
+      <td data-label="URL" class="td-dup">${url}</td>
+      <td data-label="Mensagem" class="td-dup">${msg}</td>
+      <td data-label="Job" class="td-dup">${jobID}</td>
+      <td style="color:var(--muted);font-size:12px" data-label="Usuário" class="td-dup">${aiEsc(r.UserEmail ?? '—')}</td>
+      <td style="color:var(--muted);font-size:12px;white-space:nowrap" data-label="Quando" class="td-sum">${when}</td>
     </tr>`;
   }).join('');
 }
@@ -385,9 +385,9 @@ function renderAIStatus(pausedSecs) {
     const h = Math.floor(pausedSecs / 3600), m = Math.ceil((pausedSecs % 3600) / 60);
     parts.push(`<span class="metric-chip chip-red">Worker pausado por rate limit (faltam ${h}h${m}m)</span>
       <button class="btn btn-ghost btn-sm" onclick="aiResume()">Retomar agora</button>`);
-  } else {
-    parts.push(`<span class="metric-chip chip-green">Worker ativo</span>`);
   }
+  // Com o worker rodando normalmente não há nada a dizer aqui: a situação dele fica em
+  // Métricas → Sistema. A pausa aparece também aqui porque costuma vir das API keys.
   if (!_aiEncryption) {
     parts.push(`<span class="metric-chip chip-yellow">SETTINGS_ENCRYPTION_KEY não configurada: não é possível salvar API keys</span>`);
   }
@@ -580,7 +580,8 @@ async function aiResume() {
     const res = await api.post('/admin/ai-settings/resume', {});
     if (!res.ok) throw new Error('status ' + res.status);
     toast('Worker retomado.');
-    loadAISettings();
+    if (document.getElementById('ai-status')) loadAISettings();
+    if (typeof loadWorkerStatus === 'function') loadWorkerStatus();
   } catch (e) {
     toast('Erro: ' + e.message, 'error');
   }

@@ -99,6 +99,15 @@ func (h *AISettingsHandler) Save(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// WorkerStatus: o worker não tem liga/desliga; ele pausa sozinho quando a IA responde
+// com rate limit (todas as opções da cadeia esgotadas) e volta quando o prazo acaba.
+// paused_secs > 0 = pausado por mais esse tempo. Mostrado em Métricas → Sistema.
+func (h *AISettingsHandler) WorkerStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"paused_secs": int(h.Cache.RateLimitRemaining(r.Context()).Seconds()),
+	})
+}
+
 // ResumeWorker tira o worker da pausa de rate limit sem mudar a configuração
 // (ex.: a cota free do provider já voltou).
 func (h *AISettingsHandler) ResumeWorker(w http.ResponseWriter, r *http.Request) {

@@ -278,7 +278,7 @@ Base `/api/v1`. Rotas protegidas exigem `Authorization: Bearer <jwt>`; as respos
 
 **Filtros e segurança:** `GET/POST /filters`, `DELETE /filters/{id}` · `GET /security/events`
 
-**Admin** (`/admin/...`): `errors`, `users`, `PATCH users/{id}`, `imports`, `metrics/ai`, `metrics/users`, `metrics/raw`, `metrics/discovery`, `discovery/settings` (GET/PUT), `discovery/run`, `discovery/boards/check`, `debug/gc`; master: `ai-settings` (GET/PUT), `ai-settings/resume`, `PATCH users/{id}/master`.
+**Admin** (`/admin/...`): `errors`, `users`, `PATCH users/{id}`, `imports`, `metrics/ai`, `metrics/users`, `metrics/raw`, `metrics/discovery`, `worker` (pausa por rate limit), `discovery/settings` (GET/PUT), `discovery/run`, `discovery/boards/check`, `debug/gc`; master: `ai-settings` (GET/PUT), `ai-settings/resume`, `PATCH users/{id}/master`.
 
 ---
 

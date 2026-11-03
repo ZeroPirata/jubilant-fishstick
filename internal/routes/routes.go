@@ -109,6 +109,8 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	adminMux.Handle("PUT /ai-settings",             master(http.HandlerFunc(aiH.Save)))
 	adminMux.Handle("POST /ai-settings/resume",     master(http.HandlerFunc(aiH.ResumeWorker)))
 	adminMux.Handle("PATCH /users/{id}/master",     master(http.HandlerFunc(aiH.SetMaster)))
+	// Situação do worker (pausa por rate limit): qualquer admin vê; retomar é do master.
+	adminMux.HandleFunc("GET /worker", aiH.WorkerStatus)
 	// Força coleta de lixo (botão no painel de métricas). Só admin: forçar GC em
 	// sequência pesa no servidor.
 	adminMux.HandleFunc("POST /debug/gc", func(w http.ResponseWriter, r *http.Request) {

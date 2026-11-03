@@ -283,6 +283,8 @@
       </div>
 
       <div id="metrics-view-sistema" class="hidden">
+      <!-- Situação do worker: não tem liga/desliga; pausa sozinho por rate limit da IA -->
+      <div id="m-worker-status" class="worker-status"></div>
 
       <!-- Linha 1: 4 stat cards -->
       <div class="metrics-grid">
@@ -493,7 +495,7 @@
         <div class="metric-card">
           <div data-domain="ia" class="metric-card-title">Falhas recentes</div>
           <div class="table-wrap" style="margin:0">
-            <table class="routes-table table-cards">
+            <table class="routes-table table-cards cards-collapse">
               <thead><tr><th>Quando</th><th>Finalidade</th><th>Modelo</th><th>Tipo</th><th class="rt-num">Tempo</th><th>Erro</th></tr></thead>
               <tbody id="ai-failures-body"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
             </table>
@@ -517,7 +519,7 @@
           <div class="panel-head"><div class="metric-card-title" style="margin:0">Sites</div>
             <button class="btn-more" onclick="goToDiscoverySettings()">configurar →</button></div>
           <div class="table-wrap" style="margin:0">
-            <table class="routes-table table-cards table-cards-flow">
+            <table class="routes-table table-cards table-cards-flow cards-collapse">
               <thead><tr><th>Site</th><th>Situação</th><th>Última varredura</th><th>Vagas ativas</th><th>Último sucesso</th><th>Último erro</th></tr></thead>
               <tbody id="dm-sources"></tbody>
             </table>
@@ -532,7 +534,7 @@
         <div class="metric-card">
           <div class="metric-card-title">Últimas varreduras</div>
           <div class="table-wrap" style="margin:0">
-            <table class="routes-table table-cards table-cards-flow">
+            <table class="routes-table table-cards table-cards-flow cards-collapse">
               <thead><tr><th>Início</th><th>Gatilho</th><th>Status</th><th>Duração</th><th>Termos</th><th>Vagas</th><th>Sites</th></tr></thead>
               <tbody id="dm-runs"><tr><td colspan="7" class="empty">Carregando...</td></tr></tbody>
             </table>
@@ -672,17 +674,25 @@
     <!-- ─── DESCOBRIR ─── -->
     <section id="tab-descobrir" data-tab>
       <div class="section-header">
-        <h2>Descobrir vagas</h2>
+        <h2>Descobrir vagas <button type="button" class="help-q" onclick="toggleHelp(this)" aria-label="O que é isto?" aria-expanded="false" title="O que é isto?">?</button></h2>
         <div class="toolbar" style="margin:0">
           <span class="disc-status" id="disc-status"></span>
           <button class="btn btn-primary" id="btn-disc-refresh" onclick="refreshDiscovery()">Buscar novas vagas</button>
         </div>
       </div>
 
+      <div class="card-note help-text disc-help" hidden>
+        <p>O Descobrir mostra vagas de tecnologia lidas de sites públicos, atualizadas sozinhas a cada 12h, <b>da mais compatível com o seu perfil para a menos</b>: "86% da stack" quer dizer quanto do que a vaga pede você cobre, pesando o nível de cada skill.</p>
+        <p><b>Gerar currículo</b> manda a vaga para a aba Vagas e monta o currículo. <b>Dispensar</b> esconde a vaga só para você (ela fica em "Dispensadas"). Quando a mesma vaga está em mais de um site, aparece uma vez com "também em: …".</p>
+        <p>O sino no topo avisa das vagas novas com compatibilidade alta.</p>
+      </div>
+
+      <details class="disc-fold" id="disc-prefs">
+      <summary><span class="disc-fold-title">Preferências da busca</span><span class="disc-fold-sum" id="disc-prefs-sum"></span></summary>
       <div class="disc-stack">
       <div class="form-card">
-        <p class="card-eyebrow">Local de interesse</p>
-        <p class="card-note">Filtra as vagas já encontradas, na hora. Vaga remota aparece de qualquer lugar; as cidades valem para híbrida e presencial. Exterior traz vagas remotas de empresas de fora que aceitam candidatos no Brasil. Sem nada marcado, mostra tudo.</p>
+        <p class="card-eyebrow">Local de interesse <button type="button" class="help-q" onclick="toggleHelp(this)" aria-label="O que é isto?" aria-expanded="false" title="O que é isto?">?</button></p>
+        <p class="card-note help-text" hidden>Filtra as vagas já encontradas, na hora. Vaga remota aparece de qualquer lugar; as cidades valem para híbrida e presencial. Exterior traz vagas remotas de empresas de fora que aceitam candidatos no Brasil. Sem nada marcado, mostra tudo.</p>
         <div class="disc-location">
           <div class="disc-modes">
             <label class="field-check"><input type="checkbox" name="disc-mode" value="remote" onchange="saveDiscoveryPreferences()" /> Remoto</label>
@@ -696,8 +706,8 @@
       </div>
 
       <div class="form-card">
-        <p class="card-eyebrow">Tecnologias de interesse</p>
-        <p class="card-note">Escolha linguagens e ferramentas: a lista passa a mostrar as vagas que citam qualquer uma delas, mesmo fora do seu perfil (“golang” e “go” contam como Go). Elas também entram na busca dos sites. Sem nenhuma escolhida, a lista usa as skills do seu perfil. As vagas vêm ordenadas pela compatibilidade com o seu perfil: quanto da stack da vaga você cobre.</p>
+        <p class="card-eyebrow">Tecnologias de interesse <button type="button" class="help-q" onclick="toggleHelp(this)" aria-label="O que é isto?" aria-expanded="false" title="O que é isto?">?</button></p>
+        <p class="card-note help-text" hidden>Escolha linguagens e ferramentas: a lista passa a mostrar as vagas que citam qualquer uma delas, mesmo fora do seu perfil (“golang” e “go” contam como Go). Elas também entram na busca dos sites. Sem nenhuma escolhida, a lista usa as skills do seu perfil. As vagas vêm ordenadas pela compatibilidade com o seu perfil: quanto da stack da vaga você cobre.</p>
         <div class="disc-keywords" id="disc-techs"></div>
         <div class="toolbar disc-area-add" style="margin:10px 0 0">
           <select id="disc-tech-select" aria-label="Tecnologia para adicionar"></select>
@@ -706,8 +716,8 @@
       </div>
 
       <div class="form-card">
-        <p class="card-eyebrow">Outras áreas</p>
-        <p class="card-note">O catálogo já traz vagas de tecnologia, atualizadas sozinhas a cada 12h. Se a sua área não aparece (RH, administração...), escolha ela na lista: ela é buscada nos sites e entra no catálogo. "Buscar novas vagas" refaz essa busca.</p>
+        <p class="card-eyebrow">Outras áreas <button type="button" class="help-q" onclick="toggleHelp(this)" aria-label="O que é isto?" aria-expanded="false" title="O que é isto?">?</button></p>
+        <p class="card-note help-text" hidden>O catálogo já traz vagas de tecnologia, atualizadas sozinhas a cada 12h. Se a sua área não aparece (RH, administração...), escolha ela na lista: ela é buscada nos sites e entra no catálogo. "Buscar novas vagas" refaz essa busca.</p>
         <div class="disc-keywords" id="disc-keywords"></div>
         <div class="toolbar disc-area-add" style="margin:10px 0 0">
           <select id="disc-area-select" onchange="discAreaChanged()" aria-label="Área para adicionar"></select>
@@ -717,7 +727,10 @@
         </div>
       </div>
       </div>
+      </details>
 
+      <details class="disc-fold" id="disc-filters-box">
+      <summary><span class="disc-fold-title">Filtros</span><span class="disc-fold-sum" id="disc-filters-sum"></span></summary>
       <div class="disc-filters">
         <div class="disc-filter-row">
           <span class="disc-filter-label">Nível</span>
@@ -736,6 +749,7 @@
           <div class="disc-chips" id="disc-skill-chips"></div>
         </div>
       </div>
+      </details>
 
       <div id="disc-skills-note" class="banner banner-warn hidden">
         <span class="banner-icon">⚠</span>
@@ -1117,7 +1131,7 @@
           <span id="admin-errors-count" style="color:var(--muted);font-size:12px;margin-left:auto"></span>
         </div>
         <div class="table-wrap">
-          <table class="table-cards">
+          <table class="table-cards cards-collapse">
             <thead>
               <tr>
                 <th>Tipo</th>
@@ -1242,7 +1256,7 @@
           <button class="live-badge" id="imports-live" onclick="liveToggle('imports')" style="margin-left:auto"></button>
         </div>
         <div class="table-wrap">
-          <table class="table-cards">
+          <table class="table-cards cards-collapse">
             <thead>
               <tr><th>Quando</th><th>Usuário</th><th>Arquivo</th><th>Resultado</th><th>Tentativas</th><th class="rt-num">Duração</th></tr>
             </thead>
