@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -18,8 +19,9 @@ const (
 var SeniorityLevels = []string{LevelIntern, LevelJunior, LevelMid, LevelSenior, LevelExpert}
 
 // Marcadores em minúsculas e sem acento, procurados como palavra inteira. Ficaram de
-// fora os que dão falso positivo demais: "mid" sozinho ("mid-market"), "specialist"
-// ("Support Specialist" é cargo de entrada) e "i" ("Engenheiro I").
+// fora os que dão falso positivo demais: "mid" sozinho ("mid-market") e "specialist"
+// ("Support Specialist" é cargo de entrada; "Specialist I" sai pelo numeral). Os
+// numerais "I" e "IV" têm regra própria (romanLevel).
 var seniorityMarkers = []struct {
 	level   string
 	markers []string
@@ -30,6 +32,13 @@ var seniorityMarkers = []struct {
 	{LevelSenior, []string{"senior", "sr", "mid-senior", "iii"}},
 	{LevelExpert, []string{"especialista", "staff", "principal", "lead", "leader", "lider", "tech lead", "arquiteto", "arquiteta", "architect"}},
 }
+
+// romanLevel: "Analista I", "Specialist I | Investimentos", "Engineer IV". O numeral
+// vem depois de pelo menos uma palavra e fecha o título ou vem antes de um separador:
+// assim "I" não casa no meio de uma frase. "II" e "III" já estão nos marcadores.
+var romanLevel = regexp.MustCompile(`\S\s+(i|iv)\s*(?:$|[|(,/:\-–—])`)
+
+var romanLevels = map[string]string{"i": LevelJunior, "iv": LevelSenior}
 
 // "PL/SQL" não é pleno.
 var seniorityNoise = strings.NewReplacer("pl/sql", "plsql", "pl-sql", "plsql", "pl sql", "plsql")
@@ -45,6 +54,9 @@ func ClassifySeniority(texts ...string) []string {
 			if !found[m.level] && hasAny(t, m.markers) {
 				found[m.level] = true
 			}
+		}
+		for _, m := range romanLevel.FindAllStringSubmatch(t, -1) {
+			found[romanLevels[m[1]]] = true
 		}
 	}
 	out := []string{}
