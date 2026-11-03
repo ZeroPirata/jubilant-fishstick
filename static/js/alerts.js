@@ -261,6 +261,9 @@ async function saveAlertLevel(v) {
 
 document.addEventListener('click', ev => {
   if (!_alerts.open) return;
+  // Botão que se trocou por outro no clique ("Gerar currículo" vira a escolha do que
+  // gerar) já saiu da página: não é clique fora do painel.
+  if (!ev.target.isConnected) return;
   // "Ver currículo" leva para a tela da vaga: o painel fecha junto.
   if (ev.target.closest('#alerts-panel .disc-done')) { closeAlerts(); return; }
   if (!ev.target.closest('#alerts-panel, .alerts-bell')) closeAlerts();

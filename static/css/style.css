@@ -393,10 +393,21 @@ td.job-actions-cell { width: 1%; white-space: nowrap; }
 .gen-fresh { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-2); cursor: pointer; white-space: nowrap; }
 .gen-lang { height: 28px; padding: 0 6px; width: auto; min-width: 0; font-size: 12px; margin: 0; }
 .jd-actions .gen-chooser { flex-wrap: wrap; }
+/* Escolha do que gerar no Descobrir e no sino: ocupa a linha toda e quebra em mais
+   linhas quando não cabe (no celular vazava para fora do cartão). */
+.alerts-actions .disc-gen { flex-basis: 100%; }
+.alerts-actions .gen-chooser { flex-wrap: wrap; justify-content: flex-start; }
 
 /* Ações do Descobrir: gerar / andamento / ver currículo, e o link da vaga. */
 td.disc-actions-cell { width: 1%; white-space: nowrap; }
 .disc-actions { display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 10px; }
+@media (max-width: 640px) {
+  .disc-actions { flex-wrap: wrap; }
+  .disc-actions .disc-gen { flex-basis: 100%; }
+  .disc-actions .gen-chooser { flex-wrap: wrap; justify-content: flex-end; }
+  /* Qualquer escolha do que gerar (Refazer na aba Vagas, tela da vaga): quebra linha. */
+  .gen-chooser { flex-wrap: wrap; justify-content: flex-end; white-space: normal; }
+}
 .disc-done { color: var(--green); border: 1px solid rgba(52,211,153,.45); background: rgba(52,211,153,.08); }
 .disc-done:hover { background: rgba(52,211,153,.15); border-color: var(--green); }
 .disc-failed { color: var(--red); border: 1px solid rgba(248,113,113,.35); background: rgba(248,113,113,.06); }
