@@ -35,6 +35,10 @@ func LoggingMiddleware(logger *zap.Logger, next http.Handler) http.Handler {
 		next.ServeHTTP(lrw, r)
 
 		duration := time.Since(start)
+		// Healthcheck do container a cada 10s: só entra no log quando falha.
+		if r.URL.Path == "/healthz" && lrw.statusCode == http.StatusOK {
+			return
+		}
 
 		logger.Info("HTTP Request",
 			zap.String("method", r.Method),

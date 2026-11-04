@@ -104,8 +104,15 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	row, errR := h.Users.QuerySelectAccountByEmail(r.Context(), req.Email)
+	if errR != nil && errR.StatusCode != http.StatusNotFound {
+		// Falha do banco não é "senha errada": 500, e é erro de verdade no log.
+		h.Logger.Error("login: erro ao buscar conta", zap.Error(errR))
+		writeError(w, http.StatusInternalServerError, ErrInternalServerError.Error())
+		return
+	}
 	if errR != nil {
-		h.Logger.Error("failed to get user by email", zap.Error(errR))
+		// E-mail não cadastrado é uso normal (digitou errado), não erro do sistema.
+		h.Logger.Info("login: e-mail não cadastrado")
 		// Timing equalization: run Argon2 even when user doesn't exist to prevent
 		// enumeration via response-time difference.
 		_, _ = h.Hasher.Verify("dummy-input", h.dummyHash)

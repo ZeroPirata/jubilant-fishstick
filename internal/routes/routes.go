@@ -41,6 +41,7 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	adminH := handler.NewAdminHandler(logger, adminR)
 
 	mux.HandleFunc("/", handler.ServeUI)
+	mux.HandleFunc("GET /healthz", handler.Healthz(db, rds))
 	mux.Handle("/static/", http.StripPrefix("/static/", handler.StaticCache(http.FileServer(http.Dir("static")))))
 	outputFS := http.FileServer(http.Dir(handler.OutputBaseDir()))
 	mux.Handle("/output/",

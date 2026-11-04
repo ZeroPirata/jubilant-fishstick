@@ -28,7 +28,7 @@ services:
       - db-network
       - cache-network
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 10s
       timeout: 5s
       retries: 3

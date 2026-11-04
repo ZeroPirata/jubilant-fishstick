@@ -156,14 +156,15 @@ jobs:
           docker compose logs app --tail=30
           exit 1
 
+      # /healthz confere o Postgres e o Redis de verdade, sem tocar em login (o teste
+      # antigo, com conta inexistente, gerava erro no log e evento de segurança falso).
       - name: Smoke test
         run: |
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/api/v1/auth/login -X POST \
-            -H "Content-Type: application/json" \
-            -d '{"email":"smoke@test.com","password":"x"}')
-          if [ "$CODE" = "400" ] || [ "$CODE" = "401" ] || [ "$CODE" = "422" ] || [ "$CODE" = "429" ]; then
-            echo "✅ Smoke test passou (HTTP $CODE)"
+          BODY=$(curl -s -w "\n%{http_code}" http://127.0.0.1:8080/healthz)
+          CODE=$(echo "$BODY" | tail -n1)
+          if [ "$CODE" = "200" ]; then
+            echo "✅ Smoke test passou: $(echo "$BODY" | head -n1)"
           else
-            echo "❌ Smoke test falhou — HTTP $CODE (esperado 400/401/422)"
+            echo "❌ Smoke test falhou — HTTP $CODE: $(echo "$BODY" | head -n1)"
             exit 1
           fi
