@@ -222,6 +222,42 @@ func TestAutoApplyRules(t *testing.T) {
 			t.Errorf("rawWorkplace(%q) = %q, esperado %q", in, got, want)
 		}
 	}
+	stretch := DiscoveredJob{autoStretch: true, Seniority: []string{"senior"}}
+	for _, tc := range []struct {
+		v     autoVerdict
+		apply bool
+	}{
+		{autoVerdict{Score: 85, Apply: true}, true},
+		{autoVerdict{Score: 70, Apply: true}, false},
+		{autoVerdict{Score: 90, Apply: true, Missing: []string{"Kafka"}}, false},
+	} {
+		v := tc.v
+		autoApplyRules(&v, stretch, 3.6, remote)
+		if v.Apply != tc.apply {
+			t.Errorf("nível vizinho %+v: apply=%v, esperado %v (%s)", tc.v, v.Apply, tc.apply, v.Reason)
+		}
+	}
+	for _, tc := range []struct {
+		title, desc string
+		want        bool
+	}{
+		{"[Vaga Afirmativa Mulheres] Software Engineer Sênior", "", true},
+		{"Especialista - Vaga Afirmativa para Pretos e Pard", "", true},
+		{"Backend Engineer", "Esta é uma vaga exclusiva para mulheres cis e trans.", true},
+		{"Backend Engineer", "Processo seletivo afirmativo para pessoas negras.", true},
+		{"Backend Engineer", "Encorajamos mulheres, pessoas negras e PcD a se candidatarem.", false},
+		{"Backend Engineer", "Esta posição também é destinada a pessoas com deficiência.", false},
+		{"Backend Engineer", "A Experian é uma empregadora que promove igualdade de oportunidades e ação afirmativa.", false},
+		{"Backend Engineer", "Além das vagas afirmativas, todas as vagas Stone também são destinadas a PcD.", false},
+		{"Engenheira de Software Sênior", "Esta vaga é destinada exclusivamente para mulheres.", true},
+		{"Freelancer de Áudio", "Vaga exclusiva para pessoas que residem no Brasil.", false},
+		{"Técnico de Redes", "Esta é uma vaga exclusiva para pessoas com deficiência (PcD).", true},
+		{"Senior Software Engineer", "", false},
+	} {
+		if got := autoIsAffirmative(tc.title, tc.desc); got != tc.want {
+			t.Errorf("autoIsAffirmative(%q, %q) = %v", tc.title, tc.desc, got)
+		}
+	}
 	if !autoIsNonTech("Account Executive, Mid-Market - Brazil") || autoIsNonTech("Backend Engineer") {
 		t.Error("autoIsNonTech")
 	}

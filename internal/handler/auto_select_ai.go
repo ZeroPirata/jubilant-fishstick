@@ -223,7 +223,76 @@ func autoApplyRules(v *autoVerdict, j DiscoveredJob, years float64, places []str
 	case len(v.Missing) == 1:
 		v.Score = min(v.Score, 65)
 	}
+	// Nível vizinho ao alvo: na 3ª rodada, acabadas as vagas de pleno, 4 das 5 escolhas
+	// foram sênior com "Risco: nível sênior" ou um obrigatório faltando. Melhor escolher
+	// menos do que encher a cota com vaga improvável.
+	if v.Apply && j.autoStretch && (v.Score < autoStretchMinScore || len(v.Missing) > 0) {
+		drop(fmt.Sprintf("nível %s, acima ou abaixo do seu; só entra com nota %d+ e nada obrigatório faltando",
+			autoLevelList(j.Seniority), autoStretchMinScore))
+	}
 }
+
+// autoStretchMinScore: nota mínima para uma vaga de nível vizinho ao alvo.
+const autoStretchMinScore = 80
+
+func autoLevelList(levels []string) string {
+	out := make([]string, 0, len(levels))
+	for _, l := range levels {
+		if n, ok := autoLevelNames[l]; ok {
+			out = append(out, n)
+		}
+	}
+	if len(out) == 0 {
+		return "diferente"
+	}
+	return strings.Join(out, "/")
+}
+
+// autoIsAffirmative: vaga afirmativa (exclusiva para mulheres, pessoas negras, PcD...).
+// O perfil não diz se a pessoa se encaixa, então a seleção automática não escolhe por
+// ela; continua no Descobrir para quem quiser cadastrar à mão. No título, qualquer
+// menção ao público basta; na descrição, só frases de exclusividade (o "encorajamos
+// mulheres a se candidatarem" de muitas vagas abertas a todos não conta).
+func autoIsAffirmative(title, desc string) bool {
+	t := strings.ToLower(title)
+	for _, w := range autoAffirmativeTitle {
+		if strings.Contains(t, w) {
+			return true
+		}
+	}
+	d := strings.ToLower(desc)
+	for _, w := range autoAffirmativeDesc {
+		if strings.Contains(d, w) {
+			return true
+		}
+	}
+	return false
+}
+
+var autoAffirmativeTitle = []string{"afirmativa", "afirmativo", "affirmative", "exclusiva para", "exclusivo para",
+	"exclusivas para", "vaga exclusiva", "mulheres", "women", "pessoas pretas", "pretos e pardos", "pretas e pardas",
+	"pessoas negras", "pcd", "pessoas com deficiência", "people with disabilities", "lgbt", "pessoas trans"}
+
+// Só frases que declaram a vaga exclusiva. Ficaram de fora, por aparecerem em textos
+// padrão de vagas abertas a todos (conferido no catálogo): "ação afirmativa" e
+// "affirmative action" (aviso de igualdade de oportunidades), "vagas afirmativas"
+// ("além das vagas afirmativas, todas as vagas..."), "exclusivamente para" (benefícios),
+// "também é destinada a pessoas com deficiência" (vaga aberta a todos) e "destinada
+// exclusivamente a estudantes/residentes" (outro tipo de restrição).
+var autoAffirmativeDesc = func() []string {
+	out := []string{"vaga afirmativa", "banco de talentos afirmativo", "processo seletivo afirmativo",
+		"programa afirmativo", "exclusively for women", "only for women", "women only"}
+	// "exclusiva para" sozinho pega "vaga exclusiva para pessoas que residem no Brasil":
+	// a frase precisa citar o público.
+	for _, pre := range []string{"exclusiva para ", "exclusivas para ", "exclusivamente para ", "exclusivamente a ",
+		"destinada exclusivamente a ", "destinada exclusivamente para "} {
+		for _, who := range []string{"mulheres", "pessoas com deficiência", "pcd", "pessoas negras", "pessoas pretas",
+			"pretos e pardos", "pessoas trans", "pessoas lgbt", "lgbt"} {
+			out = append(out, pre+who)
+		}
+	}
+	return out
+}()
 
 func trimYears(y float64) string {
 	return strings.TrimSuffix(strconv.FormatFloat(y, 'f', 1, 64), ".0")

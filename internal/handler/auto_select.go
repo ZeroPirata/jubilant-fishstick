@@ -342,10 +342,13 @@ func (h *AutoSelectHandler) candidates(ctx context.Context, userID pgtype.UUID, 
 	}
 
 	limit := int(set.Candidates)
+	// Junta o dobro e depois lê as descrições: vaga afirmativa que só diz isso no
+	// texto sai antes de ir para a IA.
+	want := limit * 2
 	out, extra := []DiscoveredJob{}, []DiscoveredJob{}
 	dedup := autoDedup{}
 	for _, j := range filterDiscovered(rk.jobs, rk.filter).Jobs {
-		if len(out) >= limit {
+		if len(out) >= want {
 			break
 		}
 		if len(j.fit.Items) == 0 || autoQualityRank(j.fit.Quality) < minRank {
@@ -361,7 +364,7 @@ func (h *AutoSelectHandler) candidates(ctx context.Context, userID pgtype.UUID, 
 		if excluded[j.Url] || anyExcluded(j.AlsoOn, excluded) {
 			continue
 		}
-		if autoIsNonTech(j.Title) || dedup.seen(j.Title, j.Company) {
+		if autoIsNonTech(j.Title) || autoIsAffirmative(j.Title, "") || dedup.seen(j.Title, j.Company) {
 			continue
 		}
 		rank := 0
@@ -372,12 +375,36 @@ func (h *AutoSelectHandler) candidates(ctx context.Context, userID pgtype.UUID, 
 		case 0:
 			out = append(out, j)
 		case 1:
+			j.autoStretch = true
 			extra = append(extra, j)
 		}
 	}
 	// Nível alvo primeiro (na ordem de compatibilidade); "esticar" só completa.
-	out = append(out, extra[:min(len(extra), max(limit-len(out), 0))]...)
-	return out, rk.filter, nil
+	out = append(out, extra[:min(len(extra), max(want-len(out), 0))]...)
+
+	ids := make([]pgtype.UUID, 0, len(out))
+	for _, j := range out {
+		var id pgtype.UUID
+		if id.Scan(j.ID) == nil {
+			ids = append(ids, id)
+		}
+	}
+	descs := map[string]string{}
+	if rows, err := h.Q.AutoSelectDescriptions(ctx, ids); err == nil {
+		for _, d := range rows {
+			descs[d.ID.String()] = d.Description
+		}
+	}
+	final := make([]DiscoveredJob, 0, limit)
+	for _, j := range out {
+		if len(final) >= limit {
+			break
+		}
+		if !autoIsAffirmative(j.Title, descs[j.ID]) {
+			final = append(final, j)
+		}
+	}
+	return final, rk.filter, nil
 }
 
 func anyExcluded(links []JobLink, excluded map[string]bool) bool {

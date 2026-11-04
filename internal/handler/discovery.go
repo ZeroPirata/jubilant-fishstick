@@ -88,7 +88,10 @@ type DiscoveredJob struct {
 	Dismissed bool `json:"dismissed,omitempty"`
 	techs     []string
 	fit       jobfit.Fit
-	firstSeen time.Time
+	// autoStretch: na Seleção com IA, vaga de nível vizinho ao alvo (ex.: sênior para
+	// um perfil pleno). Só entra com nota alta e nada obrigatório faltando.
+	autoStretch bool
+	firstSeen   time.Time
 }
 
 type JobLink struct {
