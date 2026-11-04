@@ -421,6 +421,8 @@ td.disc-actions-cell { width: 1%; white-space: nowrap; }
   font: 500 11.5px var(--font-body); cursor: pointer; transition: all .15s;
 }
 .btn-pdf-download:hover { background: rgba(52,211,153,.16); border-color: var(--green); }
+.btn-pdf-download:disabled { opacity: .6; cursor: progress; }
+.btn-pdf-zip { background: rgba(52,211,153,.18); border-color: var(--green); font-weight: 600; }
 
 /* ══ Formulários ══ */
 .toolbar { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }

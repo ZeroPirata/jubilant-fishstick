@@ -55,6 +55,8 @@ async function loadJobDetail() {
     const app = appRes.ok ? await apiData(appRes) : { stage: job.application_stage || '', stage_at: job.application_stage_at, events: [] };
     if (seq !== _jd.seq) return;
     _jd.language = job.language;
+    _jd.jobTitle = job.job_title || '';
+    _jd.company = job.company_name || '';
     _jd.app = app;
     _jd.stage = app.stage || '';
     _jd.done = job.status === 'completed';
