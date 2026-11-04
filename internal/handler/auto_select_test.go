@@ -90,3 +90,75 @@ func TestValidateAutoSelectSettings(t *testing.T) {
 		t.Error("ler menos vagas do que escolhe deveria falhar")
 	}
 }
+
+func TestParseAutoVerdicts_Eliminatorio(t *testing.T) {
+	got, err := parseAutoVerdicts(`{"avaliacoes":[
+		{"vaga":1,"nota":75,"eliminatorio":"VTEX obrigatório","candidatar":true,"motivo":"Forte em Go, mas exige VTEX."},
+		{"vaga":2,"nota":80,"eliminatorio":"nenhum","candidatar":true,"motivo":"Go é o núcleo."},
+		{"vaga":3,"nota":30,"eliminatorio":"Estágio","candidatar":false,"motivo":""}]}`, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := got[1]; v.Apply || v.Blocker != "VTEX obrigatório" {
+		t.Errorf("eliminatório precisa barrar mesmo com candidatar=true: %+v", v)
+	}
+	if v := got[2]; !v.Apply || v.Blocker != "" {
+		t.Errorf(`"nenhum" não é eliminatório: %+v`, v)
+	}
+	if v := got[3]; v.Reason != "Eliminatório: Estágio" {
+		t.Errorf("motivo vazio usa o eliminatório: %+v", v)
+	}
+}
+
+func TestAutoExperience(t *testing.T) {
+	d := func(s string) pgtype.Date {
+		tm, _ := time.Parse("2006-01-02", s)
+		return pgtype.Date{Time: tm, Valid: true}
+	}
+	now, _ := time.Parse("2006-01-02", "2026-01-01")
+	exps := []db.UserExperience{
+		{StartDate: d("2022-01-01"), EndDate: d("2024-01-01")},
+		{StartDate: d("2023-01-01"), EndDate: d("2023-06-01")}, // simultâneo: não soma
+		{StartDate: d("2025-01-01"), IsCurrentJob: true},
+		{}, // sem data
+	}
+	total, ok := autoExperience(exps, now)
+	if years := total.Hours() / 24 / 365.25; !ok || years < 2.95 || years > 3.05 {
+		t.Errorf("total = %.2f anos (ok=%v), esperado 3", years, ok)
+	}
+	if _, ok := autoExperience([]db.UserExperience{{}}, now); ok {
+		t.Error("sem datas deveria dar ok=false")
+	}
+}
+
+func TestAutoLevelRank(t *testing.T) {
+	target, stretch := autoLevelFit(3.6) // pleno; júnior e sênior completam
+	for _, tc := range []struct {
+		levels []string
+		want   int
+	}{
+		{nil, 0},
+		{[]string{"mid"}, 0},
+		{[]string{"junior", "mid", "senior"}, 0}, // "all levels"
+		{[]string{"senior"}, 1},
+		{[]string{"intern"}, -1},
+		{[]string{"intern", "junior"}, -1}, // estágio não vira "júnior" para quem já trabalha
+		{[]string{"expert"}, -1},
+		{[]string{"manager"}, -1},
+	} {
+		if got := autoLevelRank(tc.levels, target, stretch); got != tc.want {
+			t.Errorf("%v: %d, esperado %d", tc.levels, got, tc.want)
+		}
+	}
+}
+
+func TestAutoDedupKey(t *testing.T) {
+	a := autoDedupKey("Senior Backend Software Engineer", "MEP | Wellhub (Gympass)")
+	b := autoDedupKey("Senior Backend Software Engineer", "MEP | Wellhub")
+	if a != b {
+		t.Errorf("%q != %q", a, b)
+	}
+	if autoDedupKey("Senior Backend Software Engineer", "Visa") == a {
+		t.Error("empresas diferentes não podem colidir")
+	}
+}

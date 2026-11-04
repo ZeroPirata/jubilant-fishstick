@@ -327,9 +327,25 @@ func (h *AutoSelectHandler) candidates(ctx context.Context, userID pgtype.UUID, 
 	}
 	minRank := autoQualityRank(db.JobQuality(set.MinQuality))
 	oldest := time.Now().Add(-autoSelectMaxAge)
-	out := []DiscoveredJob{}
+
+	// Nível: o escolhido no Descobrir manda (filterDiscovered já aplica). Sem escolha,
+	// vem do tempo de carreira; sem experiências com data, não filtra.
+	var target, stretch []string
+	autoLevel := false
+	if len(rk.filter.Seniority.Levels) == 0 {
+		if exps, errE := h.Disc.Users.QuerySelectAllExperiences(ctx, userID.String()); errE == nil {
+			if total, ok := autoExperience(exps, time.Now()); ok {
+				target, stretch = autoLevelFit(total.Hours() / 24 / 365.25)
+				autoLevel = true
+			}
+		}
+	}
+
+	limit := int(set.Candidates)
+	out, extra := []DiscoveredJob{}, []DiscoveredJob{}
+	seen := map[string]bool{}
 	for _, j := range filterDiscovered(rk.jobs, rk.filter).Jobs {
-		if len(out) >= int(set.Candidates) {
+		if len(out) >= limit {
 			break
 		}
 		if len(j.fit.Items) == 0 || autoQualityRank(j.fit.Quality) < minRank {
@@ -345,8 +361,24 @@ func (h *AutoSelectHandler) candidates(ctx context.Context, userID pgtype.UUID, 
 		if excluded[j.Url] || anyExcluded(j.AlsoOn, excluded) {
 			continue
 		}
-		out = append(out, j)
+		if k := autoDedupKey(j.Title, j.Company); seen[k] {
+			continue
+		} else {
+			seen[k] = true
+		}
+		rank := 0
+		if autoLevel {
+			rank = autoLevelRank(j.Seniority, target, stretch)
+		}
+		switch rank {
+		case 0:
+			out = append(out, j)
+		case 1:
+			extra = append(extra, j)
+		}
 	}
+	// Nível alvo primeiro (na ordem de compatibilidade); "esticar" só completa.
+	out = append(out, extra[:min(len(extra), max(limit-len(out), 0))]...)
 	return out, rk.filter, nil
 }
 

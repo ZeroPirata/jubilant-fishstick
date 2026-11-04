@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/jobfit"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -36,21 +38,30 @@ Critérios, do mais ao menos importante:
 
 Regras:
 - Use só o que está escrito. Não suponha experiência que o perfil não mostra.
+- Skill em nível "básico" não é domínio: não diga que o candidato "tem experiência" com ela e não conte como núcleo atendido.
+- Plataforma ou tecnologia que dá nome à vaga ou é pedida como obrigatória (ex.: "Especialista VTEX", "Desenvolvedor PHP", Salesforce, SAP) e que o perfil não tem, ou tem só no nível básico, é requisito eliminatório.
+- Vaga de área diferente da área principal do perfil (deduza pelos cargos e pelas skills avançadas/expert: ex. mobile, front-end, QA, dados, infra/SRE para um perfil backend): nota no máximo 55, a não ser que o perfil tenha nível avançado ou expert nas tecnologias centrais da vaga.
+- Senioridade: compare os anos pedidos com o tempo total de experiência; pedir mais que 1,5× o tempo do perfil é eliminatório.
 - "nota" de 0 a 100: 80+ forte; 60–79 vale tentar; 40–59 arriscada; abaixo de 40 não vale.
-- "candidatar": true só com nota 60 ou mais e nenhum requisito eliminatório falhando.
+- "eliminatorio": o requisito eliminatório que falha, em poucas palavras (ex.: "VTEX obrigatório"); "" quando nenhum falha.
+- "candidatar": true só com nota 60 ou mais e "eliminatorio" vazio. A nota e o motivo precisam concordar com essa decisão.
 - "motivo": uma frase em português, até 160 caracteres, coerente com "candidatar":
   - candidatar true: comece pelo que faz valer a pena e, se houver, termine com o principal risco depois de "Risco:" (ex.: "Go e AWS são o núcleo da vaga e o forte do perfil. Risco: pede 3+ anos de Node.js.").
   - candidatar false: o fator que elimina ou enfraquece a candidatura (ex.: "Pede 5+ anos com Kotlin; o perfil tem 2 anos em Go.").
 - Avalie todas as vagas da lista, sem pular nenhuma, usando o número entre colchetes.
 
 Responda APENAS com JSON válido, sem texto antes ou depois:
-{"avaliacoes":[{"vaga":1,"nota":75,"candidatar":true,"motivo":"..."}]}`
+{"avaliacoes":[{"vaga":1,"nota":75,"eliminatorio":"","candidatar":true,"motivo":"..."}]}`
 
 // autoVerdict: o julgamento da IA sobre uma vaga.
 type autoVerdict struct {
 	Score  int
 	Apply  bool
 	Reason string
+	// Blocker: requisito eliminatório que a IA apontou. Com ele, a vaga não entra,
+	// mesmo que o modelo tenha marcado "candidatar" (já aconteceu: nota 75 com
+	// "a vaga exige VTEX, que o candidato não possui").
+	Blocker string
 }
 
 // flexInt aceita 7, 7.0 e "7" (modelos variam).
@@ -83,10 +94,11 @@ func (f *flexBool) UnmarshalJSON(b []byte) error {
 func parseAutoVerdicts(content string, n int) (map[int]autoVerdict, error) {
 	var out struct {
 		Avaliacoes []struct {
-			Vaga       flexInt  `json:"vaga"`
-			Nota       flexInt  `json:"nota"`
-			Candidatar flexBool `json:"candidatar"`
-			Motivo     string   `json:"motivo"`
+			Vaga         flexInt  `json:"vaga"`
+			Nota         flexInt  `json:"nota"`
+			Candidatar   flexBool `json:"candidatar"`
+			Motivo       string   `json:"motivo"`
+			Eliminatorio string   `json:"eliminatorio"`
 		} `json:"avaliacoes"`
 	}
 	if err := json.Unmarshal([]byte(content), &out); err != nil {
@@ -103,12 +115,116 @@ func parseAutoVerdicts(content string, n int) (map[int]autoVerdict, error) {
 		if utf8.RuneCountInString(reason) > 240 {
 			reason = string([]rune(reason)[:240]) + "…"
 		}
-		res[i] = autoVerdict{Score: score, Apply: bool(a.Candidatar), Reason: reason}
+		blocker := strings.TrimSpace(a.Eliminatorio)
+		switch strings.ToLower(strings.Trim(blocker, ".")) {
+		case "nenhum", "nenhuma", "não", "nao", "-", "n/a", "none", "null":
+			blocker = ""
+		}
+		if utf8.RuneCountInString(blocker) > 120 {
+			blocker = string([]rune(blocker)[:120]) + "…"
+		}
+		if reason == "" && blocker != "" {
+			reason = "Eliminatório: " + blocker
+		}
+		res[i] = autoVerdict{Score: score, Apply: bool(a.Candidatar) && blocker == "", Reason: reason, Blocker: blocker}
 	}
 	if len(res) == 0 {
 		return nil, errors.New("nenhuma avaliação na resposta")
 	}
 	return res, nil
+}
+
+// autoExperience: tempo total de carreira, sem contar duas vezes empregos simultâneos.
+// ok=false quando nenhuma experiência tem data de início.
+func autoExperience(exps []db.UserExperience, now time.Time) (time.Duration, bool) {
+	type span struct{ from, to time.Time }
+	spans := make([]span, 0, len(exps))
+	for _, e := range exps {
+		if !e.StartDate.Valid {
+			continue
+		}
+		to := now
+		if !e.IsCurrentJob && e.EndDate.Valid {
+			to = e.EndDate.Time
+		}
+		if to.After(e.StartDate.Time) {
+			spans = append(spans, span{e.StartDate.Time, to})
+		}
+	}
+	if len(spans) == 0 {
+		return 0, false
+	}
+	sort.Slice(spans, func(i, j int) bool { return spans[i].from.Before(spans[j].from) })
+	var total time.Duration
+	cur := spans[0]
+	for _, s := range spans[1:] {
+		switch {
+		case s.from.After(cur.to):
+			total += cur.to.Sub(cur.from)
+			cur = s
+		case s.to.After(cur.to):
+			cur.to = s.to
+		}
+	}
+	return total + cur.to.Sub(cur.from), true
+}
+
+// autoLevelFit: quando a pessoa não escolheu nível no Descobrir, o nível vem do tempo de
+// carreira. "Alvo" vai primeiro para a IA; "esticar" completa a lista; o resto nem
+// é lido (na 1ª rodada, 14 de 20 vagas lidas eram sênior 5+/8+ anos, principal ou
+// estágio para um perfil de 3 anos e meio: todas recusadas, gastando a IA à toa).
+// Vaga sem nível informado conta como alvo.
+func autoLevelFit(years float64) (target, stretch []string) {
+	switch {
+	case years < 1:
+		return []string{"intern", "junior"}, []string{"mid"}
+	case years < 3:
+		return []string{"junior", "mid"}, []string{"senior"}
+	case years < 6:
+		return []string{"mid"}, []string{"junior", "senior"}
+	case years < 10:
+		return []string{"senior"}, []string{"mid", "expert"}
+	default:
+		return []string{"senior", "expert"}, []string{"mid"}
+	}
+}
+
+// autoLevelRank: 0 = alvo, 1 = esticar, -1 = fora. Vaga com vários níveis ("All
+// levels") vale pelo melhor deles.
+func autoLevelRank(levels, target, stretch []string) int {
+	if len(levels) == 0 {
+		return 0
+	}
+	// Estágio é outra trilha (pede matrícula em curso): fora, a menos que seja o alvo,
+	// mesmo quando a vaga também cita júnior.
+	if slices.Contains(levels, "intern") && !slices.Contains(target, "intern") {
+		return -1
+	}
+	best := -1
+	for _, l := range levels {
+		switch {
+		case slices.Contains(target, l):
+			return 0
+		case slices.Contains(stretch, l):
+			best = 1
+		}
+	}
+	return best
+}
+
+// autoDedupKey: a mesma vaga publicada duas vezes com a empresa escrita diferente
+// ("MEP | Wellhub (Gympass)" e "MEP | Wellhub") só é lida uma vez.
+func autoDedupKey(title, company string) string {
+	norm := func(s string) []string {
+		return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+		})
+	}
+	key := strings.Join(norm(title), " ")
+	if c := norm(company); len(c) > 0 {
+		key += "|" + c[0]
+	}
+	return key
 }
 
 var autoLevelNames = map[string]string{
@@ -130,8 +246,6 @@ func autoProfileText(exps []db.UserExperience, skills []db.UserSkill, f discover
 	if len(exps) == 0 {
 		b.WriteString("- nenhuma cadastrada\n")
 	}
-	type span struct{ from, to time.Time }
-	var spans []span
 	for i, e := range exps {
 		if i >= 8 {
 			break
@@ -148,7 +262,6 @@ func autoProfileText(exps []db.UserExperience, skills []db.UserSkill, f discover
 				end = to.Format("01/2006")
 			}
 			period = fmt.Sprintf("%s – %s, %s", from.Format("01/2006"), end, autoDuration(to.Sub(from)))
-			spans = append(spans, span{from, to})
 		}
 		fmt.Fprintf(&b, "- %s em %s (%s)", e.JobRole, e.CompanyName, period)
 		if len(e.TechStack) > 0 {
@@ -156,23 +269,7 @@ func autoProfileText(exps []db.UserExperience, skills []db.UserSkill, f discover
 		}
 		b.WriteString("\n")
 	}
-	// Tempo total sem contar duas vezes empregos simultâneos.
-	sort.Slice(spans, func(i, j int) bool { return spans[i].from.Before(spans[j].from) })
-	var total time.Duration
-	var cur span
-	for i, s := range spans {
-		switch {
-		case i == 0:
-			cur = s
-		case s.from.After(cur.to):
-			total += cur.to.Sub(cur.from)
-			cur = s
-		case s.to.After(cur.to):
-			cur.to = s.to
-		}
-	}
-	if len(spans) > 0 {
-		total += cur.to.Sub(cur.from)
+	if total, ok := autoExperience(exps, now); ok {
 		fmt.Fprintf(&b, "Tempo total de experiência profissional: %s\n", autoDuration(total))
 	}
 
@@ -202,7 +299,7 @@ func autoProfileText(exps []db.UserExperience, skills []db.UserSkill, f discover
 		fmt.Fprintf(&b, "- local: %s\n", strings.Join(places, ", "))
 	}
 	if len(f.Seniority.Levels) == 0 {
-		b.WriteString("- nível: qualquer\n")
+		b.WriteString("- nível: não escolhido (julgue pelo tempo de experiência)\n")
 	} else {
 		lv := make([]string, 0, len(f.Seniority.Levels))
 		for _, l := range f.Seniority.Levels {
