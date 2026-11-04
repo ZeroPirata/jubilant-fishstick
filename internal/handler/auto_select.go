@@ -343,7 +343,7 @@ func (h *AutoSelectHandler) candidates(ctx context.Context, userID pgtype.UUID, 
 
 	limit := int(set.Candidates)
 	out, extra := []DiscoveredJob{}, []DiscoveredJob{}
-	seen := map[string]bool{}
+	dedup := autoDedup{}
 	for _, j := range filterDiscovered(rk.jobs, rk.filter).Jobs {
 		if len(out) >= limit {
 			break
@@ -361,10 +361,8 @@ func (h *AutoSelectHandler) candidates(ctx context.Context, userID pgtype.UUID, 
 		if excluded[j.Url] || anyExcluded(j.AlsoOn, excluded) {
 			continue
 		}
-		if k := autoDedupKey(j.Title, j.Company); seen[k] {
+		if autoIsNonTech(j.Title) || dedup.seen(j.Title, j.Company) {
 			continue
-		} else {
-			seen[k] = true
 		}
 		rank := 0
 		if autoLevel {
@@ -397,6 +395,10 @@ func (h *AutoSelectHandler) run(ctx context.Context, userID pgtype.UUID, runID p
 	exps, _ := h.Disc.Users.QuerySelectAllExperiences(ctx, userID.String())
 	skills, _ := h.Disc.Users.QuerySelectAllSkills(ctx, userID.String())
 	profile := autoProfileText(exps, skills, filter, time.Now())
+	years := -1.0
+	if total, ok := autoExperience(exps, time.Now()); ok {
+		years = total.Hours() / 24 / 365.25
+	}
 
 	ids := make([]pgtype.UUID, 0, len(jobs))
 	for _, j := range jobs {
@@ -452,6 +454,7 @@ func (h *AutoSelectHandler) run(ctx context.Context, userID pgtype.UUID, runID p
 		}
 		for i := range batch {
 			if v, ok := verdicts[i+1]; ok {
+				autoApplyRules(&v, batch[i].Job, years, filter.Location.WorkplaceTypes)
 				batch[i].Verdict = &v
 				analyzed++
 			}

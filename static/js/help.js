@@ -225,7 +225,7 @@ const HELP_TOPICS = [
         body: `<p>Em <b>Vagas</b>, o botão <b>Seleção com IA</b> (quando liberado para a sua conta):</p>
           <ul><li>pega as vagas do Descobrir mais compatíveis com o seu perfil, com o local e o nível que você salvou (sem nível salvo, usa o seu tempo de experiência: estágio e vagas muito acima ficam de fora)</li>
           <li>a IA lê cada uma como um recrutador do seu lado: senioridade pedida, idioma, requisitos eliminatórios, tipo de função</li>
-          <li>requisito eliminatório que falha (ex.: plataforma obrigatória que você não tem) tira a vaga, mesmo com nota boa</li>
+          <li>as regras de corte são fixas, não dependem do humor da IA: 2+ requisitos obrigatórios que você não tem, anos pedidos bem acima do seu tempo de carreira ou vaga híbrida/presencial quando você quer remoto tiram a vaga, mesmo com nota boa</li>
           <li>as que valem a candidatura entram na pipeline com a tag <b>auto-gerado</b> e o currículo é gerado sozinho</li></ul>
           <p>Você só confere e envia no site da empresa: a candidatura em si não dá para fazer por você.</p>`,
         visual: `<div class="hv-flow">

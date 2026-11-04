@@ -43,15 +43,19 @@ Regras:
 - Vaga de área diferente da área principal do perfil (deduza pelos cargos e pelas skills avançadas/expert: ex. mobile, front-end, QA, dados, infra/SRE para um perfil backend): nota no máximo 55, a não ser que o perfil tenha nível avançado ou expert nas tecnologias centrais da vaga.
 - Senioridade: compare os anos pedidos com o tempo total de experiência; pedir mais que 1,5× o tempo do perfil é eliminatório.
 - "nota" de 0 a 100: 80+ forte; 60–79 vale tentar; 40–59 arriscada; abaixo de 40 não vale.
-- "eliminatorio": o requisito eliminatório que falha, em poucas palavras (ex.: "VTEX obrigatório"); "" quando nenhum falha.
-- "candidatar": true só com nota 60 ou mais e "eliminatorio" vazio. A nota e o motivo precisam concordar com essa decisão.
+- Fatos da vaga (copie do texto, não julgue):
+  - "anos_pedidos": o mínimo de anos de experiência que a vaga pede (número), ou null se não diz.
+  - "modelo": "remoto", "híbrido" ou "presencial" conforme o texto da vaga; "" se não diz.
+  - "faltando": lista do que a vaga marca como obrigatório (tecnologia, plataforma, certificação, idioma, formação, domínio de negócio) e o perfil não tem ou tem só no nível básico. Não inclua o que é "desejável", "diferencial" ou "nice to have". [] quando nada falta.
+- "eliminatorio": outro requisito eliminatório que falha (cidadania, visto, estágio, função não técnica), em poucas palavras; "" quando nenhum falha.
+- "candidatar": true só com nota 60 ou mais, "eliminatorio" vazio e no máximo 1 item em "faltando". A nota e o motivo precisam concordar com essa decisão; o que está em "faltando" não vira só um "Risco".
 - "motivo": uma frase em português, até 160 caracteres, coerente com "candidatar":
   - candidatar true: comece pelo que faz valer a pena e, se houver, termine com o principal risco depois de "Risco:" (ex.: "Go e AWS são o núcleo da vaga e o forte do perfil. Risco: pede 3+ anos de Node.js.").
   - candidatar false: o fator que elimina ou enfraquece a candidatura (ex.: "Pede 5+ anos com Kotlin; o perfil tem 2 anos em Go.").
 - Avalie todas as vagas da lista, sem pular nenhuma, usando o número entre colchetes.
 
 Responda APENAS com JSON válido, sem texto antes ou depois:
-{"avaliacoes":[{"vaga":1,"nota":75,"eliminatorio":"","candidatar":true,"motivo":"..."}]}`
+{"avaliacoes":[{"vaga":1,"anos_pedidos":3,"modelo":"remoto","faltando":["Node.js"],"eliminatorio":"","nota":70,"candidatar":true,"motivo":"..."}]}`
 
 // autoVerdict: o julgamento da IA sobre uma vaga.
 type autoVerdict struct {
@@ -62,6 +66,10 @@ type autoVerdict struct {
 	// mesmo que o modelo tenha marcado "candidatar" (já aconteceu: nota 75 com
 	// "a vaga exige VTEX, que o candidato não possui").
 	Blocker string
+	// Fatos copiados da vaga pela IA; as regras de autoApplyRules decidem com eles.
+	YearsAsked float64  // 0 = não diz
+	Workplace  string   // remote, hybrid, onsite ou "" (não diz)
+	Missing    []string // obrigatórios que o perfil não tem
 }
 
 // flexInt aceita 7, 7.0 e "7" (modelos variam).
@@ -94,11 +102,14 @@ func (f *flexBool) UnmarshalJSON(b []byte) error {
 func parseAutoVerdicts(content string, n int) (map[int]autoVerdict, error) {
 	var out struct {
 		Avaliacoes []struct {
-			Vaga         flexInt  `json:"vaga"`
-			Nota         flexInt  `json:"nota"`
-			Candidatar   flexBool `json:"candidatar"`
-			Motivo       string   `json:"motivo"`
-			Eliminatorio string   `json:"eliminatorio"`
+			Vaga         flexInt         `json:"vaga"`
+			Nota         flexInt         `json:"nota"`
+			Candidatar   flexBool        `json:"candidatar"`
+			Motivo       string          `json:"motivo"`
+			Eliminatorio string          `json:"eliminatorio"`
+			AnosPedidos  json.RawMessage `json:"anos_pedidos"`
+			Modelo       string          `json:"modelo"`
+			Faltando     json.RawMessage `json:"faltando"`
 		} `json:"avaliacoes"`
 	}
 	if err := json.Unmarshal([]byte(content), &out); err != nil {
@@ -126,12 +137,110 @@ func parseAutoVerdicts(content string, n int) (map[int]autoVerdict, error) {
 		if reason == "" && blocker != "" {
 			reason = "Eliminatório: " + blocker
 		}
-		res[i] = autoVerdict{Score: score, Apply: bool(a.Candidatar) && blocker == "", Reason: reason, Blocker: blocker}
+		res[i] = autoVerdict{
+			Score: score, Apply: bool(a.Candidatar) && blocker == "", Reason: reason, Blocker: blocker,
+			YearsAsked: rawYears(a.AnosPedidos), Workplace: rawWorkplace(a.Modelo), Missing: rawList(a.Faltando),
+		}
 	}
 	if len(res) == 0 {
 		return nil, errors.New("nenhuma avaliação na resposta")
 	}
 	return res, nil
+}
+
+// rawYears aceita 3, 3.5, "3", "3+", "3 anos"; o resto (null, "") vira 0.
+func rawYears(b json.RawMessage) float64 {
+	s := strings.Trim(strings.TrimSpace(string(b)), `"`)
+	end := 0
+	for end < len(s) && (s[end] >= '0' && s[end] <= '9' || s[end] == '.' || s[end] == ',') {
+		end++
+	}
+	v, err := strconv.ParseFloat(strings.ReplaceAll(s[:end], ",", "."), 64)
+	if err != nil || v < 0 || v > 40 {
+		return 0
+	}
+	return v
+}
+
+func rawWorkplace(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch {
+	case strings.HasPrefix(s, "remot"), strings.HasPrefix(s, "home"):
+		return "remote"
+	case strings.HasPrefix(s, "híbrid"), strings.HasPrefix(s, "hibrid"), strings.HasPrefix(s, "hybrid"):
+		return "hybrid"
+	case strings.HasPrefix(s, "presen"), s == "onsite", s == "on-site":
+		return "onsite"
+	}
+	return ""
+}
+
+// rawList aceita ["a","b"] ou "a, b".
+func rawList(b json.RawMessage) []string {
+	var list []string
+	if json.Unmarshal(b, &list) != nil {
+		var s string
+		if json.Unmarshal(b, &s) != nil {
+			return nil
+		}
+		list = strings.Split(s, ",")
+	}
+	out := make([]string, 0, len(list))
+	for _, it := range list {
+		it = strings.TrimSpace(it)
+		switch strings.ToLower(it) {
+		case "", "nenhum", "nenhuma", "-", "n/a", "none":
+			continue
+		}
+		out = append(out, it)
+	}
+	return out
+}
+
+// autoApplyRules: as regras de corte ficam no código, não no julgamento do modelo. Na
+// 2ª rodada o modelo aprovou vagas apontando ele mesmo "Risco: presencial/híbrida" e
+// "pede Ruby on Rails e Vue.js, que o candidato não possui". Aqui:
+//   - anos pedidos acima de 1,5× a carreira do perfil → fora;
+//   - modelo de trabalho fora das preferências (só quando o site não informou; se
+//     informou, o Descobrir já filtrou) → fora;
+//   - 2+ obrigatórios faltando → fora; 1 faltando → nota no máximo 65.
+//
+// years < 0: tempo de carreira desconhecido.
+func autoApplyRules(v *autoVerdict, j DiscoveredJob, years float64, places []string) {
+	drop := func(why string) {
+		v.Apply = false
+		v.Reason = "Fora: " + why + "."
+	}
+	switch {
+	case v.Blocker != "":
+		v.Apply = false
+	case years > 0 && v.YearsAsked > years*1.5:
+		drop(fmt.Sprintf("pede %s+ anos; o perfil tem %s", trimYears(v.YearsAsked), autoDuration(time.Duration(years*365.25*24)*time.Hour)))
+	case len(places) > 0 && j.WorkplaceType == "" && v.Workplace != "" && !slices.Contains(places, v.Workplace):
+		drop("vaga " + autoPlace(v.Workplace) + ", fora do local que você escolheu")
+	case len(v.Missing) >= 2:
+		drop("obrigatórios que o perfil não tem: " + strings.Join(v.Missing[:min(len(v.Missing), 4)], ", "))
+	case len(v.Missing) == 1:
+		v.Score = min(v.Score, 65)
+	}
+}
+
+func trimYears(y float64) string {
+	return strings.TrimSuffix(strconv.FormatFloat(y, 'f', 1, 64), ".0")
+}
+
+// autoNonTech: título claramente fora de tecnologia (vendas, RH...): nem vai para a IA.
+var autoNonTech = []string{"account executive", "account manager", "sales", "vendas", "vendedor", "comercial",
+	"customer success", "recruiter", "recrutador", "talent acquisition", "business development", "marketing manager"}
+
+func autoIsNonTech(title string) bool {
+	t := strings.ToLower(title)
+	for _, w := range autoNonTech {
+		if strings.Contains(t, w) {
+			return true
+		}
+	}
+	return false
 }
 
 // autoExperience: tempo total de carreira, sem contar duas vezes empregos simultâneos.
@@ -212,19 +321,41 @@ func autoLevelRank(levels, target, stretch []string) int {
 	return best
 }
 
-// autoDedupKey: a mesma vaga publicada duas vezes com a empresa escrita diferente
-// ("MEP | Wellhub (Gympass)" e "MEP | Wellhub") só é lida uma vez.
-func autoDedupKey(title, company string) string {
-	norm := func(s string) []string {
-		return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
-			return !unicode.IsLetter(r) && !unicode.IsDigit(r)
-		})
+// autoDedup: a mesma vaga publicada mais de uma vez com a empresa escrita diferente
+// ("MEP | Wellhub (Gympass)" e "MEP | Wellhub"; "Méliuz" e "Carreiras Méliuz") só é
+// lida uma vez: mesmo título e alguma palavra da empresa em comum.
+type autoDedup map[string][]map[string]bool
+
+var autoCompanyNoise = map[string]bool{"carreiras": true, "careers": true, "grupo": true, "group": true,
+	"inc": true, "ltda": true, "sa": true, "brasil": true, "brazil": true, "the": true, "de": true, "do": true, "da": true}
+
+func autoWords(s string) []string {
+	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+}
+
+// seen registra a vaga e diz se ela já tinha aparecido.
+func (d autoDedup) seen(title, company string) bool {
+	key := strings.Join(autoWords(title), " ")
+	words := map[string]bool{}
+	for _, w := range autoWords(company) {
+		if !autoCompanyNoise[w] && len(w) > 1 {
+			words[w] = true
+		}
 	}
-	key := strings.Join(norm(title), " ")
-	if c := norm(company); len(c) > 0 {
-		key += "|" + c[0]
+	for _, prev := range d[key] {
+		if len(words) == 0 && len(prev) == 0 {
+			return true
+		}
+		for w := range words {
+			if prev[w] {
+				return true
+			}
+		}
 	}
-	return key
+	d[key] = append(d[key], words)
+	return false
 }
 
 var autoLevelNames = map[string]string{

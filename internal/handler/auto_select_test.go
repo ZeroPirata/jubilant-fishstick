@@ -152,13 +152,77 @@ func TestAutoLevelRank(t *testing.T) {
 	}
 }
 
-func TestAutoDedupKey(t *testing.T) {
-	a := autoDedupKey("Senior Backend Software Engineer", "MEP | Wellhub (Gympass)")
-	b := autoDedupKey("Senior Backend Software Engineer", "MEP | Wellhub")
-	if a != b {
-		t.Errorf("%q != %q", a, b)
+func TestAutoDedup(t *testing.T) {
+	d := autoDedup{}
+	for _, tc := range []struct {
+		title, company string
+		dup            bool
+	}{
+		{"Senior Backend Software Engineer", "MEP | Wellhub (Gympass)", false},
+		{"Senior Backend Software Engineer", "MEP | Wellhub", true},
+		{"Analista de SRE Sr (vaga remota)", "Méliuz", false},
+		{"Analista de SRE Sr (vaga remota)", "Carreiras Méliuz", true},
+		{"Senior Backend Software Engineer", "Visa", false},
+		{"Data Engineer", "", false},
+		{"Data Engineer", "", true},
+	} {
+		if got := d.seen(tc.title, tc.company); got != tc.dup {
+			t.Errorf("%s | %s: repetida=%v, esperado %v", tc.title, tc.company, got, tc.dup)
+		}
 	}
-	if autoDedupKey("Senior Backend Software Engineer", "Visa") == a {
-		t.Error("empresas diferentes não podem colidir")
+}
+
+func TestParseAutoVerdicts_Fatos(t *testing.T) {
+	got, err := parseAutoVerdicts(`{"avaliacoes":[
+		{"vaga":1,"anos_pedidos":"5+","modelo":"Híbrido","faltando":["Ruby on Rails","Vue.js"],"nota":70,"candidatar":true,"motivo":"x"},
+		{"vaga":2,"anos_pedidos":null,"modelo":"","faltando":"nenhum","nota":80,"candidatar":true,"motivo":"y"}]}`, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := got[1]; v.YearsAsked != 5 || v.Workplace != "hybrid" || len(v.Missing) != 2 {
+		t.Errorf("vaga 1: %+v", v)
+	}
+	if v := got[2]; v.YearsAsked != 0 || v.Workplace != "" || len(v.Missing) != 0 {
+		t.Errorf("vaga 2: %+v", v)
+	}
+}
+
+func TestAutoApplyRules(t *testing.T) {
+	remote := []string{"remote"}
+	for _, tc := range []struct {
+		name      string
+		v         autoVerdict
+		job       DiscoveredJob
+		apply     bool
+		score     int
+		reasonHas string
+	}{
+		{"ok", autoVerdict{Score: 80, Apply: true, YearsAsked: 3}, DiscoveredJob{}, true, 80, ""},
+		{"anos demais", autoVerdict{Score: 70, Apply: true, YearsAsked: 6}, DiscoveredJob{}, false, 70, "pede 6+ anos"},
+		{"5 anos para 3,6 passa", autoVerdict{Score: 70, Apply: true, YearsAsked: 5}, DiscoveredJob{}, true, 70, ""},
+		{"híbrido sem local no site", autoVerdict{Score: 80, Apply: true, Workplace: "hybrid"}, DiscoveredJob{}, false, 80, "híbrido"},
+		{"site diz remoto: vale o site", autoVerdict{Score: 80, Apply: true, Workplace: "hybrid"}, DiscoveredJob{WorkplaceType: "remote"}, true, 80, ""},
+		{"dois faltando", autoVerdict{Score: 70, Apply: true, Missing: []string{"Ruby on Rails", "Vue.js"}}, DiscoveredJob{}, false, 70, "Ruby on Rails, Vue.js"},
+		{"um faltando limita a nota", autoVerdict{Score: 85, Apply: true, Missing: []string{"Machine Learning"}}, DiscoveredJob{}, true, 65, ""},
+		{"eliminatório", autoVerdict{Score: 80, Apply: true, Blocker: "cidadania"}, DiscoveredJob{}, false, 80, ""},
+	} {
+		v := tc.v
+		autoApplyRules(&v, tc.job, 3.6, remote)
+		if v.Apply != tc.apply || v.Score != tc.score || !strings.Contains(v.Reason, tc.reasonHas) {
+			t.Errorf("%s: apply=%v score=%d reason=%q", tc.name, v.Apply, v.Score, v.Reason)
+		}
+	}
+	// Carreira desconhecida: a regra de anos não se aplica.
+	v := autoVerdict{Score: 70, Apply: true, YearsAsked: 10}
+	if autoApplyRules(&v, DiscoveredJob{}, -1, nil); !v.Apply {
+		t.Error("sem tempo de carreira não deveria cortar por anos")
+	}
+	for in, want := range map[string]string{"Remoto": "remote", "home office": "remote", "híbrido": "hybrid", "Hybrid": "hybrid", "presencial": "onsite", "": ""} {
+		if got := rawWorkplace(in); got != want {
+			t.Errorf("rawWorkplace(%q) = %q, esperado %q", in, got, want)
+		}
+	}
+	if !autoIsNonTech("Account Executive, Mid-Market - Brazil") || autoIsNonTech("Backend Engineer") {
+		t.Error("autoIsNonTech")
 	}
 }
