@@ -230,6 +230,10 @@ func (h *JobHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 
 			ApplicationStage:   j.ApplicationStage.String,
 			ApplicationStageAt: pgTimePtr(j.ApplicationStageAt),
+
+			AutoSelected: j.AutoSelected,
+			AutoScore:    pgInt4Ptr(j.AutoScore),
+			AutoReason:   j.AutoReason.String,
 		}
 		if canFit {
 			h.attachFit(r.Context(), userID, &response[i], j.ID, j.TechStack, j.Status, j.Quality, skills, aliasMap)
@@ -302,6 +306,10 @@ func (h *JobHandler) GetJob(w http.ResponseWriter, r *http.Request) {
 
 		ApplicationStage:   j.ApplicationStage.String,
 		ApplicationStageAt: pgTimePtr(j.ApplicationStageAt),
+
+		AutoSelected: j.AutoSelected,
+		AutoScore:    pgInt4Ptr(j.AutoScore),
+		AutoReason:   j.AutoReason.String,
 	}
 	// Texto completo: o lido no processamento; para vagas processadas antes de ele ser
 	// guardado, o do catálogo do Descobrir, quando a vaga veio de lá.

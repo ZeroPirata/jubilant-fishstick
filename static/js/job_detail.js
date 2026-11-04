@@ -92,6 +92,7 @@ function renderJobDetail(j, resumes, app) {
           ${j.quality ? `<span class="badge badge-${j.quality}">Compatibilidade ${escHtml((qualityLabels[j.quality] || j.quality).toLowerCase())}</span>` : ''}
           ${j.fit && j.fit.items.length ? `<span class="jd-pct">${j.fit.coverage_pct}% da stack</span>` : ''}
           <span id="jd-app-chip">${appStageChip(app?.stage)}</span>
+          ${autoTag(j)}
         </div>
         <div class="jd-meta">${meta}</div>
       </div>
@@ -124,6 +125,7 @@ function renderJobDetail(j, resumes, app) {
   const fit = `
     <div class="jd-card" id="jd-fit" role="tabpanel"${_jd.tab === 'fit' ? '' : ' hidden'}>
       <h3 class="jd-card-title">Compatibilidade</h3>
+      ${j.auto_selected ? `<p class="jd-auto"><b>Escolhida pela seleção com IA</b>${j.auto_score != null ? ` · nota ${j.auto_score}/100` : ''}${j.auto_reason ? `: ${escHtml(j.auto_reason)}` : ''}</p>` : ''}
       ${renderFitDetails({ stack: j.stacks || [], reqs: j.requirements || [], quality: j.quality, fit: j.fit, analysis: j.analysis })}
     </div>`;
 

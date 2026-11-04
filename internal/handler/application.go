@@ -63,6 +63,7 @@ type ApplicationBoardItem struct {
 	AppliedAt        *time.Time `json:"applied_at,omitempty"`
 	ReachedInterview bool       `json:"reached_interview"`
 	LastNote         string     `json:"last_note,omitempty"`
+	AutoSelected     bool       `json:"auto_selected,omitempty"`
 }
 
 // parseApplicationDate lê "AAAA-MM-DD" (vazio = agora). Hoje vira o instante atual,
@@ -116,6 +117,7 @@ func (h *JobHandler) ApplicationBoard(w http.ResponseWriter, r *http.Request) {
 			AppliedAt:        pgTimePtr(j.AppliedAt),
 			ReachedInterview: j.ReachedInterview,
 			LastNote:         j.LastNote,
+			AutoSelected:     j.AutoSelected,
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -240,6 +242,13 @@ func (h *JobHandler) writeApplication(w http.ResponseWriter, r *http.Request, us
 		}
 	}
 	writeJSON(w, status, out)
+}
+
+func pgInt4Ptr(v pgtype.Int4) *int32 {
+	if !v.Valid {
+		return nil
+	}
+	return &v.Int32
 }
 
 func pgTimePtr(t pgtype.Timestamptz) *time.Time {

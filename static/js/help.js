@@ -206,6 +206,29 @@ const HELP_TOPICS = [
     ],
   },
   {
+    id: 'selecao', title: 'Seleção com IA', icon: 'i-spark',
+    slides: [
+      {
+        title: 'A IA escolhe as vagas por você',
+        body: `<p>Em <b>Vagas</b>, o botão <b>Seleção com IA</b> (quando liberado para a sua conta):</p>
+          <ul><li>pega as vagas do Descobrir mais compatíveis com o seu perfil, com o local e o nível que você salvou</li>
+          <li>a IA lê cada uma como um recrutador do seu lado: senioridade pedida, idioma, requisitos eliminatórios, tipo de função</li>
+          <li>as que valem a candidatura entram na pipeline com a tag <b>auto-gerado</b> e o currículo é gerado sozinho</li></ul>
+          <p>Você só confere e envia no site da empresa: a candidatura em si não dá para fazer por você.</p>`,
+        visual: `<div class="hv-flow">
+          ${['Descobrir', 'Triagem IA', 'Pipeline', 'Currículo', 'Você envia'].map((s, i) => `<div class="hv-step" style="--i:${i}"><span>0${i + 1}</span>${s}</div>`).join('<i></i>')}
+        </div>`,
+      },
+      {
+        title: 'Transparente e com limite',
+        body: `<ul><li>Cada vaga lida ganha uma <b>nota</b> e um <b>motivo</b>, inclusive as que ficaram de fora</li>
+          <li>Na tela da vaga, a aba Compatibilidade mostra por que a IA escolheu</li>
+          <li>Há um limite por clique e por dia; a mesma vaga não é lida de novo por 14 dias</li>
+          <li>Não gostou de uma escolha? Exclua a vaga: isso também ajuda a medir a qualidade da seleção</li></ul>`,
+      },
+    ],
+  },
+  {
     id: 'bastidores', title: 'Por dentro', icon: 'i-shield',
     slides: [
       {

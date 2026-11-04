@@ -41,6 +41,13 @@ func (h *AISettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	triageChain, err := h.Store.List(r.Context(), services.PurposeTriage)
+	if err != nil {
+		h.Logger.Error("ai-settings: erro ao listar cadeia triage", zap.Error(err))
+		writeError(w, http.StatusInternalServerError, ErrInternalServerError.Error())
+		return
+	}
+
 	// O que é usado quando a cadeia do painel está vazia (sem keys).
 	envMain := services.Provider{Name: h.Config.Ai.Provider, Model: h.Config.Ai.Model}.Label()
 	envScrape := "mesma cadeia da IA principal"
@@ -51,7 +58,8 @@ func (h *AISettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"main":               mainChain,
 		"scrape":             scrapeChain,
-		"env_fallback":       map[string]string{"main": envMain, "scrape": envScrape},
+		"triage":             triageChain,
+		"env_fallback":       map[string]string{"main": envMain, "scrape": envScrape, "triage": "mesma cadeia da IA principal"},
 		"encryption_enabled": h.Store.EncryptionEnabled(),
 		"worker_paused_secs": int(h.Cache.RateLimitRemaining(r.Context()).Seconds()),
 	})
@@ -68,6 +76,8 @@ func (h *AISettingsHandler) Save(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Main   *[]aiconfig.Input `json:"main"`
 		Scrape *[]aiconfig.Input `json:"scrape"`
+		// Triage: cadeia da seleção automática (opcional: ausente não mexe nela).
+		Triage *[]aiconfig.Input `json:"triage"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Main == nil || body.Scrape == nil {
 		writeError(w, http.StatusBadRequest, ErrInvalidRequestBody.Error())
@@ -75,6 +85,9 @@ func (h *AISettingsHandler) Save(w http.ResponseWriter, r *http.Request) {
 	}
 
 	chains := map[services.Purpose][]aiconfig.Input{services.PurposeMain: *body.Main, services.PurposeScrape: *body.Scrape}
+	if body.Triage != nil {
+		chains[services.PurposeTriage] = *body.Triage
+	}
 	if err := h.Store.SaveAll(r.Context(), chains, userID.String()); err != nil {
 		var verr *aiconfig.ValidationError
 		if errors.As(err, &verr) {

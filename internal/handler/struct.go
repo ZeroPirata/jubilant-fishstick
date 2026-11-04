@@ -49,6 +49,11 @@ type Job struct {
 	// Etapa da candidatura ("" = ainda não enviado) e desde quando.
 	ApplicationStage   string     `json:"application_stage,omitempty"`
 	ApplicationStageAt *time.Time `json:"application_stage_at,omitempty"`
+	// Seleção automática: a vaga foi escolhida pela IA (tag "auto-gerado"), com a nota
+	// e o motivo que ela deu.
+	AutoSelected bool   `json:"auto_selected,omitempty"`
+	AutoScore    *int32 `json:"auto_score,omitempty"`
+	AutoReason   string `json:"auto_reason,omitempty"`
 }
 
 // Resume

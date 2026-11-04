@@ -14,6 +14,8 @@ function switchAdminView(view, btn) {
   document.getElementById('admin-ai').classList.toggle('hidden',     view !== 'ai');
   document.getElementById('admin-imports').classList.toggle('hidden', view !== 'imports');
   document.getElementById('admin-discovery').classList.toggle('hidden', view !== 'discovery');
+  document.getElementById('admin-autoselect').classList.toggle('hidden', view !== 'autoselect');
+  if (view === 'autoselect') loadAutoSelectAdmin();
   if (view === 'errors') loadAdminErrors();
   if (view === 'users')  loadAdminUsers();
   if (view === 'ai')     loadAISettings();
@@ -250,14 +252,14 @@ async function loadAdminUsers() {
     renderAdminUsers(d.data?.data || []);
   } catch (e) {
     document.getElementById('admin-users-body').innerHTML =
-      `<tr><td colspan="5" class="empty">Erro ao carregar: ${e.message}</td></tr>`;
+      `<tr><td colspan="6" class="empty">Erro ao carregar: ${e.message}</td></tr>`;
   }
 }
 
 function renderAdminUsers(users) {
   const body = document.getElementById('admin-users-body');
   if (!users.length) {
-    body.innerHTML = `<tr><td colspan="5" class="empty">Nenhum usuário.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6" class="empty">Nenhum usuário.</td></tr>`;
     return;
   }
   body.innerHTML = users.map(u => {
@@ -274,9 +276,14 @@ function renderAdminUsers(users) {
           onclick="toggleAdmin('${u.ID}', ${!u.IsAdmin})">${btnLabel}</button>`;
     const masterBtn = !_isMaster ? '' : `<button class="btn ${u.IsMaster ? 'btn-danger' : 'btn-ghost'}" style="font-size:12px;padding:4px 10px"
           onclick="toggleMaster('${u.ID}', ${!u.IsMaster})">${u.IsMaster ? 'Remover master' : 'Tornar master'}</button>`;
+    // Seleção com IA: admin e master sempre têm; os outros, liberados aqui.
+    const autoCell = u.IsAdmin || u.IsMaster
+      ? '<span class="auto-muted" title="Admins e masters sempre têm acesso">sempre</span>'
+      : `<label class="field-check" style="margin:0"><span class="ai-switch"><input type="checkbox" ${u.AutoSelect ? 'checked' : ''} onchange="toggleAutoSelectAccess('${u.ID}', this.checked)" aria-label="Seleção com IA para ${aiEsc(u.Email)}" /><span></span></span></label>`;
     return `<tr>
       <td data-label="Email">${aiEsc(u.Email)}</td>
       <td data-label="Papel">${badge}</td>
+      <td data-label="Seleção com IA">${autoCell}</td>
       <td style="color:var(--muted);font-size:12px" data-label="Último acesso" title="${u.LastSeen ? new Date(u.LastSeen).toLocaleString('pt-BR') : ''}">${relativeTime(u.LastSeen)}</td>
       <td style="color:var(--muted);font-size:12px" data-label="Cadastro">${when}</td>
       <td style="display:flex;gap:6px">${adminBtn}${masterBtn}</td>
@@ -333,8 +340,11 @@ const AI_PROVIDERS = {
 const AI_CHAINS = {
   main:   { label: 'IA Principal', note: 'Geração do currículo.' },
   scrape: { label: 'IA Scrape',    note: 'Extração da vaga e do currículo importado.' },
+  triage: { label: 'IA Triagem',   note: 'Seleção com IA: julga quais vagas do Descobrir valem a candidatura.' },
 };
-let _ai = { items: [], order: { main: [], scrape: [] }, view: 'all', open: null, saved: '', env: {}, seq: 0 };
+const AI_PURPOSES = Object.keys(AI_CHAINS);
+const aiEmptyOrder = () => Object.fromEntries(AI_PURPOSES.map(p => [p, []]));
+let _ai = { items: [], order: aiEmptyOrder(), view: 'all', open: null, saved: '', env: {}, seq: 0 };
 let _aiEncryption = true;
 
 function aiEsc(s) {
@@ -354,8 +364,8 @@ async function loadAISettings() {
     const d = (await res.json()).data;
     _aiEncryption = d.encryption_enabled;
     _ai.env = d.env_fallback || {};
-    _ai.items = []; _ai.order = { main: [], scrape: [] }; _ai.open = null;
-    for (const purpose of ['main', 'scrape']) {
+    _ai.items = []; _ai.order = aiEmptyOrder(); _ai.open = null;
+    for (const purpose of AI_PURPOSES) {
       for (const row of d[purpose] || []) {
         const key = `${row.provider}|${row.url}|${row.model}`;
         let it = _ai.items.find(x => x.key === key && !x.ids[purpose]);
@@ -395,14 +405,14 @@ function renderAIStatus(pausedSecs) {
     `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${parts.join('')}</div>`;
 }
 
-// O que vai para o PUT: as duas cadeias, na ordem de cada uma.
+// O que vai para o PUT: as cadeias, na ordem de cada uma.
 function aiPayload() {
   const out = {};
-  for (const purpose of ['main', 'scrape']) {
+  for (const purpose of AI_PURPOSES) {
     out[purpose] = _ai.order[purpose].map(uid => {
       const it = aiItem(uid);
       const id = it.ids[purpose] || '';
-      const keyFrom = !id && it.has_key && !it.api_key && !it.clear_key ? (it.ids.main || it.ids.scrape || '') : '';
+      const keyFrom = !id && it.has_key && !it.api_key && !it.clear_key ? (Object.values(it.ids).find(Boolean) || '') : '';
       return { id, provider: it.provider, url: it.url.trim(), model: it.model.trim(), api_key: it.api_key.trim(),
                clear_key: it.clear_key, enabled: !!it.enabled[purpose], key_from: keyFrom };
     });
@@ -418,8 +428,8 @@ function aiSyncDirty() {
 
 function renderAI() {
   const v = _ai.view;
-  const n = { all: _ai.items.length, main: _ai.order.main.length, scrape: _ai.order.scrape.length };
-  document.getElementById('ai-views').innerHTML = [['all', 'Todas as IAs'], ['main', AI_CHAINS.main.label], ['scrape', AI_CHAINS.scrape.label]]
+  const n = { all: _ai.items.length, ...Object.fromEntries(AI_PURPOSES.map(p => [p, _ai.order[p].length])) };
+  document.getElementById('ai-views').innerHTML = [['all', 'Todas as IAs'], ...AI_PURPOSES.map(p => [p, AI_CHAINS[p].label])]
     .map(([k, label]) => `<button class="${k === v ? 'active' : ''}" onclick="aiView('${k}')">${label} <span class="ai-count">${n[k]}</span></button>`).join('');
 
   const note = document.getElementById('ai-view-note');
@@ -447,7 +457,7 @@ function aiSummaryHTML(it, i) {
   const v = _ai.view;
   let chips;
   if (v === 'all') {
-    chips = ['main', 'scrape'].filter(p => _ai.order[p].includes(it.uid)).map(p => {
+    chips = AI_PURPOSES.filter(p => _ai.order[p].includes(it.uid)).map(p => {
       const pos = _ai.order[p].indexOf(it.uid) + 1;
       return `<span class="ai-chip ai-chip-${p}${it.enabled[p] ? '' : ' off'}" title="${it.enabled[p] ? '' : 'desativada nesta cadeia'}">${AI_CHAINS[p].label.replace('IA ', '')} ${pos}º${it.enabled[p] ? '' : ' · off'}</span>`;
     }).join('') || '<span class="ai-chip ai-chip-none">fora das cadeias</span>';
@@ -484,20 +494,20 @@ function aiFormHTML(it) {
   const opts = Object.entries(AI_PROVIDERS).map(([k, p]) =>
     `<option value="${k}" ${k === it.provider ? 'selected' : ''}>${aiEsc(p.label)}</option>`).join('');
   const on = f => `oninput="aiSet('${it.uid}','${f}',this.value)"`;
-  const member = ['main', 'scrape'].map(p => `
+  const member = AI_PURPOSES.map(p => `
     <label class="ai-member ${_ai.order[p].includes(it.uid) ? 'on' : ''}">
       <input type="checkbox" ${_ai.order[p].includes(it.uid) ? 'checked' : ''} onchange="aiMember('${it.uid}','${p}',this.checked)">
       <span><b>${AI_CHAINS[p].label}</b><small>${AI_CHAINS[p].note}</small></span></label>`).join('');
-  const nowhere = !_ai.order.main.includes(it.uid) && !_ai.order.scrape.includes(it.uid);
+  const nowhere = AI_PURPOSES.every(p => !_ai.order[p].includes(it.uid));
   return `<div class="ai-form">
     <div class="field"><label>Usar em</label><div class="ai-members">${member}</div>
-      ${nowhere ? '<p class="ai-warn">Fora das duas cadeias: esta IA será apagada ao salvar.</p>' : ''}</div>
+      ${nowhere ? '<p class="ai-warn">Fora de todas as cadeias: esta IA será apagada ao salvar.</p>' : ''}</div>
     <div class="field-row">
       <div class="field"><label>Provider</label><select onchange="aiSet('${it.uid}','provider',this.value);renderAI()">${opts}</select></div>
       <div class="field"><label>Modelo</label><input type="text" value="${aiEsc(it.model)}" placeholder="${aiEsc(preset.model)}" ${on('model')} /></div>
     </div>
     <div class="field"><label>URL</label><input type="url" value="${aiEsc(it.url)}" placeholder="${aiEsc(preset.url)}" ${on('url')} /></div>
-    <div class="field" style="margin-bottom:0"><label>API key <span style="text-transform:none;letter-spacing:0">(${aiEsc(aiKeyLabel(it))}${it.ids.main && it.ids.scrape ? ', vale para as duas cadeias' : ''})</span></label>
+    <div class="field" style="margin-bottom:0"><label>API key <span style="text-transform:none;letter-spacing:0">(${aiEsc(aiKeyLabel(it))}${Object.values(it.ids).filter(Boolean).length > 1 ? ', vale para todas as cadeias dela' : ''})</span></label>
       <div style="display:flex;gap:8px">
         <input type="password" autocomplete="new-password" value="${aiEsc(it.api_key)}"
           placeholder="${it.has_key ? 'deixe vazio para manter a atual' : 'opcional para Ollama'}" ${on('api_key')} onchange="renderAI()" />
@@ -553,9 +563,9 @@ function aiAdd() {
 
 async function aiRemove(uid) {
   const it = aiItem(uid);
-  const where = ['main', 'scrape'].filter(p => _ai.order[p].includes(uid)).map(p => AI_CHAINS[p].label).join(' e ');
+  const where = AI_PURPOSES.filter(p => _ai.order[p].includes(uid)).map(p => AI_CHAINS[p].label).join(' e ');
   if (where && !await confirmDialog(`Remover ${aiModelName(it)} (está em ${where})? Só vale depois de salvar.`)) return;
-  for (const p of ['main', 'scrape']) _ai.order[p] = _ai.order[p].filter(x => x !== uid);
+  for (const p of AI_PURPOSES) _ai.order[p] = _ai.order[p].filter(x => x !== uid);
   _ai.items = _ai.items.filter(x => x.uid !== uid);
   _ai.open = null;
   renderAI();
@@ -599,6 +609,7 @@ async function checkAdminStatus() {
     applyAdminVisibility(isAdmin);
     document.querySelectorAll('.master-only').forEach(el => el.classList.toggle('hidden', !_isMaster));
     showAppVersion(_isMaster ? d.data?.version : null);
+    if (typeof setAutoSelectAccess === 'function') setAutoSelectAccess(d.data?.auto_select);
     if (d.data?.profile_empty) impWelcome();
   } catch (_) {}
 }

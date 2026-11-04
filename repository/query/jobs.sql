@@ -152,7 +152,7 @@ LIMIT 200;
 -- mesmo que depois tenha sido encerrada.
 SELECT
     j.id, j.job_title, j.company_name, j.external_url, j.quality, j.status,
-    j.application_stage, j.application_stage_at, j.created_at,
+    j.application_stage, j.application_stage_at, j.created_at, j.auto_selected,
     (SELECT max(gr.created_at) FROM generated_resumes gr WHERE gr.job_id = j.id)::timestamptz AS resume_at,
     (SELECT min(e.happened_at) FROM job_application_events e WHERE e.job_id = j.id AND e.stage = 'applied')::timestamptz AS applied_at,
     EXISTS (SELECT 1 FROM job_application_events e WHERE e.job_id = j.id AND e.stage IN ('interview', 'offer', 'hired')) AS reached_interview,
@@ -163,3 +163,10 @@ WHERE j.user_id = @user_id AND j.deleted_at IS NULL
   AND (j.application_stage IS NOT NULL OR j.status = 'completed')
 ORDER BY COALESCE(j.application_stage_at, j.created_at) DESC
 LIMIT 500;
+
+-- name: QueryInsertAutoJob :one
+-- Vaga posta pela seleção automática (tag "auto-gerado"). Já na pipeline: não duplica.
+INSERT INTO jobs(external_url, user_id, company_name, job_title, language, mode, auto_selected, auto_score, auto_reason)
+VALUES (@external_url, @user_id, @company_name, @job_title, @language, @mode, true, @auto_score, @auto_reason)
+ON CONFLICT (user_id, external_url) DO NOTHING
+RETURNING id;

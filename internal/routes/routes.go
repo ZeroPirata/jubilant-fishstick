@@ -102,6 +102,18 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	adminMux.HandleFunc("POST /discovery/boards/check", discAdmin.CheckBoards)
 	adminMux.HandleFunc("GET /metrics/discovery", discAdmin.Metrics)
 
+	// Seleção automática (botão em Vagas): a IA escolhe vagas do Descobrir e põe na
+	// pipeline. Quem usa: admin, master e quem o admin liberar. Configuração e métricas
+	// no painel.
+	autoSel := handler.NewAutoSelectHandler(logger, db, handler.NewDiscoveryHandler(logger, db, disc), adminR, llm, bus)
+	protectedMux.HandleFunc("GET /auto-select", autoSel.Status)
+	protectedMux.HandleFunc("POST /auto-select/runs", autoSel.Start)
+	protectedMux.HandleFunc("GET /auto-select/runs/{id}", autoSel.GetRun)
+	adminMux.HandleFunc("GET /auto-select/settings", autoSel.GetSettings)
+	adminMux.HandleFunc("PUT /auto-select/settings", autoSel.SaveSettings)
+	adminMux.HandleFunc("PATCH /users/{id}/auto-select", autoSel.SetAccess)
+	adminMux.HandleFunc("GET /metrics/auto-select", autoSel.Metrics)
+
 	// Só master: configurações de IA (contêm API keys) e promoção de masters
 	master := middleware.MasterMiddleware(adminR)
 	aiH := handler.NewAISettingsHandler(logger, aiStore, ucache.New(rds), adminR, cfg)

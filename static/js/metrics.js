@@ -354,7 +354,7 @@ function toggleAIFailure(tr) {
 function switchMetricsView(view, btn) {
   _metricsView = view;
   document.querySelectorAll('[data-mview]').forEach(b => b.classList.toggle('active', b === btn));
-  for (const v of ['geral', 'sistema', 'ia', 'banco', 'busca']) {
+  for (const v of ['geral', 'sistema', 'ia', 'banco', 'busca', 'auto']) {
     document.getElementById(`metrics-view-${v}`).classList.toggle('hidden', v !== view);
   }
   refreshMetricsView();
@@ -364,6 +364,7 @@ function refreshMetricsView() {
   if (_metricsView === 'geral') loadGeneralMetrics();
   else if (_metricsView === 'ia') loadAIMetrics();
   else if (_metricsView === 'busca') loadDiscoveryMetrics();
+  else if (_metricsView === 'auto') loadAutoSelectMetrics();
   else loadMetrics();
 }
 
@@ -432,7 +433,7 @@ const AI_STATUS_LABELS = {
   rate_limit: 'rate limit', timeout: 'timeout', truncated: 'cortada', empty: 'vazia',
   parse_error: 'JSON inválido', http_error: 'erro HTTP', network_error: 'rede', error: 'outro', canceled: 'cancelada',
 };
-const AI_PURPOSE_LABELS = { main: 'Currículo', scrape: 'Scrape', import: 'Importação' };
+const AI_PURPOSE_LABELS = { main: 'Currículo', scrape: 'Scrape', import: 'Importação', triage: 'Seleção com IA' };
 const AI_BUCKET_MS = { '24h': 3600e3, '7d': 6 * 3600e3, '30d': 24 * 3600e3 };
 
 function fmtMs(ms) { return ms ? fmtDur(ms / 1000) : '—'; }

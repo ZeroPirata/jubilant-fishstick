@@ -283,6 +283,7 @@ function boardCard(it) {
       <div class="board-meta">
         ${appClosed(it.stage) ? appStageChip(it.stage) : ''}
         ${q}
+        ${autoTag(it)}
         ${when ? `<span class="board-when">${escHtml(when)}</span>` : ''}
       </div>
       ${it.last_note ? `<p class="board-note" title="${escHtml(it.last_note)}">${escHtml(it.last_note)}</p>` : ''}

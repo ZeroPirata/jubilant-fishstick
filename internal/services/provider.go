@@ -16,6 +16,7 @@ const (
 	PurposeMain   Purpose = "main"   // geração do currículo
 	PurposeScrape Purpose = "scrape" // extração dos dados da vaga
 	PurposeImport Purpose = "import" // leitura do currículo enviado pelo usuário (cadeia de scrape, depois a principal)
+	PurposeTriage Purpose = "triage" // seleção automática: a IA julga quais vagas valem a candidatura (sem cadeia própria, usa a principal)
 )
 
 // Provider é uma entrada da cadeia de fallback.
@@ -115,6 +116,12 @@ func (ai *AiService) resolveProviders(ctx context.Context, purpose Purpose) []Pr
 		} else if len(ps) > 0 {
 			return ps
 		}
+	}
+
+	if purpose == PurposeTriage {
+		// Julgar a vaga pede raciocínio, não só extração: sem cadeia própria no painel,
+		// vale a principal (que já cai no .env quando vazia).
+		return ai.resolveProviders(ctx, PurposeMain)
 	}
 
 	if purpose == PurposeScrape {

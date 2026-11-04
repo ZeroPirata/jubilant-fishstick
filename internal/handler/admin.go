@@ -41,7 +41,12 @@ func (h *AdminHandler) Me(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.Logger.Warn("me: falha ao verificar perfil vazio", zap.Error(err))
 	}
-	body := map[string]any{"is_admin": isAdmin, "is_master": isMaster, "profile_empty": empty}
+	// Seleção automática (botão em Vagas): falha só esconde o botão.
+	autoSelect, err := h.Admin.AutoSelectAllowed(r.Context(), userID.String())
+	if err != nil {
+		h.Logger.Warn("me: falha ao verificar acesso à seleção automática", zap.Error(err))
+	}
+	body := map[string]any{"is_admin": isAdmin, "is_master": isMaster, "profile_empty": empty, "auto_select": autoSelect}
 	// Versão do app (version.json): só o master vê, para saber quando há deploy novo.
 	if isMaster {
 		body["version"] = appversion.Current()

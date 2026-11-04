@@ -117,11 +117,12 @@ O usuário envia um PDF, DOCX ou TXT (ou o PDF exportado do LinkedIn). A IA sepa
 | Aba | O que mostra |
 |---|---|
 | Log de erros | Falhas de leitura, perfil vazio, erros e limites da IA, por vaga |
-| Usuários | Contas, último acesso, quem é admin |
+| Usuários | Contas, último acesso, quem é admin, quem tem a Seleção com IA |
 | Importações | Histórico de importações de currículo, ao vivo |
 | Busca de vagas | Sites ligados, termos do catálogo, intervalo, empresas nos ATS (com busca por nome ou link em todos os ATS) |
-| Configurações de IA *(master)* | Cadeia de provedores por finalidade (geração, leitura de vagas, importação), pausa do worker |
-| Métricas | Vagas, IA (chamadas, latência, tokens), usuários e a varredura de vagas em andamento, por site |
+| Seleção com IA | Liga/desliga, vagas por clique e por dia, quantas a IA lê, nota mínima, compatibilidade mínima e o que gerar |
+| Configurações de IA *(master)* | Cadeia de provedores por finalidade (geração, leitura de vagas, importação, triagem da Seleção com IA), pausa do worker |
+| Métricas | Vagas, IA (chamadas, latência, tokens), usuários, a varredura de vagas em andamento, por site, e a Seleção com IA (escolhidas, enviadas, descartadas, custo) |
 
 O **admin master** vê também a versão do app no rodapé da barra lateral, com o selo "nova" quando há deploy novo.
 
@@ -272,6 +273,9 @@ Base `/api/v1`. Rotas protegidas exigem `Authorization: Bearer <jwt>`; as respos
 | GET | `/jobs/{id}/application` | Etapa atual e histórico da candidatura |
 | POST | `/jobs/{id}/application/events` | Marca etapa ou anotação `{stage, note?, date?}` (`stage`: applied, interview, offer, hired, rejected, withdrawn, ready, note) |
 | DELETE | `/jobs/{id}/application/events/{event_id}` | Apaga um item do histórico (recalcula a etapa) |
+| GET | `/auto-select` | Seleção com IA: acesso, limites, uso de hoje e a última rodada |
+| POST | `/auto-select/runs` | Inicia uma rodada (a IA lê as vagas do Descobrir e põe as melhores na pipeline) |
+| GET | `/auto-select/runs/{id}` | Andamento e resultado da rodada (nota e motivo de cada vaga) |
 | GET | `/jobs/{id}/resumes[/{resume_id}]` | Currículos da vaga |
 | DELETE | `/jobs/{id}/resumes/{resume_id}` | Remover currículo |
 | POST | `/jobs/{id}/resumes/{resume_id}/pdf` | Gerar PDF (modelo) |
@@ -282,7 +286,7 @@ Base `/api/v1`. Rotas protegidas exigem `Authorization: Bearer <jwt>`; as respos
 
 **Filtros e segurança:** `GET/POST /filters`, `DELETE /filters/{id}` · `GET /security/events`
 
-**Admin** (`/admin/...`): `errors`, `users`, `PATCH users/{id}`, `imports`, `metrics/ai`, `metrics/users`, `metrics/raw`, `metrics/discovery`, `worker` (pausa por rate limit), `discovery/settings` (GET/PUT), `discovery/run`, `discovery/boards/check`, `debug/gc`; master: `ai-settings` (GET/PUT), `ai-settings/resume`, `PATCH users/{id}/master`.
+**Admin** (`/admin/...`): `errors`, `users`, `PATCH users/{id}`, `imports`, `metrics/ai`, `metrics/users`, `metrics/raw`, `metrics/discovery`, `worker` (pausa por rate limit), `discovery/settings` (GET/PUT), `discovery/run`, `discovery/boards/check`, `auto-select/settings` (GET/PUT), `PATCH users/{id}/auto-select`, `metrics/auto-select`, `debug/gc`; master: `ai-settings` (GET/PUT), `ai-settings/resume`, `PATCH users/{id}/master`.
 
 ---
 

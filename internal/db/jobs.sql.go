@@ -14,7 +14,7 @@ import (
 const queryApplicationBoard = `-- name: QueryApplicationBoard :many
 SELECT
     j.id, j.job_title, j.company_name, j.external_url, j.quality, j.status,
-    j.application_stage, j.application_stage_at, j.created_at,
+    j.application_stage, j.application_stage_at, j.created_at, j.auto_selected,
     (SELECT max(gr.created_at) FROM generated_resumes gr WHERE gr.job_id = j.id)::timestamptz AS resume_at,
     (SELECT min(e.happened_at) FROM job_application_events e WHERE e.job_id = j.id AND e.stage = 'applied')::timestamptz AS applied_at,
     EXISTS (SELECT 1 FROM job_application_events e WHERE e.job_id = j.id AND e.stage IN ('interview', 'offer', 'hired')) AS reached_interview,
@@ -37,6 +37,7 @@ type QueryApplicationBoardRow struct {
 	ApplicationStage   pgtype.Text        `json:"application_stage"`
 	ApplicationStageAt pgtype.Timestamptz `json:"application_stage_at"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	AutoSelected       bool               `json:"auto_selected"`
 	ResumeAt           pgtype.Timestamptz `json:"resume_at"`
 	AppliedAt          pgtype.Timestamptz `json:"applied_at"`
 	ReachedInterview   bool               `json:"reached_interview"`
@@ -65,6 +66,7 @@ func (q *Queries) QueryApplicationBoard(ctx context.Context, userID pgtype.UUID)
 			&i.ApplicationStage,
 			&i.ApplicationStageAt,
 			&i.CreatedAt,
+			&i.AutoSelected,
 			&i.ResumeAt,
 			&i.AppliedAt,
 			&i.ReachedInterview,
@@ -193,6 +195,41 @@ func (q *Queries) QueryInsertApplicationEvent(ctx context.Context, arg QueryInse
 		arg.Stage,
 		arg.Note,
 		arg.HappenedAt,
+	)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const queryInsertAutoJob = `-- name: QueryInsertAutoJob :one
+INSERT INTO jobs(external_url, user_id, company_name, job_title, language, mode, auto_selected, auto_score, auto_reason)
+VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8)
+ON CONFLICT (user_id, external_url) DO NOTHING
+RETURNING id
+`
+
+type QueryInsertAutoJobParams struct {
+	ExternalUrl string      `json:"external_url"`
+	UserID      pgtype.UUID `json:"user_id"`
+	CompanyName pgtype.Text `json:"company_name"`
+	JobTitle    pgtype.Text `json:"job_title"`
+	Language    pgtype.Text `json:"language"`
+	Mode        string      `json:"mode"`
+	AutoScore   pgtype.Int4 `json:"auto_score"`
+	AutoReason  pgtype.Text `json:"auto_reason"`
+}
+
+// Vaga posta pela seleção automática (tag "auto-gerado"). Já na pipeline: não duplica.
+func (q *Queries) QueryInsertAutoJob(ctx context.Context, arg QueryInsertAutoJobParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, queryInsertAutoJob,
+		arg.ExternalUrl,
+		arg.UserID,
+		arg.CompanyName,
+		arg.JobTitle,
+		arg.Language,
+		arg.Mode,
+		arg.AutoScore,
+		arg.AutoReason,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)
@@ -428,7 +465,7 @@ func (q *Queries) QueryReprocessJob(ctx context.Context, arg QueryReprocessJobPa
 }
 
 const querySelectJobForUser = `-- name: QuerySelectJobForUser :one
-SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation, j.application_stage, j.application_stage_at
+SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation, j.application_stage, j.application_stage_at, j.auto_selected, j.auto_score, j.auto_reason
 FROM jobs j
 WHERE j.id = $1 AND j.user_id = $2 AND j.deleted_at IS NULL
 `
@@ -463,12 +500,15 @@ func (q *Queries) QuerySelectJobForUser(ctx context.Context, arg QuerySelectJobF
 		&i.FreshGeneration,
 		&i.ApplicationStage,
 		&i.ApplicationStageAt,
+		&i.AutoSelected,
+		&i.AutoScore,
+		&i.AutoReason,
 	)
 	return i, err
 }
 
 const querySelectJobsForUser = `-- name: QuerySelectJobsForUser :many
-SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation, j.application_stage, j.application_stage_at, COUNT(*) OVER() AS total_count
+SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation, j.application_stage, j.application_stage_at, j.auto_selected, j.auto_score, j.auto_reason, COUNT(*) OVER() AS total_count
 FROM jobs j
 INNER JOIN user_accounts acc ON acc.id = j.user_id
 WHERE
@@ -511,6 +551,9 @@ type QuerySelectJobsForUserRow struct {
 	FreshGeneration    bool               `json:"fresh_generation"`
 	ApplicationStage   pgtype.Text        `json:"application_stage"`
 	ApplicationStageAt pgtype.Timestamptz `json:"application_stage_at"`
+	AutoSelected       bool               `json:"auto_selected"`
+	AutoScore          pgtype.Int4        `json:"auto_score"`
+	AutoReason         pgtype.Text        `json:"auto_reason"`
 	TotalCount         int64              `json:"total_count"`
 }
 
@@ -551,6 +594,9 @@ func (q *Queries) QuerySelectJobsForUser(ctx context.Context, arg QuerySelectJob
 			&i.FreshGeneration,
 			&i.ApplicationStage,
 			&i.ApplicationStageAt,
+			&i.AutoSelected,
+			&i.AutoScore,
+			&i.AutoReason,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

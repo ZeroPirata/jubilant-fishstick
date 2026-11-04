@@ -18,12 +18,14 @@ type ErrorLog struct {
 }
 
 type UserAccount struct {
-	ID        string
-	Email     string
-	IsAdmin   bool
-	IsMaster  bool
-	LastSeen  *time.Time
-	CreatedAt time.Time
+	ID       string
+	Email    string
+	IsAdmin  bool
+	IsMaster bool
+	// AutoSelect: liberado para a seleção automática pelo admin (admin e master já têm).
+	AutoSelect bool
+	LastSeen   *time.Time
+	CreatedAt  time.Time
 }
 
 type InsertErrorLogParams struct {
@@ -41,6 +43,8 @@ type Repository interface {
 	SetAdmin(ctx context.Context, userID string, isAdmin bool) error
 	IsAdmin(ctx context.Context, userID string) (bool, error)
 	IsMaster(ctx context.Context, userID string) (bool, error)
+	// AutoSelectAllowed: admin, master ou liberado pelo admin para a seleção automática.
+	AutoSelectAllowed(ctx context.Context, userID string) (bool, error)
 	// ProfileEmpty: sem nome, experiências nem habilidades (o app sugere importar o currículo).
 	ProfileEmpty(ctx context.Context, userID string) (bool, error)
 	// SetMaster promove (também vira admin) ou rebaixa um master (continua admin).

@@ -296,6 +296,7 @@ function renderJobRow(j) {
       <div class="jl-chips">
         <span class="jl-status">${badge(j.status)}</span>
         ${appStageChip(j.application_stage)}
+        ${autoTag(j)}
         <span class="jl-quality">${jobQualityChip(j.id, quality, fit)}</span>
       </div>
       <div class="jl-actions job-actions-cell" data-status="${j.status}" data-lang="${j.language === 'en' ? 'en' : 'pt-br'}">${jobActions(j.id, j.status)}</div>

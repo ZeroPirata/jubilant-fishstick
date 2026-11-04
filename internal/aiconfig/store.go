@@ -76,7 +76,7 @@ func NewStore(repo aisettings.Repository, box *security.SecretBox) *Store {
 
 func ParsePurpose(s string) (services.Purpose, bool) {
 	p := services.Purpose(s)
-	return p, p == services.PurposeMain || p == services.PurposeScrape
+	return p, p == services.PurposeMain || p == services.PurposeScrape || p == services.PurposeTriage
 }
 
 // EncryptionEnabled informa se dá para salvar keys (SETTINGS_ENCRYPTION_KEY configurada).
@@ -155,7 +155,7 @@ func (s *Store) Save(ctx context.Context, purpose services.Purpose, inputs []Inp
 func (s *Store) SaveAll(ctx context.Context, chains map[services.Purpose][]Input, userID string) error {
 	keysByPurpose := map[services.Purpose]map[string][]byte{}
 	allKeys := map[string][]byte{}
-	for _, purpose := range []services.Purpose{services.PurposeMain, services.PurposeScrape} {
+	for _, purpose := range []services.Purpose{services.PurposeMain, services.PurposeScrape, services.PurposeTriage} {
 		existing, err := s.repo.List(ctx, string(purpose))
 		if err != nil {
 			return err
@@ -193,7 +193,7 @@ func (s *Store) buildRows(purpose services.Purpose, inputs []Input, own, all map
 	if len(inputs) > maxProviders {
 		return nil, &ValidationError{fmt.Sprintf("no máximo %d providers por cadeia", maxProviders)}
 	}
-	name := map[services.Purpose]string{services.PurposeMain: "principal", services.PurposeScrape: "scrape"}[purpose]
+	name := map[services.Purpose]string{services.PurposeMain: "principal", services.PurposeScrape: "scrape", services.PurposeTriage: "triagem"}[purpose]
 
 	rows := make([]aisettings.ProviderRow, 0, len(inputs))
 	for i, in := range inputs {

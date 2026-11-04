@@ -259,6 +259,47 @@ type AiProvider struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AutoSelectPick struct {
+	RunID       pgtype.UUID        `json:"run_id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	Url         string             `json:"url"`
+	Title       string             `json:"title"`
+	Company     string             `json:"company"`
+	CoveragePct int32              `json:"coverage_pct"`
+	Quality     string             `json:"quality"`
+	Score       pgtype.Int4        `json:"score"`
+	Selected    bool               `json:"selected"`
+	Reason      string             `json:"reason"`
+	JobID       pgtype.UUID        `json:"job_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type AutoSelectRun struct {
+	ID         pgtype.UUID        `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	Status     string             `json:"status"`
+	Requested  int32              `json:"requested"`
+	Candidates int32              `json:"candidates"`
+	Analyzed   int32              `json:"analyzed"`
+	Selected   int32              `json:"selected"`
+	Error      string             `json:"error"`
+	StartedAt  pgtype.Timestamptz `json:"started_at"`
+	FinishedAt pgtype.Timestamptz `json:"finished_at"`
+}
+
+type AutoSelectSetting struct {
+	ID         int16              `json:"id"`
+	Enabled    bool               `json:"enabled"`
+	PerRun     int32              `json:"per_run"`
+	PerDay     int32              `json:"per_day"`
+	Candidates int32              `json:"candidates"`
+	MinScore   int32              `json:"min_score"`
+	MinQuality string             `json:"min_quality"`
+	Mode       string             `json:"mode"`
+	UpdatedBy  pgtype.UUID        `json:"updated_by"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type DiscoveredJob struct {
 	ID            pgtype.UUID        `json:"id"`
 	Source        string             `json:"source"`
@@ -367,6 +408,9 @@ type Job struct {
 	FreshGeneration    bool               `json:"fresh_generation"`
 	ApplicationStage   pgtype.Text        `json:"application_stage"`
 	ApplicationStageAt pgtype.Timestamptz `json:"application_stage_at"`
+	AutoSelected       bool               `json:"auto_selected"`
+	AutoScore          pgtype.Int4        `json:"auto_score"`
+	AutoReason         pgtype.Text        `json:"auto_reason"`
 }
 
 type JobAlertFeedback struct {
@@ -442,15 +486,16 @@ type UserAcademicHistory struct {
 }
 
 type UserAccount struct {
-	ID           pgtype.UUID        `json:"id"`
-	Email        string             `json:"email"`
-	PasswordHash string             `json:"password_hash"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
-	IsAdmin      bool               `json:"is_admin"`
-	IsMaster     bool               `json:"is_master"`
-	LastSeenAt   pgtype.Timestamptz `json:"last_seen_at"`
+	ID               pgtype.UUID        `json:"id"`
+	Email            string             `json:"email"`
+	PasswordHash     string             `json:"password_hash"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+	IsAdmin          bool               `json:"is_admin"`
+	IsMaster         bool               `json:"is_master"`
+	LastSeenAt       pgtype.Timestamptz `json:"last_seen_at"`
+	AutoSelectAccess bool               `json:"auto_select_access"`
 }
 
 type UserCertificate struct {

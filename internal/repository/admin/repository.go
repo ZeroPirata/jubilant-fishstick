@@ -79,7 +79,7 @@ func (r *adminRepo) ListErrorLogs(ctx context.Context, limit, offset int) ([]Err
 
 func (r *adminRepo) ListUsers(ctx context.Context) ([]UserAccount, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, email, is_admin, is_master, last_seen_at, created_at
+		`SELECT id, email, is_admin, is_master, auto_select_access, last_seen_at, created_at
 		 FROM user_accounts
 		 WHERE deleted_at IS NULL
 		 ORDER BY created_at DESC`,
@@ -94,7 +94,7 @@ func (r *adminRepo) ListUsers(ctx context.Context) ([]UserAccount, error) {
 		var u UserAccount
 		var id pgtype.UUID
 		var createdAt, lastSeen pgtype.Timestamptz
-		if err := rows.Scan(&id, &u.Email, &u.IsAdmin, &u.IsMaster, &lastSeen, &createdAt); err != nil {
+		if err := rows.Scan(&id, &u.Email, &u.IsAdmin, &u.IsMaster, &u.AutoSelect, &lastSeen, &createdAt); err != nil {
 			return nil, err
 		}
 		if lastSeen.Valid {
@@ -141,6 +141,18 @@ func (r *adminRepo) IsMaster(ctx context.Context, userID string) (bool, error) {
 		`SELECT is_master FROM user_accounts WHERE id = $1 AND deleted_at IS NULL`, uid,
 	).Scan(&isMaster)
 	return isMaster, err
+}
+
+func (r *adminRepo) AutoSelectAllowed(ctx context.Context, userID string) (bool, error) {
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return false, err
+	}
+	var ok bool
+	err := r.db.QueryRow(ctx,
+		`SELECT is_admin OR is_master OR auto_select_access FROM user_accounts WHERE id = $1 AND deleted_at IS NULL`, uid,
+	).Scan(&ok)
+	return ok, err
 }
 
 func (r *adminRepo) ProfileEmpty(ctx context.Context, userID string) (bool, error) {
