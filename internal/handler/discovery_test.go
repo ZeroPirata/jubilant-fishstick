@@ -376,3 +376,25 @@ func TestAddAlsoOn(t *testing.T) {
 		t.Errorf("AlsoOn = %v, want %v", j.AlsoOn, want)
 	}
 }
+
+// Depois que a vaga passou pela pipeline, a compatibilidade usa a stack lida pela IA,
+// igual à página da vaga (o caso do SRE: 71% no sino e "Baixa" na página).
+func TestJobFitPrefersPipelineStack(t *testing.T) {
+	skills := []db.UserSkill{
+		{SkillName: "Go", ProficiencyLevel: db.SkillLevelExpert},
+		{SkillName: "Python", ProficiencyLevel: db.SkillLevelAdvanced},
+		{SkillName: "Docker", ProficiencyLevel: db.SkillLevelAdvanced},
+	}
+	eval := jobfit.NewEvaluator(skills, map[string]string{})
+	catalog := []string{"Go", "Python", "Docker", "Kubernetes"}
+	pipeline := []string{"kubernetes", "terraform", "datadog", "docker"}
+
+	fit, from := jobFit(eval, catalog, nil)
+	if from != "catalog" || fit.Strong != 3 {
+		t.Errorf("sem pipeline: from=%q strong=%d, quer catalog e 3", from, fit.Strong)
+	}
+	fit, from = jobFit(eval, catalog, pipeline)
+	if from != "pipeline" || fit.Strong != 1 || len(fit.Items) != 4 {
+		t.Errorf("com pipeline: from=%q strong=%d itens=%d, quer pipeline, 1 e 4", from, fit.Strong, len(fit.Items))
+	}
+}

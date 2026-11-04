@@ -128,7 +128,7 @@ function renderJobDetail(j, resumes) {
     <div class="jd-card" id="jd-resumes" role="tabpanel"${_jd.tab === 'resumes' ? '' : ' hidden'}>
       <h3 class="jd-card-title">Currículos e cover letters</h3>
       ${resumes.length
-        ? jdResumeToolbar(resumes.length) + renderResumes(j.id, resumes, { selectable: true })
+        ? jdResumeToolbar(resumes.length) + renderResumes(j.id, resumes, { selectable: true, quality: j.quality })
         : `<p class="jd-empty-inline">${running ? 'Sendo gerado — aparece aqui quando ficar pronto.' : 'Nenhum currículo gerado ainda. Use “Refazer” para gerar.'}</p>`}
     </div>`;
 

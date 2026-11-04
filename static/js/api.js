@@ -50,4 +50,10 @@ const fmtDate = iso => {
   if (iso.length === 10) return iso; // já é YYYY-MM-DD
   return new Date(iso).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
 };
+// fmtDay: só a data (listas compactas).
+const fmtDay = iso => {
+  if (!iso) return '—';
+  if (iso.length === 10) return iso.split('-').reverse().join('/');
+  return new Date(iso).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric' });
+};
 const splitCsv = s => s.split(',').map(x => x.trim()).filter(Boolean);

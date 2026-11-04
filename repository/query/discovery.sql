@@ -335,3 +335,43 @@ ORDER BY quality;
 
 -- name: AlertsFeedbackPrune :exec
 DELETE FROM job_alert_feedback WHERE created_at < @cutoff;
+
+
+-- name: DiscoveryPipelineStacks :many
+-- A stack que a IA leu da vaga inteira, das vagas do usuário já processadas, por URL.
+-- Quando a vaga do catálogo já foi para a pipeline, a compatibilidade vem desta stack
+-- (a mesma da aba Vagas), não das tecnologias que a varredura casou no texto.
+SELECT DISTINCT ON (j.external_url) j.external_url, j.tech_stack
+FROM jobs j
+WHERE j.user_id = @user_id AND j.deleted_at IS NULL
+  AND j.status = 'completed' AND cardinality(j.tech_stack) > 0
+ORDER BY j.external_url, j.created_at DESC;
+
+
+-- name: DiscoveryJobGet :one
+-- Uma vaga do catálogo para a página "Sobre a vaga", com a descrição inteira e a vaga
+-- na pipeline do usuário (a mais recente com a mesma URL), se já foi mandada.
+SELECT
+    d.id, d.source, d.title, d.company, d.location, d.workplace_type, d.international, d.url,
+    d.seniority, d.published_at, d.techs, d.language, d.first_seen_at, d.description,
+    pj.id AS pipeline_job_id,
+    COALESCE(pj.status::text, '')::text AS pipeline_status
+FROM discovered_jobs d
+LEFT JOIN LATERAL (
+    SELECT j.id, j.status FROM jobs j
+    WHERE j.user_id = @user_id AND j.external_url = d.url AND j.deleted_at IS NULL
+    ORDER BY j.created_at DESC
+    LIMIT 1
+) pj ON true
+WHERE d.id = @id;
+
+
+-- name: DiscoveryJobSiblings :many
+-- A mesma vaga (título e empresa iguais) em outros sites, para "também em".
+SELECT d.source, d.url
+FROM discovered_jobs d
+WHERE d.id <> @id AND d.company <> ''
+  AND lower(btrim(d.title)) = lower(btrim(@title::text))
+  AND lower(btrim(d.company)) = lower(btrim(@company::text))
+  AND (d.expires_at IS NULL OR d.expires_at >= now())
+ORDER BY d.published_at DESC NULLS LAST;

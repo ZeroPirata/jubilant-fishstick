@@ -22,6 +22,7 @@ func setupDiscoveryRoutes(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Po
 	mux.HandleFunc("PUT /discovery/alerts", h.SaveAlerts)
 	mux.HandleFunc("POST /discovery/alerts/seen", h.MarkAlertsSeen)
 	mux.HandleFunc("POST /discovery/alerts/feedback", h.AlertFeedback)
+	mux.HandleFunc("GET /discovery/jobs/{id}", h.GetJob)
 	mux.HandleFunc("POST /discovery/jobs/{id}/dismiss", h.DismissJob)
 	mux.HandleFunc("DELETE /discovery/jobs/{id}/dismiss", h.RestoreJob)
 }

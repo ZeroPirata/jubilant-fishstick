@@ -274,7 +274,7 @@ Base `/api/v1`. Rotas protegidas exigem `Authorization: Bearer <jwt>`; as respos
 | POST | `/jobs/{id}/resumes/{resume_id}/feedback` | Avaliar |
 | GET | `/jobs/events` | SSE |
 
-**Descobrir:** `GET /discovery/jobs` (filtros, paginação, ordenado por compatibilidade) · `GET /discovery/technologies` · `GET/PUT /discovery/preferences` · `POST /discovery/refresh` · `GET /discovery/status` · `GET/PUT /discovery/alerts` · `POST /discovery/alerts/seen` · `POST /discovery/alerts/feedback` · `POST/DELETE /discovery/jobs/{id}/dismiss` (`?dismissed=1` lista as dispensadas)
+**Descobrir:** `GET /discovery/jobs` (filtros, paginação, ordenado por compatibilidade) · `GET /discovery/jobs/{id}` (página "Sobre a vaga": descrição, compatibilidade e onde mais aparece) · `GET /discovery/technologies` · `GET/PUT /discovery/preferences` · `POST /discovery/refresh` · `GET /discovery/status` · `GET/PUT /discovery/alerts` · `POST /discovery/alerts/seen` · `POST /discovery/alerts/feedback` · `POST/DELETE /discovery/jobs/{id}/dismiss` (`?dismissed=1` lista as dispensadas)
 
 **Filtros e segurança:** `GET/POST /filters`, `DELETE /filters/{id}` · `GET /security/events`
 

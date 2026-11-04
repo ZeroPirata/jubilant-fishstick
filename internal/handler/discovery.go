@@ -78,6 +78,9 @@ type DiscoveredJob struct {
 	// Fit: compatibilidade da stack da vaga com o perfil (o mesmo JobFit da aba Vagas),
 	// que ordena a lista. Só vai na resposta para as vagas da página.
 	Fit *jobfit.Fit `json:"fit,omitempty"`
+	// FitFrom: de onde veio a stack do Fit: "pipeline" (leitura da IA, depois de gerar)
+	// ou "catalog" (tecnologias casadas na varredura).
+	FitFrom string `json:"fit_from,omitempty"`
 	// AlsoOn: a mesma vaga (empresa e título iguais) publicada em outros sites. A
 	// lista mostra uma só, com os links das outras, em vez de repetir.
 	AlsoOn []JobLink `json:"also_on,omitempty"`
@@ -215,6 +218,10 @@ func (h *DiscoveryHandler) rankedJobs(ctx context.Context, userID pgtype.UUID, v
 	if errR != nil {
 		return out, errR
 	}
+	pipeStacks, errR := h.Repo.PipelineStacks(ctx, userID)
+	if errR != nil {
+		return out, errR
+	}
 
 	// A mesma vaga costuma ser publicada uma vez por cidade, e às vezes em mais de um
 	// site: fica a mais recente (a query vem da mais recente para a mais antiga), com
@@ -248,7 +255,7 @@ func (h *DiscoveryHandler) rankedJobs(ctx context.Context, userID pgtype.UUID, v
 		job := toDiscoveredJob(row, matched)
 		job.MatchedTechs = matchedTechs
 		job.Dismissed = view == onlyDismissed
-		job.fit = eval.Evaluate(row.Techs)
+		job.fit, job.FitFrom = jobFit(eval, row.Techs, pipeStacks[row.Url])
 		kept[key] = len(jobs)
 		jobs = append(jobs, job)
 	}
@@ -258,6 +265,17 @@ func (h *DiscoveryHandler) rankedJobs(ctx context.Context, userID pgtype.UUID, v
 	rankDiscovered(jobs)
 	out.jobs = jobs
 	return out, nil
+}
+
+// jobFit: a compatibilidade da vaga. Depois que ela foi para a pipeline e a IA leu a
+// vaga inteira, vale a stack dessa leitura (a mesma da aba Vagas e da página da vaga);
+// antes, as tecnologias que a varredura casou no texto. FitFrom diz qual ("pipeline"
+// ou "catalog"), para a tela explicar.
+func jobFit(eval *jobfit.Evaluator, catalog, pipeline []string) (jobfit.Fit, string) {
+	if len(pipeline) > 0 {
+		return eval.Evaluate(pipeline), "pipeline"
+	}
+	return eval.Evaluate(catalog), "catalog"
 }
 
 // rankDiscovered ordena pela compatibilidade (JobFit): primeiro a faixa (alta, média,

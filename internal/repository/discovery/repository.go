@@ -218,3 +218,26 @@ func (r *discoveryRepository) AlertFeedbackStats(ctx context.Context, since time
 func (r *discoveryRepository) PruneAlertFeedback(ctx context.Context, before time.Time) *repository.RepositoryError {
 	return repository.HandleDatabaseError(r.Q.AlertsFeedbackPrune(ctx, pgtype.Timestamptz{Time: before, Valid: true}))
 }
+
+// PipelineStacks: url da vaga → stack lida pela IA, das vagas processadas do usuário.
+func (r *discoveryRepository) PipelineStacks(ctx context.Context, userID pgtype.UUID) (map[string][]string, *repository.RepositoryError) {
+	rows, err := r.Q.DiscoveryPipelineStacks(ctx, userID)
+	if err != nil {
+		return nil, repository.HandleDatabaseError(err)
+	}
+	out := make(map[string][]string, len(rows))
+	for _, row := range rows {
+		out[row.ExternalUrl] = row.TechStack
+	}
+	return out, nil
+}
+
+func (r *discoveryRepository) JobGet(ctx context.Context, args db.DiscoveryJobGetParams) (db.DiscoveryJobGetRow, *repository.RepositoryError) {
+	row, err := r.Q.DiscoveryJobGet(ctx, args)
+	return row, repository.HandleDatabaseError(err)
+}
+
+func (r *discoveryRepository) JobSiblings(ctx context.Context, args db.DiscoveryJobSiblingsParams) ([]db.DiscoveryJobSiblingsRow, *repository.RepositoryError) {
+	rows, err := r.Q.DiscoveryJobSiblings(ctx, args)
+	return rows, repository.HandleDatabaseError(err)
+}

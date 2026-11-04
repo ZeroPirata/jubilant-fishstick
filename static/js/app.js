@@ -82,11 +82,12 @@ function navigateTo(id) {
   if (id === 'admin')    loadAdminPanel();
   if (id === 'ajuda')    loadHelp();
   impSyncPill();
-  // A tela da vaga põe o próprio endereço (#/vaga/<id>, em openJobDetail).
-  if (id !== 'vaga') setRoute('#/' + id);
+  // As telas de uma vaga põem o próprio endereço (#/vaga/<id> em openJobDetail,
+  // #/descobrir/<id> em openDiscJob).
+  if (id !== 'vaga' && id !== 'sobre') setRoute('#/' + id);
 }
 
-// ── Rotas: #/<aba> e #/vaga/<id> ──
+// ── Rotas: #/<aba>, #/vaga/<id> e #/descobrir/<id> ──
 // O endereço acompanha a aba aberta: F5 volta para ela, o link de uma vaga pode ser
 // aberto em outra aba do navegador e o Voltar do navegador volta para a tela anterior.
 
@@ -104,8 +105,13 @@ function applyRoute() {
     if (_activeTab !== 'vaga' || _jd.id !== vaga[1]) openJobDetail(vaga[1]);
     return;
   }
+  const disc = path.match(/^descobrir\/([0-9a-f-]{36})$/i);
+  if (disc) {
+    if (_activeTab !== 'sobre' || _sd.id !== disc[1]) openDiscJob(disc[1]);
+    return;
+  }
   let tab = path;
-  const section = tab && tab !== 'vaga' ? document.getElementById('tab-' + tab) : null;
+  const section = tab && tab !== 'vaga' && tab !== 'sobre' ? document.getElementById('tab-' + tab) : null;
   const adminOnly = document.querySelector(`.sidebar button.admin-only[data-tab="${tab}"]`);
   if (!section || (adminOnly && localStorage.getItem('jp_is_admin') !== '1')) {
     // Substitui em vez de empilhar: o Voltar não cai de novo no endereço inválido.

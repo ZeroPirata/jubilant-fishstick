@@ -432,7 +432,7 @@ function changeDiscoverySize(val) {
 async function loadDiscoveryJobs() {
   const seq = ++_discLoadSeq;
   const tbody = document.getElementById('disc-body');
-  tbody.innerHTML = '<tr><td colspan="5" class="empty">Carregando...</td></tr>';
+  tbody.innerHTML = '<p class="jl-empty">Carregando...</p>';
   try {
     const qs = new URLSearchParams({ offset: _discPg.offset, size: _discPg.size });
     _discFilters.sources.forEach(s => qs.append('source', s));
@@ -440,7 +440,7 @@ async function loadDiscoveryJobs() {
     if (_discShowDismissed) qs.set('dismissed', '1');
     const res = await api.get(`/discovery/jobs?${qs}`);
     if (seq !== _discLoadSeq) return;
-    if (!res.ok) { tbody.innerHTML = '<tr><td colspan="5" class="empty">Erro ao carregar vagas.</td></tr>'; return; }
+    if (!res.ok) { tbody.innerHTML = '<p class=\"jl-empty\">Erro ao carregar vagas.</p>'; return; }
     const json = await res.json();
     if (seq !== _discLoadSeq) return;
     const jobs = json.data ?? [];
@@ -453,22 +453,25 @@ async function loadDiscoveryJobs() {
     updateDiscFoldSummaries();
 
     if (!jobs.length && _discShowDismissed) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty">Nenhuma vaga dispensada.</td></tr>';
+      tbody.innerHTML = '<p class=\"jl-empty\">Nenhuma vaga dispensada.</p>';
       return;
     }
     if (!jobs.length) {
       const filtered = _discFilters.sources.length || _discFilters.skills.length || _discLevels.length;
       tbody.innerHTML = filtered
-        ? '<tr><td colspan="5" class="empty">Nenhuma vaga com esses filtros.</td></tr>'
-        : '<tr><td colspan="5" class="empty">Nenhuma vaga do catálogo cita suas skills no seu local de interesse. Confira o Perfil, o local ou adicione uma área acima.</td></tr>';
+        ? '<p class=\"jl-empty\">Nenhuma vaga com esses filtros.</p>'
+        : '<p class=\"jl-empty\">Nenhuma vaga do catálogo cita suas skills no seu local de interesse. Confira o Perfil, o local ou adicione uma área acima.</p>';
       return;
     }
     tbody.innerHTML = jobs.map(renderDiscoveryRow).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty">Erro: ${escDisc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<p class="jl-empty">Erro: ${escDisc(e.message)}</p>`;
   }
 }
 
+// Linha compacta: compatibilidade, título e nível, empresa · site · local · data,
+// a stack em chips e as ações. A descrição e o detalhe da compatibilidade ficam na
+// página "Sobre a vaga" (Ver mais / olhinho, ou clique no título).
 function renderDiscoveryRow(j) {
   const url = safeHttpUrl(j.url);
   const local = [j.international ? 'Exterior' : '', _discWorkplace[j.workplace_type] || '', j.location].filter(Boolean).join(' · ');
@@ -476,45 +479,54 @@ function renderDiscoveryRow(j) {
   const techs = (j.matched_techs || []).filter(t => !j.matched_skills.some(s => s.toLowerCase() === t.toLowerCase()));
   // Depois, o resto da stack que a vaga cita, apagado: "C#, Java, Go ou Rust" com Go no perfil.
   const stack = j.stack || [];
-  const shown = stack.slice(0, 8);
-  const skills = j.matched_skills.map(s => `<span class="match-tag">${escDisc(s)}</span>`).join('') +
-    techs.map(t => `<span class="match-tag match-tag-tech" title="Tecnologia de interesse">${escDisc(t)}</span>`).join('') +
+  const strong = [...j.matched_skills.map(s => [s, '']), ...techs.map(t => [t, ' match-tag-tech'])];
+  const room = Math.max(0, 6 - strong.length);
+  const shown = stack.slice(0, room);
+  const rest = stack.length - shown.length;
+  const skills = strong.map(([t, cls]) => `<span class="match-tag${cls}">${escDisc(t)}</span>`).join('') +
     shown.map(t => `<span class="match-tag match-tag-other" title="Também citada na vaga">${escDisc(t)}</span>`).join('') +
-    (stack.length > shown.length
-      ? `<span class="match-tag match-tag-other" title="${escDisc(stack.slice(8).join(', '))}">+${stack.length - shown.length}</span>`
-      : '');
+    (rest > 0 ? `<span class="match-tag match-tag-other" title="${escDisc(stack.slice(room).join(', '))}">+${rest}</span>` : '');
   // Nível tirado do título (ou do campo de nível da fonte): é uma estimativa.
   const levels = (j.seniority || []).map(l => _discLevelNames[l]).filter(Boolean);
   const level = levels.length
     ? `<span class="disc-level" title="Nível estimado pelo título da vaga">${escDisc(levels.join(' / '))}</span>`
     : '';
+  const fit = j.fit && (j.fit.items || []).length ? j.fit : null;
+  const pct = fit
+    ? `<span class="jl-pct q-${escDisc(fit.quality)}" title="${escDisc(discFitTitle(fit))}">${fit.coverage_pct}%</span>`
+    : '<span class="jl-pct" title="Nenhuma tecnologia conhecida no texto da vaga">—</span>';
   const action = j.pipeline_job_id
     ? discPipeline(j.pipeline_job_id, j.pipeline_status)
     : discGenerateButton(url, j.language);
   const dismiss = j.dismissed
     ? `<button type="button" class="btn btn-ghost btn-sm" onclick="restoreDiscJob('${escDisc(j.id)}', this)">Restaurar</button>`
-    : `<button type="button" class="btn btn-ghost btn-sm disc-dismiss" onclick="dismissDiscJob('${escDisc(j.id)}', this)" title="Some da lista e dos alertas só para você (dá para restaurar em Dispensadas)">Dispensar</button>`;
+    : `<button type="button" class="btn-delete disc-dismiss" onclick="dismissDiscJob('${escDisc(j.id)}', this)" title="Dispensar: some da lista e dos alertas só para você (dá para restaurar em Dispensadas)" aria-label="Dispensar vaga">✕</button>`;
+  const sub = [j.company, _discSourceNames[j.source] || j.source, local, j.published_at ? fmtDay(j.published_at) : ''].filter(Boolean).map(escDisc).join(' · ');
 
   return `
-    <tr>
-      <td data-label="Vaga" class="td-block">
-        <div class="disc-title">${escDisc(j.title)}${level}</div>
-        <div class="disc-company">${[j.company, _discSourceNames[j.source] || j.source].filter(Boolean).map(escDisc).join(' · ')}</div>
-        ${discAlsoOn(j.also_on)}
-        ${discFitLine(j.fit)}
-        <div class="disc-snippet clamp-3">${escDisc(j.snippet)}</div>
-      </td>
-      <td data-label="Local">${escDisc(local) || '<span style="color:var(--muted)">—</span>'}</td>
-      <td data-label="Stack"><div class="disc-skills">${skills}</div></td>
-      <td style="color:var(--muted)" data-label="Publicada">${fmtDate(j.published_at)}</td>
-      <td class="disc-actions-cell">
-        <div class="disc-actions">
-          ${action}
-          ${url ? `<a class="link" href="${escDisc(url)}" target="_blank" rel="noopener noreferrer">↗ abrir</a>` : ''}
-          ${dismiss}
-        </div>
-      </td>
-    </tr>`;
+    <div class="jl-row disc-row" data-id="${escDisc(j.id)}">
+      ${pct}
+      <div class="jl-main">
+        <div class="jl-title"><a class="disc-title" href="#/descobrir/${escDisc(j.id)}" onclick="event.preventDefault(); openDiscJob('${escDisc(j.id)}')">${escDisc(j.title)}</a>${level}</div>
+        <div class="jl-sub">${sub}</div>
+        ${skills ? `<div class="disc-skills">${skills}</div>` : ''}
+      </div>
+      <div class="jl-actions disc-actions">
+        ${action}
+        <button type="button" class="btn btn-ghost btn-sm disc-more" onclick="openDiscJob('${escDisc(j.id)}')" title="Ver mais: compatibilidade e descrição da vaga" aria-label="Ver mais">
+          <svg class="ico"><use href="#i-eye"/></svg><span>Ver mais</span>
+        </button>
+        ${url ? `<a class="btn btn-ghost btn-sm disc-open" href="${escDisc(url)}" target="_blank" rel="noopener noreferrer" title="Abrir a vaga no site" aria-label="Abrir a vaga no site">↗</a>` : ''}
+        ${dismiss}
+      </div>
+    </div>`;
+}
+
+// Dica do % na lista: quantas tecnologias você cobre e o que falta.
+function discFitTitle(fit) {
+  const missing = fit.items.filter(i => i.status === 'missing').map(i => i.name);
+  return `Cobertura da stack: você cobre ${fit.strong + fit.partial} de ${fit.items.length}` +
+    (missing.length ? ` · falta: ${missing.join(', ')}` : ' · cobre toda a stack');
 }
 
 // A mesma vaga (empresa e título iguais) em outros sites: a lista mostra uma só, com
@@ -546,7 +558,7 @@ async function dismissDiscJob(id, btn) {
   try {
     const res = await api.post(`/discovery/jobs/${encodeURIComponent(id)}/dismiss`, {});
     if (!res.ok) { btn.disabled = false; toast('Não foi possível dispensar.', 'error'); return; }
-    const row = btn.closest('tr');
+    const row = btn.closest('.jl-row');
     if (row) row.remove();
     const b = document.getElementById('disc-dismissed-toggle');
     const n = (parseInt((b?.textContent.match(/\d+/) || ['0'])[0], 10) || 0) + 1;
@@ -570,23 +582,6 @@ async function restoreDiscJob(id, btn) {
     btn.disabled = false;
     toast(e.message || 'Erro de conexão.', 'error');
   }
-}
-
-// Compatibilidade da vaga (o mesmo JobFit da aba Vagas): cobertura da stack pelo
-// perfil, ponderada pelo nível, quantas tecnologias você cobre e as que faltam. É ela
-// que ordena a lista.
-function discFitLine(fit) {
-  if (!fit || !(fit.items || []).length) return '';
-  const total = fit.items.length;
-  const covered = fit.strong + fit.partial;
-  const missing = fit.items.filter(i => i.status === 'missing').map(i => i.name);
-  const gaps = missing.length
-    ? ` · <span class="disc-fit-gaps" title="${escDisc(missing.join(', '))}">falta: ${escDisc(missing.slice(0, 3).join(', '))}${missing.length > 3 ? ` +${missing.length - 3}` : ''}</span>`
-    : ' · <span class="disc-fit-full">cobre toda a stack</span>';
-  return `<div class="disc-fit">
-    <span class="disc-fit-pct disc-fit-${escDisc(fit.quality)}" title="Cobertura da stack da vaga pelo seu perfil, ponderada pelo nível de cada skill">${fit.coverage_pct}% da stack</span>
-    <span class="disc-fit-count">você cobre ${covered} de ${total}</span>${gaps}
-  </div>`;
 }
 
 // "Gerar currículo" abre a escolha de idioma (sugerido pelo texto da vaga) e do que
@@ -623,7 +618,7 @@ async function addDiscoveredJob(mode, btn) {
     const res = await api.post('/jobs', { url, mode, language });
     if (res.status === 409) {
       toast('Esta vaga já está na sua lista de Vagas.', 'error');
-      loadDiscoveryJobs(); // a lista traz o andamento dela
+      if (_activeTab === 'sobre') loadDiscJob(); else loadDiscoveryJobs(); // trazem o andamento dela
       return;
     }
     if (!res.ok) { toast('Erro ao cadastrar vaga.', 'error'); controls.forEach(b => b.disabled = false); return; }

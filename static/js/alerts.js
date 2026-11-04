@@ -4,7 +4,7 @@
 // ser marcada como vista sem ter sido mostrada. Abrir o painel ou o Descobrir marca
 // como vistas: a mesma vaga não aparece de novo no contador. Atualiza ao entrar e a
 // cada 10 minutos com a aba do navegador visível.
-const _alerts = { data: null, timer: null, open: false, feedback: {} };
+const _alerts = { data: null, timer: null, open: false };
 // Empresa com pelo menos isso de vagas novas vira um grupo recolhido no painel.
 const ALERTS_GROUP_FROM = 3;
 const ALERTS_EVERY = 10 * 60 * 1000;
@@ -142,18 +142,13 @@ function toggleAlertGroup(btn) {
   li.classList.toggle('open', !list.hidden);
 }
 
-function alertJob(id) {
-  return (_alerts.data?.jobs || []).find(j => j.id === id);
-}
-
-// Cada vaga abre ali mesmo: compatibilidade, trecho da descrição, stack e as ações do
-// Descobrir (Gerar currículo, andamento na pipeline, vaga original), mais avaliar o
-// alerta e dispensar a vaga.
+// Cada vaga abre a página "Sobre a vaga" (#/descobrir/<id>): compatibilidade,
+// descrição e as ações para decidir se gera o currículo. O painel fecha.
 function alertItem(j) {
   const pct = j.fit && j.fit.items.length ? `<span class="alerts-pct q-${escHtml(j.fit.quality)}">${j.fit.coverage_pct}%</span>` : '<span class="alerts-pct"></span>';
   const source = (typeof _discSourceNames !== 'undefined' && _discSourceNames[j.source]) || j.source;
   return `<li class="alerts-item" data-id="${escHtml(j.id)}">
-    <button type="button" class="alerts-row" onclick="toggleAlertItem(this)" aria-expanded="false">
+    <button type="button" class="alerts-row" onclick="openDiscJob('${escHtml(j.id)}', { from: 'alerts' })">
       ${pct}
       <span class="alerts-job">
         <span class="alerts-title">${escHtml(j.title)}</span>
@@ -161,90 +156,7 @@ function alertItem(j) {
       </span>
       <span class="alerts-chevron" aria-hidden="true">›</span>
     </button>
-    <div class="alerts-detail" hidden></div>
   </li>`;
-}
-
-function toggleAlertItem(btn) {
-  const li = btn.closest('.alerts-item');
-  const detail = li.querySelector('.alerts-detail');
-  const open = detail.hidden;
-  detail.hidden = !open;
-  btn.setAttribute('aria-expanded', open);
-  li.classList.toggle('open', open);
-  if (open && !detail.innerHTML) detail.innerHTML = alertDetail(alertJob(li.dataset.id));
-}
-
-function alertDetail(j) {
-  const url = /^https?:\/\//i.test(j.url || '') ? j.url : '';
-  const local = [j.international ? 'Exterior' : '', (typeof _discWorkplace !== 'undefined' && _discWorkplace[j.workplace_type]) || '', j.location].filter(Boolean).join(' · ');
-  const stack = [...(j.matched_skills || []), ...(j.stack || [])];
-  const action = j.pipeline_job_id ? discPipeline(j.pipeline_job_id, j.pipeline_status) : (url ? discGenerateButton(url, j.language) : '');
-  return `
-    ${discFitLine(j.fit)}
-    ${local ? `<div class="alerts-meta">${escHtml(local)}</div>` : ''}
-    ${j.snippet ? `<p class="alerts-snippet">${escHtml(j.snippet)}</p>` : ''}
-    ${stack.length ? `<div class="disc-skills">${stack.slice(0, 10).map(t => `<span class="match-tag">${escHtml(t)}</span>`).join('')}</div>` : ''}
-    ${typeof discAlsoOn === 'function' ? discAlsoOn(j.also_on) : ''}
-    <div class="disc-actions alerts-actions">
-      ${action}
-      ${url ? `<a class="link" href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">↗ vaga original</a>` : ''}
-    </div>
-    <div class="alerts-feedback">
-      <span>Este alerta foi útil?</span>
-      ${alertFeedbackButtons(j.id)}
-      <button type="button" class="btn btn-ghost btn-sm alerts-dismiss" onclick="dismissAlertJob(this)"
-        title="Some do sino e do Descobrir só para você (dá para restaurar no Descobrir, em Dispensadas)">Dispensar</button>
-    </div>`;
-}
-
-function alertFeedbackButtons(id) {
-  const v = _alerts.feedback[id];
-  return `<button type="button" class="alerts-vote${v === true ? ' on' : ''}" onclick="sendAlertFeedback(this, true)" aria-pressed="${v === true}" title="Útil">👍</button>
-    <button type="button" class="alerts-vote${v === false ? ' on' : ''}" onclick="sendAlertFeedback(this, false)" aria-pressed="${v === false}" title="Não útil">👎</button>`;
-}
-
-// Avaliação do alerta, com a compatibilidade que a vaga tinha: aparece em Métricas →
-// Busca de vagas, para ajustar a regra com dados.
-async function sendAlertFeedback(btn, relevant) {
-  const li = btn.closest('.alerts-item');
-  const j = alertJob(li.dataset.id);
-  if (!j || !j.fit) return;
-  try {
-    const res = await api.post('/discovery/alerts/feedback', {
-      job_id: j.id, relevant, quality: j.fit.quality, coverage_pct: j.fit.coverage_pct,
-    });
-    if (!res.ok) { toast('Não foi possível salvar a avaliação.', 'error'); return; }
-    _alerts.feedback[j.id] = relevant;
-    btn.parentElement.querySelectorAll('.alerts-vote').forEach(b => {
-      const on = b === btn;
-      b.classList.toggle('on', on);
-      b.setAttribute('aria-pressed', on);
-    });
-    toast(relevant ? 'Obrigado: alerta marcado como útil.' : 'Obrigado: alerta marcado como não útil.');
-  } catch (e) {
-    toast(e.message || 'Erro de conexão.', 'error');
-  }
-}
-
-async function dismissAlertJob(btn) {
-  const li = btn.closest('.alerts-item');
-  const id = li.dataset.id;
-  btn.disabled = true;
-  try {
-    const res = await api.post(`/discovery/jobs/${encodeURIComponent(id)}/dismiss`, {});
-    if (!res.ok) { btn.disabled = false; toast('Não foi possível dispensar.', 'error'); return; }
-    if (_alerts.data) {
-      _alerts.data.jobs = _alerts.data.jobs.filter(j => j.id !== id);
-      _alerts.data.count = Math.max(0, _alerts.data.count - 1);
-    }
-    renderAlerts();
-    toast('Vaga dispensada. Ela fica no Descobrir, em "Dispensadas".');
-    if (_activeTab === 'descobrir' && typeof loadDiscoveryJobs === 'function') loadDiscoveryJobs();
-  } catch (e) {
-    btn.disabled = false;
-    toast(e.message || 'Erro de conexão.', 'error');
-  }
 }
 
 async function saveAlertLevel(v) {
@@ -261,11 +173,8 @@ async function saveAlertLevel(v) {
 
 document.addEventListener('click', ev => {
   if (!_alerts.open) return;
-  // Botão que se trocou por outro no clique ("Gerar currículo" vira a escolha do que
-  // gerar) já saiu da página: não é clique fora do painel.
+  // Elemento que se trocou por outro no clique já saiu da página: não é clique fora.
   if (!ev.target.isConnected) return;
-  // "Ver currículo" leva para a tela da vaga: o painel fecha junto.
-  if (ev.target.closest('#alerts-panel .disc-done')) { closeAlerts(); return; }
   if (!ev.target.closest('#alerts-panel, .alerts-bell')) closeAlerts();
 });
 document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && _alerts.open) closeAlerts(); });

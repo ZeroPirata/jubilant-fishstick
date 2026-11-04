@@ -24,6 +24,9 @@ type Repository interface {
 	ListCandidates(ctx context.Context, args db.DiscoveryListCandidatesParams) ([]db.DiscoveryListCandidatesRow, *repository.RepositoryError)
 	SkillHits(ctx context.Context, args db.DiscoverySkillHitsParams) ([]db.DiscoverySkillHitsRow, *repository.RepositoryError)
 	PageDetails(ctx context.Context, args db.DiscoveryPageDetailsParams) ([]db.DiscoveryPageDetailsRow, *repository.RepositoryError)
+	PipelineStacks(ctx context.Context, userID pgtype.UUID) (map[string][]string, *repository.RepositoryError)
+	JobGet(ctx context.Context, args db.DiscoveryJobGetParams) (db.DiscoveryJobGetRow, *repository.RepositoryError)
+	JobSiblings(ctx context.Context, args db.DiscoveryJobSiblingsParams) ([]db.DiscoveryJobSiblingsRow, *repository.RepositoryError)
 	SelectTechsPending(ctx context.Context, args db.DiscoverySelectTechsPendingParams) ([]db.DiscoverySelectTechsPendingRow, *repository.RepositoryError)
 	UpdateTechs(ctx context.Context, args db.DiscoveryUpdateTechsParams) *repository.RepositoryError
 	CleanIndexPending(ctx context.Context) *repository.RepositoryError

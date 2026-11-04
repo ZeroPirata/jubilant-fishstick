@@ -18,12 +18,6 @@ function badge(status) {
   return `<span class="badge badge-${status}">${label}</span>`;
 }
 
-function qualityBadge(jobId, q) {
-  if (!q) return '<span style="color:var(--muted)">—</span>';
-  const label = qualityLabels[q] || q;
-  return `<button class="badge badge-${q} badge-quality-btn" id="quality-btn-${jobId}" onclick="openJobDetail('${jobId}', { focus: 'fit' })" title="Ver a compatibilidade na tela da vaga">${label}<span class="quality-chevron">›</span></button>`;
-}
-
 // ── Jobs pagination state ──
 const _jobsPg = { offset: 0, size: 20 };
 
@@ -109,40 +103,36 @@ function applyJobEvent(ev) {
   if (typeof discOnJobEvent === 'function') discOnJobEvent(ev);
   if (typeof jdOnJobEvent === 'function') jdOnJobEvent(ev);
   const row = document.getElementById(`job-row-${ev.id}`);
-  if (!row) { loadJobs(); return; }
+  if (!row) { if (_activeTab === 'vagas') loadJobs(); return; }
 
-  // Quality + gap (atualiza meta antes do badge para que badge() leia correto)
+  const meta = _jobMeta.get(ev.id) || {};
   if (ev.quality || ev.fit || ev.analysis) {
-    const meta = _jobMeta.get(ev.id) || {};
     _jobMeta.set(ev.id, {
       ...meta,
       ...(ev.quality  ? { quality: ev.quality }   : {}),
       ...(ev.fit      ? { fit: ev.fit }           : {}),
       ...(ev.analysis ? { analysis: ev.analysis } : {}),
     });
-    if (ev.quality) row.cells[4].innerHTML = qualityBadge(ev.id, ev.quality);
   }
+  const m = _jobMeta.get(ev.id) || {};
+  row.querySelector('.jl-quality').innerHTML = jobQualityChip(ev.id, m.quality, m.fit);
+  row.querySelector('.jl-status').innerHTML = badge(ev.status);
 
-  // Status (usa quality já atualizado acima)
-  row.cells[3].innerHTML = badge(ev.status);
+  // Empresa e título chegam depois da leitura da vaga.
+  if (ev.company_name) row.querySelector('.jl-company').textContent = ev.company_name;
+  if (ev.job_title)    row.querySelector('.job-title-link')?.replaceChildren(ev.job_title);
 
-  // Company / title (preenchidos após scrape)
-  if (ev.company_name) row.cells[1].textContent = ev.company_name;
-  if (ev.job_title)    row.cells[2].querySelector('.job-title-link')?.replaceChildren(ev.job_title);
-
-  // Botões de ação
-  row.cells[7].dataset.status = ev.status;
-  row.cells[7].innerHTML = jobActions(ev.id, ev.status);
+  const cell = row.querySelector('.job-actions-cell');
+  cell.dataset.status = ev.status;
+  cell.innerHTML = jobActions(ev.id, ev.status);
 }
 
-// jobActions: Currículos · Refazer · ✕ numa linha só, com altura igual. Usada na lista
+// jobActions: Refazer · ✕ numa linha só, com altura igual. Usada na lista
 // e na atualização ao vivo (SSE) para as duas nunca divergirem.
 function jobActions(id, status) {
-  const isDone = status === 'completed';
-  const isEnd  = isDone || status === 'error';
+  const isEnd = status === 'completed' || status === 'error';
   return `<div class="job-actions">
-    ${isDone ? `<button class="btn-expand" onclick="openJobDetail('${id}', { focus: 'resumes' })">Currículos</button>` : ''}
-    ${isEnd  ? `<button class="btn btn-ghost btn-sm" onclick="retryJob('${id}', this)">Refazer</button>` : ''}
+    ${isEnd ? `<button class="btn btn-ghost btn-sm" onclick="retryJob('${id}', this)">Refazer</button>` : ''}
     <button class="btn-delete" onclick="deleteJob('${id}', this)" title="Excluir vaga" aria-label="Excluir vaga">✕</button>
   </div>`;
 }
@@ -178,7 +168,7 @@ function fitSummaryText(fit) {
 
 // renderFitDetails: compatibilidade (análise da IA, stack × perfil, requisitos) de uma
 // vaga. Usada na tela da vaga (job_detail.js).
-function renderFitDetails({ stack = [], reqs = [], quality = null, fit = null, analysis = null } = {}) {
+function renderFitDetails({ stack = [], reqs = [], quality = null, fit = null, analysis = null, analysisHint = true } = {}) {
   const qualityLbl = qualityLabels[quality] || '—';
 
   const summary = quality
@@ -207,7 +197,7 @@ function renderFitDetails({ stack = [], reqs = [], quality = null, fit = null, a
           ${list('Lacunas', analysis.lacunas, 'fit-list-gap')}
         </div>
       </div>`;
-  } else if (quality) {
+  } else if (quality && analysisHint) {
     analysisSection = '<div class="fit-analysis-empty">Sem análise da IA para esta vaga (processada antes da análise existir). Use “Refazer” para gerar.</div>';
   }
 
@@ -258,24 +248,27 @@ function renderFitDetails({ stack = [], reqs = [], quality = null, fit = null, a
 }
 
 // ── VAGAS ──
+// Lista compacta: uma linha por vaga (título, empresa e data; status e compatibilidade
+// em chips; Refazer e excluir). O resto (stack, análise, currículos) fica na tela da
+// vaga, aberta ao clicar na linha.
 async function loadJobs() {
-  const tbody = document.getElementById('jobs-body');
+  const list = document.getElementById('jobs-body');
   const statusFilter  = document.getElementById('jobs-status-filter').value;
   const qualityFilter = document.getElementById('jobs-quality-filter').value;
   let qs = `?offset=${_jobsPg.offset}&size=${_jobsPg.size}`;
   if (statusFilter)  qs += `&status=${statusFilter}`;
   if (qualityFilter) qs += `&quality=${qualityFilter}`;
-  tbody.innerHTML = `<tr><td colspan="8" class="empty">Carregando...</td></tr>`;
+  list.innerHTML = '<p class="jl-empty">Carregando...</p>';
 
   try {
     const res = await api.get('/jobs' + qs);
-    if (!res.ok) { tbody.innerHTML = `<tr><td colspan="8" class="empty">Erro ao carregar vagas.</td></tr>`; return; }
+    if (!res.ok) { list.innerHTML = '<p class="jl-empty">Erro ao carregar vagas.</p>'; return; }
     const { data: jobs, meta } = await apiList(res);
 
     renderJobsPagination(meta.total ?? 0, meta.cursor ?? _jobsPg.offset, meta.size ?? _jobsPg.size);
 
     if (!jobs.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="empty">Nenhuma vaga encontrada.</td></tr>`;
+      list.innerHTML = '<p class="jl-empty">Nenhuma vaga encontrada.</p>';
       return;
     }
 
@@ -285,32 +278,41 @@ async function loadJobs() {
         fit: j.fit || null, analysis: j.analysis || null,
       });
     });
-
-    tbody.innerHTML = jobs.map(j => {
-      const { quality } = _jobMeta.get(j.id);
-      return `
-      <tr id="job-row-${j.id}" class="job-row-link" onclick="jobRowClick(event, '${j.id}')" title="Abrir a vaga">
-        <td style="color:var(--muted);font-size:11px" class="truncate" title="${j.id}" data-label="ID">${j.id.slice(0,8)}…</td>
-        <td data-label="Empresa">${j.company_name ? escHtml(j.company_name) : '<span style="color:var(--muted)">—</span>'}</td>
-        <td class="truncate" title="${escHtml(j.job_title || '')}" data-label="Título"><span class="job-title-link">${j.job_title ? escHtml(j.job_title) : '<span style="color:var(--muted)">—</span>'}</span></td>
-        <td data-label="Status">${badge(j.status)}</td>
-        <td data-label="Qualidade">${qualityBadge(j.id, quality)}</td>
-        <td style="color:var(--muted)" data-label="Cadastrada">${fmtDate(j.created_at)}</td>
-        <td data-label="URL">
-          ${j.url ? `<a class="link" href="${j.url}" target="_blank" rel="noopener">↗ abrir</a>` : '—'}
-        </td>
-        <td class="job-actions-cell" data-status="${j.status}" data-lang="${j.language === 'en' ? 'en' : 'pt-br'}">${jobActions(j.id, j.status)}</td>
-      </tr>
-    `; }).join('');
+    list.innerHTML = jobs.map(renderJobRow).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty">Erro: ${e.message}</td></tr>`;
+    list.innerHTML = `<p class="jl-empty">Erro: ${escHtml(e.message)}</p>`;
   }
 }
 
-// Clique na linha abre a tela da vaga; botões, links e seletores fazem o próprio trabalho.
+function renderJobRow(j) {
+  const { quality, fit } = _jobMeta.get(j.id) || {};
+  return `
+    <div id="job-row-${j.id}" class="jl-row job-row-link" onclick="jobRowClick(event, '${j.id}')" title="Abrir a vaga">
+      <div class="jl-main">
+        <div class="jl-title"><span class="job-title-link">${j.job_title ? escHtml(j.job_title) : '<span class="jl-muted">Lendo a vaga…</span>'}</span></div>
+        <div class="jl-sub"><span class="jl-company">${escHtml(j.company_name || 'Empresa ainda não lida')}</span> · <span>cadastrada em ${escHtml(fmtDay(j.created_at))}</span></div>
+      </div>
+      <div class="jl-chips">
+        <span class="jl-status">${badge(j.status)}</span>
+        <span class="jl-quality">${jobQualityChip(j.id, quality, fit)}</span>
+      </div>
+      <div class="jl-actions job-actions-cell" data-status="${j.status}" data-lang="${j.language === 'en' ? 'en' : 'pt-br'}">${jobActions(j.id, j.status)}</div>
+    </div>`;
+}
+
+// Compatibilidade na linha: faixa e a % da stack num chip só.
+function jobQualityChip(id, quality, fit) {
+  if (!quality) return '';
+  const pct = fit && (fit.items || []).length ? ` ${fit.coverage_pct}%` : '';
+  return `<button class="badge badge-${quality} badge-quality-btn" id="quality-btn-${id}" onclick="openJobDetail('${id}', { focus: 'fit' })" title="Compatibilidade: ver na tela da vaga">${qualityLabels[quality] || quality}${pct}</button>`;
+}
+
+// Clique na linha abre a tela da vaga (nos currículos, quando já foram gerados);
+// botões, links e seletores fazem o próprio trabalho.
 function jobRowClick(ev, id) {
   if (ev.target.closest('button, a, select, input, textarea, label')) return;
-  openJobDetail(id);
+  const status = document.querySelector(`#job-row-${id} .job-actions-cell`)?.dataset.status;
+  openJobDetail(id, status === 'completed' ? { focus: 'resumes' } : {});
 }
 
 async function deleteJob(id, btn) {
@@ -320,8 +322,6 @@ async function deleteJob(id, btn) {
     const res = await api.delete(`/jobs/${id}`);
     if (!res.ok) { toast('Erro ao deletar vaga.', 'error'); btn.disabled = false; return; }
     document.getElementById(`job-row-${id}`)?.remove();
-    const resumeRow = document.getElementById(`resumes-row-${id}`);
-    resumeRow?.remove();
     toast('Vaga deletada.');
   } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
 }
@@ -364,12 +364,12 @@ function genFresh(btn) {
 }
 
 function retryJob(id, btn) {
-  const td = btn.closest('td');
+  const td = btn.closest('.job-actions-cell');
   td.innerHTML = genChooser({ lang: td.dataset.lang, onGo: 'doRetryWithMode', args: [id], onCancel: `cancelRetry('${id}', this)`, retry: true });
 }
 
 function cancelRetry(id, btn) {
-  const td = btn.closest('td');
+  const td = btn.closest('.job-actions-cell');
   td.innerHTML = jobActions(id, td.dataset.status);
 }
 
@@ -404,48 +404,73 @@ function templateSelect(resumeId) {
   return `<select id="tpl-${resumeId}" class="tpl-select" aria-label="Modelo do PDF" title="Modelo do PDF">${opts}</select>`;
 }
 
-// selectable: checkbox em cada card para apagar vários (tela da vaga).
-function renderResumes(jobId, resumes, { selectable = false } = {}) {
+const _resumeKinds = { full: 'currículo + cover letter', resume_only: 'só currículo', cover_only: 'só cover letter' };
+
+// Currículos de uma vaga (tela da vaga): um item por geração, com a data, a
+// compatibilidade e o que foi gerado; clicar abre o PDF, a avaliação e o texto.
+// Com um só, ele já vem aberto. selectable: checkbox para apagar vários.
+function renderResumes(jobId, resumes, { selectable = false, quality = null } = {}) {
   if (!resumes.length) return '<p style="color:var(--muted);font-size:13px">Nenhum currículo gerado ainda.</p>';
+  const openFirst = resumes.length === 1;
   return resumes.map((r, i) => {
     const key = `r-${jobId}-${i}`;
     let content = {};
     try { content = JSON.parse(r.content_json || '{}'); } catch (_) {}
     const hasPdf = !!r.resume_pdf_path;
+    const hasCv = !!(content.curriculo || '').trim(), hasCl = !!(content.cover_letter || '').trim();
+    const kind = hasCv && hasCl ? 'full' : hasCv ? 'resume_only' : hasCl ? 'cover_only' : '';
+    const q = r.job?.quality || quality;
+    const open = openFirst;
 
     return `
-      <div class="resume-card" id="rc-${r.id}">
-        <div class="resume-card-header">
+      <div class="resume-card resume-item${open ? ' open' : ''}" id="rc-${r.id}">
+        <div class="resume-item-head">
           ${selectable ? `<input type="checkbox" class="resume-check" value="${r.id}" onchange="jdSelChanged()" aria-label="Selecionar este currículo">` : ''}
-          <div class="resume-card-title">
-            <h4>${escHtml(r.job?.company_name || 'Empresa')} — ${escHtml(r.job?.job_title || 'Vaga')}</h4>
-            <div class="meta">Gerado em ${fmtDate(r.created_at)}${r.job?.quality ? ` · qualidade: ${r.job.quality}` : ''}</div>
-          </div>
+          <button type="button" class="resume-item-toggle" onclick="toggleResumeItem(this)" aria-expanded="${open}" aria-controls="rb-${r.id}">
+            <span class="resume-item-when">${i === 0 ? '<b>Mais recente</b> · ' : ''}${escHtml(fmtDate(r.created_at))}</span>
+            <span class="resume-item-tags">
+              ${q ? `<span class="badge badge-${escHtml(q)}">${escHtml(qualityLabels[q] || q)}</span>` : ''}
+              ${kind ? `<span class="resume-item-kind">${_resumeKinds[kind]}</span>` : ''}
+              ${hasPdf ? '<span class="resume-item-pdf" title="PDF já gerado">PDF</span>' : ''}
+            </span>
+            <span class="resume-item-chevron" aria-hidden="true">›</span>
+          </button>
+        </div>
+        <div class="resume-item-body" id="rb-${r.id}"${open ? '' : ' hidden'}>
           <div class="resume-card-actions">
             ${content.version >= 2 ? templateSelect(r.id) : ''}
             <button id="pdf-btn-${r.id}" class="btn-pdf" onclick="generatePDF('${jobId}','${r.id}',this)">
               ${hasPdf ? '↺ Regerar PDF' : '⬇ Gerar PDF'}
             </button>
             <button class="btn btn-ghost btn-sm" onclick="openFeedback('${jobId}','${r.id}')">Avaliar</button>
-            <button class="btn-delete" onclick="deleteResume('${jobId}','${r.id}',this)">✕</button>
+            <button class="btn-delete" onclick="deleteResume('${jobId}','${r.id}',this)" title="Apagar este currículo" aria-label="Apagar este currículo">✕</button>
           </div>
-        </div>
 
-        ${hasPdf ? pdfBar(r.resume_pdf_path, r.cover_letter_path, r.id) : `<div id="pdf-bar-${r.id}"></div>`}
+          ${hasPdf ? pdfBar(r.resume_pdf_path, r.cover_letter_path, r.id) : `<div id="pdf-bar-${r.id}"></div>`}
 
-        <div class="resume-tabs">
-          <button class="active" onclick="switchResumeTab(this,'${key}-cv')">Currículo</button>
-          <button onclick="switchResumeTab(this,'${key}-cl')">Cover Letter</button>
-        </div>
-        <div id="${key}-cv" class="resume-pane active">
-          <pre class="resume-text">${escHtml(content.curriculo || '')}</pre>
-        </div>
-        <div id="${key}-cl" class="resume-pane">
-          <pre class="resume-text">${escHtml(content.cover_letter || '')}</pre>
+          <div class="resume-tabs">
+            <button class="active" onclick="switchResumeTab(this,'${key}-cv')">Currículo</button>
+            <button onclick="switchResumeTab(this,'${key}-cl')">Cover Letter</button>
+          </div>
+          <div id="${key}-cv" class="resume-pane active">
+            <pre class="resume-text">${escHtml(content.curriculo || '') || '<span class="jl-muted">Não gerado nesta versão.</span>'}</pre>
+          </div>
+          <div id="${key}-cl" class="resume-pane">
+            <pre class="resume-text">${escHtml(content.cover_letter || '') || '<span class="jl-muted">Não gerada nesta versão.</span>'}</pre>
+          </div>
         </div>
       </div>
     `;
   }).join('');
+}
+
+function toggleResumeItem(btn) {
+  const item = btn.closest('.resume-item');
+  const body = item.querySelector('.resume-item-body');
+  const open = body.hidden;
+  body.hidden = !open;
+  item.classList.toggle('open', open);
+  btn.setAttribute('aria-expanded', open);
 }
 
 function pdfBar(resumePath, coverPath, resumeId) {
@@ -538,46 +563,6 @@ async function deleteResume(jobId, resumeId, btn) {
     // Na tela da vaga, recarrega para o contador "Currículos (N)" e o estado vazio.
     if (_activeTab === 'vaga' && _jd.id === jobId) loadJobDetail();
   } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
-}
-
-// ── Aba de currículos (vista global: itera jobs completados) ──
-async function loadResumesTab() {
-  const container = document.getElementById('curriculos-container');
-  container.innerHTML = '<p class="empty">Carregando vagas...</p>';
-
-  try {
-    const res = await api.get('/jobs?offset=0&size=200');
-    const { data: jobs } = await apiList(res);
-    const completed = jobs.filter(j => j.status === 'completed');
-
-    if (!completed.length) {
-      container.innerHTML = '<p class="empty">Nenhuma vaga com currículo gerado ainda.</p>';
-      return;
-    }
-
-    container.innerHTML = '<p class="empty">Carregando currículos...</p>';
-
-    const results = await Promise.all(
-      completed.map(j =>
-        api.get(`/jobs/${j.id}/resumes?cursor=0&size=10`)
-          .then(r => apiList(r))
-          .then(({ data }) => ({ job: j, resumes: data }))
-          .catch(() => ({ job: j, resumes: [] }))
-      )
-    );
-
-    const withResumes = results.filter(r => r.resumes.length > 0);
-    if (!withResumes.length) {
-      container.innerHTML = '<p class="empty">Nenhum currículo encontrado.</p>';
-      return;
-    }
-
-    container.innerHTML = withResumes.map(({ job, resumes }) =>
-      renderResumes(job.id, resumes)
-    ).join('<hr style="border:none;border-top:1px solid var(--border);margin:20px 0">');
-  } catch (e) {
-    container.innerHTML = `<p class="empty">Erro: ${e.message}</p>`;
-  }
 }
 
 // ── Nova Vaga ──

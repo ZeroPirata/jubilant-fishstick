@@ -339,6 +339,114 @@ func (q *Queries) DiscoveryInsertRunSource(ctx context.Context, arg DiscoveryIns
 	return err
 }
 
+const discoveryJobGet = `-- name: DiscoveryJobGet :one
+SELECT
+    d.id, d.source, d.title, d.company, d.location, d.workplace_type, d.international, d.url,
+    d.seniority, d.published_at, d.techs, d.language, d.first_seen_at, d.description,
+    pj.id AS pipeline_job_id,
+    COALESCE(pj.status::text, '')::text AS pipeline_status
+FROM discovered_jobs d
+LEFT JOIN LATERAL (
+    SELECT j.id, j.status FROM jobs j
+    WHERE j.user_id = $1 AND j.external_url = d.url AND j.deleted_at IS NULL
+    ORDER BY j.created_at DESC
+    LIMIT 1
+) pj ON true
+WHERE d.id = $2
+`
+
+type DiscoveryJobGetParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	ID     pgtype.UUID `json:"id"`
+}
+
+type DiscoveryJobGetRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Source         string             `json:"source"`
+	Title          string             `json:"title"`
+	Company        string             `json:"company"`
+	Location       string             `json:"location"`
+	WorkplaceType  string             `json:"workplace_type"`
+	International  bool               `json:"international"`
+	Url            string             `json:"url"`
+	Seniority      []string           `json:"seniority"`
+	PublishedAt    pgtype.Timestamptz `json:"published_at"`
+	Techs          []string           `json:"techs"`
+	Language       string             `json:"language"`
+	FirstSeenAt    pgtype.Timestamptz `json:"first_seen_at"`
+	Description    string             `json:"description"`
+	PipelineJobID  pgtype.UUID        `json:"pipeline_job_id"`
+	PipelineStatus string             `json:"pipeline_status"`
+}
+
+// Uma vaga do catálogo para a página "Sobre a vaga", com a descrição inteira e a vaga
+// na pipeline do usuário (a mais recente com a mesma URL), se já foi mandada.
+func (q *Queries) DiscoveryJobGet(ctx context.Context, arg DiscoveryJobGetParams) (DiscoveryJobGetRow, error) {
+	row := q.db.QueryRow(ctx, discoveryJobGet, arg.UserID, arg.ID)
+	var i DiscoveryJobGetRow
+	err := row.Scan(
+		&i.ID,
+		&i.Source,
+		&i.Title,
+		&i.Company,
+		&i.Location,
+		&i.WorkplaceType,
+		&i.International,
+		&i.Url,
+		&i.Seniority,
+		&i.PublishedAt,
+		&i.Techs,
+		&i.Language,
+		&i.FirstSeenAt,
+		&i.Description,
+		&i.PipelineJobID,
+		&i.PipelineStatus,
+	)
+	return i, err
+}
+
+const discoveryJobSiblings = `-- name: DiscoveryJobSiblings :many
+SELECT d.source, d.url
+FROM discovered_jobs d
+WHERE d.id <> $1 AND d.company <> ''
+  AND lower(btrim(d.title)) = lower(btrim($2::text))
+  AND lower(btrim(d.company)) = lower(btrim($3::text))
+  AND (d.expires_at IS NULL OR d.expires_at >= now())
+ORDER BY d.published_at DESC NULLS LAST
+`
+
+type DiscoveryJobSiblingsParams struct {
+	ID      pgtype.UUID `json:"id"`
+	Title   string      `json:"title"`
+	Company string      `json:"company"`
+}
+
+type DiscoveryJobSiblingsRow struct {
+	Source string `json:"source"`
+	Url    string `json:"url"`
+}
+
+// A mesma vaga (título e empresa iguais) em outros sites, para "também em".
+func (q *Queries) DiscoveryJobSiblings(ctx context.Context, arg DiscoveryJobSiblingsParams) ([]DiscoveryJobSiblingsRow, error) {
+	rows, err := q.db.Query(ctx, discoveryJobSiblings, arg.ID, arg.Title, arg.Company)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DiscoveryJobSiblingsRow
+	for rows.Next() {
+		var i DiscoveryJobSiblingsRow
+		if err := rows.Scan(&i.Source, &i.Url); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const discoveryLastFullRun = `-- name: DiscoveryLastFullRun :one
 SELECT COALESCE(max(started_at), 'epoch'::timestamptz)::timestamptz AS started_at
 FROM discovery_runs
@@ -651,6 +759,42 @@ func (q *Queries) DiscoveryPageDetails(ctx context.Context, arg DiscoveryPageDet
 			&i.PipelineJobID,
 			&i.PipelineStatus,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const discoveryPipelineStacks = `-- name: DiscoveryPipelineStacks :many
+SELECT DISTINCT ON (j.external_url) j.external_url, j.tech_stack
+FROM jobs j
+WHERE j.user_id = $1 AND j.deleted_at IS NULL
+  AND j.status = 'completed' AND cardinality(j.tech_stack) > 0
+ORDER BY j.external_url, j.created_at DESC
+`
+
+type DiscoveryPipelineStacksRow struct {
+	ExternalUrl string   `json:"external_url"`
+	TechStack   []string `json:"tech_stack"`
+}
+
+// A stack que a IA leu da vaga inteira, das vagas do usuário já processadas, por URL.
+// Quando a vaga do catálogo já foi para a pipeline, a compatibilidade vem desta stack
+// (a mesma da aba Vagas), não das tecnologias que a varredura casou no texto.
+func (q *Queries) DiscoveryPipelineStacks(ctx context.Context, userID pgtype.UUID) ([]DiscoveryPipelineStacksRow, error) {
+	rows, err := q.db.Query(ctx, discoveryPipelineStacks, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DiscoveryPipelineStacksRow
+	for rows.Next() {
+		var i DiscoveryPipelineStacksRow
+		if err := rows.Scan(&i.ExternalUrl, &i.TechStack); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

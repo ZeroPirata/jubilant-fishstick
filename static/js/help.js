@@ -133,7 +133,8 @@ const HELP_TOPICS = [
       {
         title: 'Ordenadas pelo que você sabe',
         body: `<p>Cada vaga mostra a <b>compatibilidade</b> com o seu perfil: quanto da stack você cobre (pesando o nível), quantas tecnologias são suas e o que falta.</p>
-          <ul><li>A lista vem das mais compatíveis para as menos</li><li>O que falta é um bom roteiro de estudo</li></ul>`,
+          <ul><li>A lista vem das mais compatíveis para as menos</li><li>O que falta é um bom roteiro de estudo</li>
+          <li>Antes de gerar, é uma estimativa pelas tecnologias citadas no texto; depois de gerar, vale a leitura completa da vaga pela IA (o mesmo número da aba Vagas)</li></ul>`,
         visual: `<div class="hv-stack">
           <div class="disc-fit"><span class="disc-fit-pct disc-fit-high">82% da stack</span><span>você cobre 5 de 6</span> · <span class="disc-fit-gaps">falta: Kafka</span></div>
           <div class="disc-fit"><span class="disc-fit-pct disc-fit-mid">55% da stack</span><span>você cobre 3 de 5</span> · <span class="disc-fit-gaps">falta: AWS, Terraform</span></div>
@@ -150,7 +151,7 @@ const HELP_TOPICS = [
       },
       {
         title: 'Da vaga ao currículo',
-        body: `<p><b>Gerar currículo</b> manda a vaga para a sua lista. Você escolhe o idioma (o da vaga vem sugerido) e o que gerar.</p>
+        body: `<p><b>Ver mais</b> (o olhinho no celular) abre a página da vaga: compatibilidade e descrição completa, para decidir antes de gerar. <b>Gerar currículo</b> manda a vaga para a sua lista. Você escolhe o idioma (o da vaga vem sugerido) e o que gerar.</p>
           <ul><li>Quando fica pronto, o botão vira <b>Ver currículo</b></li>
           <li>Se o site da vaga bloquear a leitura, o sistema usa a descrição guardada no catálogo</li></ul>`,
         visual: `<div class="hv-status">
@@ -162,6 +163,7 @@ const HELP_TOPICS = [
         body: `<p>O <b>sininho</b> no topo conta as vagas que entraram no catálogo desde a sua última olhada e combinam com você.</p>
           <ul><li>Escolha avisar só das de compatibilidade <b>alta</b> (padrão) ou também das <b>médias</b>, ou desligar</li>
           <li>Valem o local e o nível que você salvou no Descobrir</li>
+          <li>Tocar numa vaga do sininho abre a página dela, com 👍/👎 para dizer se o aviso foi útil</li>
           <li>Abrir o sininho ou o Descobrir marca como vistas: a mesma vaga não é avisada de novo</li></ul>`,
         visual: `<div class="hv-status">
           ${['varredura', 'vaga nova', 'compatível?', 'sininho'].map((s, i) => `<span class="hv-pill" style="--i:${i}">${s}</span>`).join('<i>›</i>')}
