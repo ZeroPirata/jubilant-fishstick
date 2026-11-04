@@ -66,6 +66,21 @@ async function loadJobDetail() {
   }
 }
 
+// Caixa "Escolhida pela seleção com IA". A nota é o julgamento da IA (senioridade,
+// requisitos, área); a "% da stack" é outra conta (tecnologias × suas habilidades).
+// Ficam separadas e com nome para não parecerem a mesma métrica.
+function jdAutoBox(j) {
+  const score = j.auto_score != null
+    ? `<span class="jd-auto-score" title="Julgamento da IA sobre a vaga inteira (senioridade, requisitos, área). Não é a % da stack.">nota da IA ${j.auto_score}/100</span>`
+    : '';
+  const reason = String(j.auto_reason || '');
+  const cut = reason.search(/\bRisco:/);
+  const body = cut > 0
+    ? `<p>${escHtml(reason.slice(0, cut).trim())}</p><p class="jd-auto-risk"><b>Risco:</b> ${escHtml(reason.slice(cut + 6).trim())}</p>`
+    : (reason ? `<p>${escHtml(reason)}</p>` : '');
+  return `<div class="jd-auto"><div class="jd-auto-head"><b>Escolhida pela seleção com IA</b>${score}</div>${body}</div>`;
+}
+
 // SSE: a vaga aberta muda de status (Refazer, processamento terminando) → recarrega.
 // Vários eventos chegam em sequência; espera eles assentarem.
 function jdOnJobEvent(ev) {
@@ -127,7 +142,7 @@ function renderJobDetail(j, resumes, app) {
   const fit = `
     <div class="jd-card" id="jd-fit" role="tabpanel"${_jd.tab === 'fit' ? '' : ' hidden'}>
       <h3 class="jd-card-title">Compatibilidade</h3>
-      ${j.auto_selected ? `<p class="jd-auto"><b>Escolhida pela seleção com IA</b>${j.auto_score != null ? ` · nota ${j.auto_score}/100` : ''}${j.auto_reason ? `: ${escHtml(j.auto_reason)}` : ''}</p>` : ''}
+      ${j.auto_selected ? jdAutoBox(j) : ''}
       ${renderFitDetails({ stack: j.stacks || [], reqs: j.requirements || [], quality: j.quality, fit: j.fit, analysis: j.analysis })}
     </div>`;
 

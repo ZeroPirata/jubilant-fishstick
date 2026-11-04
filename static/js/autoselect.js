@@ -172,7 +172,7 @@ function autoWatch(id) {
 // Tag nas listas e na tela da vaga.
 function autoTag(j) {
   if (!j?.auto_selected) return '';
-  const tip = ['Escolhida pela seleção com IA', j.auto_score != null ? `nota ${j.auto_score}` : '', j.auto_reason || ''].filter(Boolean).join(' · ');
+  const tip = ['Escolhida pela seleção com IA', j.auto_score != null ? `nota da IA ${j.auto_score}/100` : '', j.auto_reason || ''].filter(Boolean).join(' · ');
   return `<span class="auto-tag" title="${escHtml(tip)}"><svg class="ico"><use href="#i-spark"/></svg>auto-gerado</span>`;
 }
 

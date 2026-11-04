@@ -221,8 +221,9 @@ const HELP_TOPICS = [
       },
       {
         title: 'Transparente e com limite',
-        body: `<ul><li>Cada vaga lida ganha uma <b>nota</b> e um <b>motivo</b>, inclusive as que ficaram de fora</li>
-          <li>Na tela da vaga, a aba Compatibilidade mostra por que a IA escolheu</li>
+        body: `<ul><li>Cada vaga lida ganha uma <b>nota da IA</b> (0 a 100) e um <b>motivo</b>, inclusive as que ficaram de fora</li>
+          <li>Na tela da vaga, a aba Compatibilidade mostra por que a IA escolheu e, quando há, o principal <b>risco</b></li>
+          <li>A nota da IA não é a <b>% da stack</b>: a nota julga a vaga inteira (senioridade, anos pedidos, requisitos, área); a % só compara as tecnologias com as suas habilidades</li>
           <li>Há um limite por clique e por dia; a mesma vaga não é lida de novo por 14 dias</li>
           <li>Não gostou de uma escolha? Exclua a vaga: isso também ajuda a medir a qualidade da seleção</li></ul>`,
       },
@@ -298,6 +299,18 @@ const HELP_TOPICS = [
           <ul><li><b>Primeiro emprego</b>: destaca formação e projetos para quem está começando</li></ul>`,
         visual: `<div class="hv-templates">
           ${[['Clássico', ''], ['Executivo', 'hv-t-exec'], ['Compacto', 'hv-t-comp'], ['Primeiro emprego', 'hv-t-first']].map(([n, c]) => `<div class="hv-tpl ${c}"><span></span><span></span><span></span><b>${n}</b></div>`).join('')}
+        </div>`,
+      },
+      {
+        title: 'Baixe pronto para enviar',
+        body: `<p>Sem renomear arquivo antes de mandar:</p>
+          <ul><li><b>Baixar tudo (.zip)</b>: currículo e cover letter juntos, num .zip com o nome da empresa e da vaga</li>
+          <li>O currículo sai com o <b>seu nome</b> (nome e sobrenome do perfil); a carta, como <code>cover_letter.pdf</code></li>
+          <li>Os botões avulsos continuam lá, para portais que pedem só o currículo</li></ul>
+          <p>Nomes em minúsculas, sem acento e curtos.</p>`,
+        visual: `<div class="hv-compare">
+          <div class="hv-bad"><span>✕</span>curriculo.pdf · cover_letter.pdf</div>
+          <div class="hv-good"><span>✓</span>nubank_desenvolvedor_back_end.zip<br>└ gabriel_nunes.pdf<br>└ cover_letter.pdf</div>
         </div>`,
       },
       {

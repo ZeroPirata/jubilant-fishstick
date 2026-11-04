@@ -38,7 +38,9 @@ Regras:
 - Use só o que está escrito. Não suponha experiência que o perfil não mostra.
 - "nota" de 0 a 100: 80+ forte; 60–79 vale tentar; 40–59 arriscada; abaixo de 40 não vale.
 - "candidatar": true só com nota 60 ou mais e nenhum requisito eliminatório falhando.
-- "motivo": uma frase em português, até 160 caracteres, com o fator decisivo (ex.: "Pede 5+ anos com Kotlin; o perfil tem 2 anos em Go.").
+- "motivo": uma frase em português, até 160 caracteres, coerente com "candidatar":
+  - candidatar true: comece pelo que faz valer a pena e, se houver, termine com o principal risco depois de "Risco:" (ex.: "Go e AWS são o núcleo da vaga e o forte do perfil. Risco: pede 3+ anos de Node.js.").
+  - candidatar false: o fator que elimina ou enfraquece a candidatura (ex.: "Pede 5+ anos com Kotlin; o perfil tem 2 anos em Go.").
 - Avalie todas as vagas da lista, sem pular nenhuma, usando o número entre colchetes.
 
 Responda APENAS com JSON válido, sem texto antes ou depois:
