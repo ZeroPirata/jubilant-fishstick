@@ -77,6 +77,7 @@ function navigateTo(id) {
   if (id === 'vagas')    loadJobs();
   if (id === 'perfil')   loadProfile();
   if (id === 'descobrir') { loadDiscovery(); markAlertsSeen(); }
+  if (id === 'candidaturas') loadBoard();
   if (id === 'filtros')  loadFilters();
   if (id === 'metricas') startMetricsRefresh();
   if (id === 'admin')    loadAdminPanel();

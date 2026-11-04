@@ -5,6 +5,7 @@ import (
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/repository"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -26,6 +27,12 @@ type Repository interface {
 	QueryFindJobByUrl(ctx context.Context, args db.QueryFindJobByUrlParams) (string, *repository.RepositoryError)
 	QueryListResumesForUser(ctx context.Context, args db.QueryListResumesForUserParams) ([]db.QueryListResumesForUserRow, *repository.RepositoryError)
 	QueryDeleteResume(ctx context.Context, args db.QueryDeleteResumeParams) *repository.RepositoryError
+
+	// Quadro de candidaturas (application.go).
+	ApplicationAddEvent(ctx context.Context, args db.QueryInsertApplicationEventParams) (string, *repository.RepositoryError)
+	ApplicationDeleteEvent(ctx context.Context, userID, jobID, eventID pgtype.UUID) *repository.RepositoryError
+	ApplicationEvents(ctx context.Context, userID, jobID pgtype.UUID) ([]db.QueryListApplicationEventsRow, *repository.RepositoryError)
+	ApplicationBoard(ctx context.Context, userID pgtype.UUID) ([]db.QueryApplicationBoardRow, *repository.RepositoryError)
 }
 
 func New(conn *pgxpool.Pool) Repository {

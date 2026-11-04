@@ -4,10 +4,11 @@
 // texto completo lido do site e o que o usuário colou). Abre ao clicar na vaga em
 // Vagas, em "Currículos"/qualidade e em "Ver currículo" no Descobrir.
 
-// tab: painel aberto (fit | keywords | resumes | about). Como na Ajuda, um por vez em vez de
+// tab: painel aberto (fit | keywords | resumes | application | about). Como na Ajuda, um por vez em vez de
 // uma página longa; continua o mesmo quando a tela recarrega sozinha (SSE).
-const _jd = { id: null, from: 'vagas', seq: 0, reloadTimer: null, language: '', tab: 'fit' };
-const _jdTabs = ['fit', 'keywords', 'resumes', 'about'];
+// app/stage/done: candidatura da vaga (applications.js), para atualizar só a aba dela.
+const _jd = { id: null, from: 'vagas', seq: 0, reloadTimer: null, language: '', tab: 'fit', app: null, stage: '', done: false };
+const _jdTabs = ['fit', 'keywords', 'resumes', 'application', 'about'];
 
 const _jdModes = { full: 'Currículo e cover letter', resume_only: 'Só currículo', cover_only: 'Só cover letter' };
 const _jdSourceLabel = { processamento: 'lida do site no processamento', catalogo: 'do catálogo do Descobrir' };
@@ -40,9 +41,10 @@ async function loadJobDetail() {
   }
   root.dataset.id = id;
   try {
-    const [jobRes, resRes] = await Promise.all([
+    const [jobRes, resRes, appRes] = await Promise.all([
       api.get(`/jobs/${id}`),
       api.get(`/jobs/${id}/resumes?cursor=0&size=20`),
+      api.get(`/jobs/${id}/application`),
     ]);
     if (seq !== _jd.seq) return;
     if (jobRes.status === 404) { root.innerHTML = '<p class="jd-empty">Esta vaga não existe mais.</p>'; return; }
@@ -50,9 +52,13 @@ async function loadJobDetail() {
     const job = await apiData(jobRes);
     if (!job || !job.id) throw new Error('Resposta inesperada ao carregar a vaga.');
     const resumes = resRes.ok ? ((await apiList(resRes)).data || []) : [];
+    const app = appRes.ok ? await apiData(appRes) : { stage: job.application_stage || '', stage_at: job.application_stage_at, events: [] };
     if (seq !== _jd.seq) return;
     _jd.language = job.language;
-    root.innerHTML = renderJobDetail(job, resumes);
+    _jd.app = app;
+    _jd.stage = app.stage || '';
+    _jd.done = job.status === 'completed';
+    root.innerHTML = renderJobDetail(job, resumes, app);
   } catch (e) {
     if (seq === _jd.seq) root.innerHTML = `<p class="jd-empty">Erro: ${escHtml(e.message)}</p>`;
   }
@@ -66,7 +72,7 @@ function jdOnJobEvent(ev) {
   _jd.reloadTimer = setTimeout(() => loadJobDetail(), 400);
 }
 
-function renderJobDetail(j, resumes) {
+function renderJobDetail(j, resumes, app) {
   const url = /^https?:\/\//i.test(j.url || '') ? j.url : '';
   const done = j.status === 'completed';
   const running = !done && j.status !== 'error';
@@ -85,10 +91,12 @@ function renderJobDetail(j, resumes) {
           ${badge(j.status)}
           ${j.quality ? `<span class="badge badge-${j.quality}">Compatibilidade ${escHtml((qualityLabels[j.quality] || j.quality).toLowerCase())}</span>` : ''}
           ${j.fit && j.fit.items.length ? `<span class="jd-pct">${j.fit.coverage_pct}% da stack</span>` : ''}
+          <span id="jd-app-chip">${appStageChip(app?.stage)}</span>
         </div>
         <div class="jd-meta">${meta}</div>
       </div>
       <div class="jd-actions" id="jd-actions">
+        <span id="jd-app-quick" class="jd-app-quick">${jdAppQuick(done, app?.stage)}</span>
         ${url ? `<a class="btn btn-ghost btn-sm" href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">↗ Vaga original</a>` : ''}
         ${!running ? `<button class="btn btn-ghost btn-sm" onclick="jdRetryMenu()">Refazer</button>` : ''}
         <button class="btn btn-ghost btn-sm jd-delete" onclick="jdDelete()">Excluir</button>
@@ -101,6 +109,7 @@ function renderJobDetail(j, resumes) {
     ['fit', 'Compatibilidade', fitSub, 'i-chart'],
     ['keywords', 'Palavras-chave', jdKeywordsSub(j.keywords), 'i-search'],
     ['resumes', 'Currículos e cover letters', resumes.length ? `${resumes.length} ${resumes.length === 1 ? 'gerado' : 'gerados'}` : (running ? 'gerando…' : 'nenhum ainda'), 'i-jobs'],
+    ['application', 'Candidatura', jdAppSub(app), 'i-board'],
     ['about', 'Sobre a vaga', 'descrição, stack e requisitos', 'i-search'],
   ];
   const nav = `
@@ -130,6 +139,12 @@ function renderJobDetail(j, resumes) {
       ${resumes.length
         ? jdResumeToolbar(resumes.length) + renderResumes(j.id, resumes, { selectable: true, quality: j.quality })
         : `<p class="jd-empty-inline">${running ? 'Sendo gerado — aparece aqui quando ficar pronto.' : 'Nenhum currículo gerado ainda. Use “Refazer” para gerar.'}</p>`}
+    </div>`;
+
+  const application = `
+    <div class="jd-card" id="jd-application" role="tabpanel"${_jd.tab === 'application' ? '' : ' hidden'}>
+      <h3 class="jd-card-title">Candidatura</h3>
+      <div id="jd-application-body">${appPanel(j.id, app, done)}</div>
     </div>`;
 
   const about = `
@@ -164,7 +179,33 @@ function renderJobDetail(j, resumes) {
         </div>` : ''}
     </div>`;
 
-  return header + `<div class="jd-body">${nav}<div class="jd-stage">${fit + keywords + resumesCard + about}</div></div>`;
+  return header + `<div class="jd-body">${nav}<div class="jd-stage">${fit + keywords + resumesCard + application + about}</div></div>`;
+}
+
+// ── Candidatura (applications.js) ──
+function jdAppSub(app) {
+  const st = app?.stage;
+  return st ? `${appStageInfo[st]?.label || st} ${appAgo(app.stage_at)}` : 'não enviado';
+}
+
+// Atalho no cabeçalho: currículo pronto e ainda não marcado como enviado.
+function jdAppQuick(done, stage) {
+  return done && !stage
+    ? `<button type="button" class="btn btn-ghost btn-sm" onclick="appQuick(_jd.id, 'applied', '', this)" title="Marque quando mandar o currículo para a empresa: a vaga vai para Enviado no quadro de Candidaturas">✓ Marquei como enviado</button>`
+    : '';
+}
+
+// Depois de marcar uma etapa: atualiza só o que depende dela (o resto da tela fica).
+function jdApplicationChanged(app) {
+  if (!app) return;
+  _jd.app = app;
+  _jd.stage = app.stage || '';
+  const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+  set('jd-application-body', appPanel(_jd.id, app, _jd.done));
+  set('jd-app-chip', appStageChip(app.stage));
+  set('jd-app-quick', jdAppQuick(_jd.done, app.stage));
+  const sub = document.querySelector('#jd-tab-application small');
+  if (sub) sub.textContent = jdAppSub(app);
 }
 
 // ── Palavras-chave (ATS) ──

@@ -227,6 +227,9 @@ func (h *JobHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 			Status:       string(j.Status),
 			Quality:      util.PgTextoToNullString(string(j.Quality.JobQuality)),
 			Analysis:     decodeAnalysis(j.FitAnalysis),
+
+			ApplicationStage:   j.ApplicationStage.String,
+			ApplicationStageAt: pgTimePtr(j.ApplicationStageAt),
 		}
 		if canFit {
 			h.attachFit(r.Context(), userID, &response[i], j.ID, j.TechStack, j.Status, j.Quality, skills, aliasMap)
@@ -296,6 +299,9 @@ func (h *JobHandler) GetJob(w http.ResponseWriter, r *http.Request) {
 		Mode:              j.Mode,
 		Analysis:          decodeAnalysis(j.FitAnalysis),
 		SourceDescription: util.PgTextoToNullString(j.SourceDescription.String),
+
+		ApplicationStage:   j.ApplicationStage.String,
+		ApplicationStageAt: pgTimePtr(j.ApplicationStageAt),
 	}
 	// Texto completo: o lido no processamento; para vagas processadas antes de ele ser
 	// guardado, o do catálogo do Descobrir, quando a vaga veio de lá.

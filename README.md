@@ -268,6 +268,10 @@ Base `/api/v1`. Rotas protegidas exigem `Authorization: Bearer <jwt>`; as respos
 | GET / POST | `/jobs` | Listar (filtros de status e compatibilidade) / cadastrar `{url, company_name?, job_title?, description?, language, mode}` |
 | GET / PUT / DELETE | `/jobs/{id}` | Ver / editar / remover |
 | PUT | `/jobs/{id}/retry` | Refazer `{mode?, language?, fresh?}` |
+| GET | `/applications` | Quadro de candidaturas (vagas concluídas e as que têm etapa) |
+| GET | `/jobs/{id}/application` | Etapa atual e histórico da candidatura |
+| POST | `/jobs/{id}/application/events` | Marca etapa ou anotação `{stage, note?, date?}` (`stage`: applied, interview, offer, hired, rejected, withdrawn, ready, note) |
+| DELETE | `/jobs/{id}/application/events/{event_id}` | Apaga um item do histórico (recalcula a etapa) |
 | GET | `/jobs/{id}/resumes[/{resume_id}]` | Currículos da vaga |
 | DELETE | `/jobs/{id}/resumes/{resume_id}` | Remover currículo |
 | POST | `/jobs/{id}/resumes/{resume_id}/pdf` | Gerar PDF (modelo) |

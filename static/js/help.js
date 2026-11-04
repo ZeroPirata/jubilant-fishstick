@@ -181,6 +181,31 @@ const HELP_TOPICS = [
     ],
   },
   {
+    id: 'candidaturas', title: 'Candidaturas', icon: 'i-board',
+    slides: [
+      {
+        title: 'Em que etapa está cada currículo',
+        body: `<p>A aba <b>Candidaturas</b> é um quadro: <b>Currículo pronto → Enviado → Entrevista → Proposta → Encerradas</b>.</p>
+          <ul><li>Currículo gerado entra sozinho em "Currículo pronto"</li>
+          <li>Depois de mandar para a empresa, um clique em <b>Marquei como enviado</b> (ou arraste o cartão, no computador)</li>
+          <li>Errou? O aviso tem <b>Desfazer</b>, e o histórico da vaga deixa apagar qualquer item</li></ul>`,
+        visual: `<div class="hv-flow">
+          ${['Pronto', 'Enviado', 'Entrevista', 'Proposta', 'Fim'].map((s, i) => `<div class="hv-step" style="--i:${i}"><span>0${i + 1}</span>${s}</div>`).join('<i></i>')}
+        </div>`,
+        cta: { label: 'Abrir Candidaturas', action: "navigateTo('candidaturas')" },
+      },
+      {
+        title: 'Pouca anotação manual',
+        body: `<p>O quadro faz o máximo sozinho:</p>
+          <ul><li>Ao baixar o PDF, ele pergunta se você já enviou</li>
+          <li>A data é a de hoje; dá para escolher outra se você esqueceu de marcar</li>
+          <li>Anotação é opcional (com quem falou, próxima etapa, salário)</li>
+          <li>Enviado há ${APP_STALE_DAYS}+ dias sem resposta fica destacado, com <b>Encerrar</b> num clique</li></ul>
+          <p>No topo: quantas você enviou e quantas chegaram a entrevista.</p>`,
+      },
+    ],
+  },
+  {
     id: 'bastidores', title: 'Por dentro', icon: 'i-shield',
     slides: [
       {

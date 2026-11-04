@@ -106,3 +106,60 @@ LIMIT @size OFFSET @cursor;
 DELETE FROM generated_resumes
 WHERE id = @id AND job_id = @job_id AND user_id = @user_id
 RETURNING id;
+-- ── Quadro de candidaturas ──
+
+-- name: QueryApplicationJobOwned :one
+SELECT j.id FROM jobs j
+WHERE j.id = @id AND j.user_id = @user_id AND j.deleted_at IS NULL
+FOR UPDATE;
+
+-- name: QueryInsertApplicationEvent :one
+INSERT INTO job_application_events(job_id, user_id, stage, note, happened_at)
+VALUES (@job_id, @user_id, @stage, @note, @happened_at)
+RETURNING id;
+
+-- name: QueryDeleteApplicationEvent :one
+DELETE FROM job_application_events
+WHERE id = @id AND job_id = @job_id AND user_id = @user_id
+RETURNING id;
+
+-- name: QueryRecomputeApplicationStage :exec
+-- Etapa atual = a última mudança de etapa do histórico (anotações não contam);
+-- 'ready' ou nenhuma = ainda não enviado.
+UPDATE jobs j
+SET application_stage = NULLIF(last.stage, 'ready'),
+    application_stage_at = CASE WHEN last.stage IS NULL OR last.stage = 'ready' THEN NULL ELSE last.happened_at END
+FROM (SELECT @job_id::uuid AS job_id) k
+LEFT JOIN LATERAL (
+    SELECT e.stage, e.happened_at
+    FROM job_application_events e
+    WHERE e.job_id = k.job_id AND e.stage <> 'note'
+    ORDER BY e.happened_at DESC, e.created_at DESC
+    LIMIT 1
+) last ON true
+WHERE j.id = k.job_id AND j.user_id = @user_id;
+
+-- name: QueryListApplicationEvents :many
+SELECT e.id, e.stage, e.note, e.happened_at, e.created_at
+FROM job_application_events e
+WHERE e.job_id = @job_id AND e.user_id = @user_id
+ORDER BY e.happened_at DESC, e.created_at DESC
+LIMIT 200;
+
+-- name: QueryApplicationBoard :many
+-- Vagas do quadro: as concluídas (currículo pronto) e as que já têm etapa. applied_at
+-- é o primeiro envio; reached_interview diz se chegou a entrevista (taxa de resposta),
+-- mesmo que depois tenha sido encerrada.
+SELECT
+    j.id, j.job_title, j.company_name, j.external_url, j.quality, j.status,
+    j.application_stage, j.application_stage_at, j.created_at,
+    (SELECT max(gr.created_at) FROM generated_resumes gr WHERE gr.job_id = j.id)::timestamptz AS resume_at,
+    (SELECT min(e.happened_at) FROM job_application_events e WHERE e.job_id = j.id AND e.stage = 'applied')::timestamptz AS applied_at,
+    EXISTS (SELECT 1 FROM job_application_events e WHERE e.job_id = j.id AND e.stage IN ('interview', 'offer', 'hired')) AS reached_interview,
+    COALESCE((SELECT e.note FROM job_application_events e WHERE e.job_id = j.id AND e.note <> ''
+              ORDER BY e.happened_at DESC, e.created_at DESC LIMIT 1), '')::text AS last_note
+FROM jobs j
+WHERE j.user_id = @user_id AND j.deleted_at IS NULL
+  AND (j.application_stage IS NOT NULL OR j.status = 'completed')
+ORDER BY COALESCE(j.application_stage_at, j.created_at) DESC
+LIMIT 500;

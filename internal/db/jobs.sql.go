@@ -11,6 +11,114 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const queryApplicationBoard = `-- name: QueryApplicationBoard :many
+SELECT
+    j.id, j.job_title, j.company_name, j.external_url, j.quality, j.status,
+    j.application_stage, j.application_stage_at, j.created_at,
+    (SELECT max(gr.created_at) FROM generated_resumes gr WHERE gr.job_id = j.id)::timestamptz AS resume_at,
+    (SELECT min(e.happened_at) FROM job_application_events e WHERE e.job_id = j.id AND e.stage = 'applied')::timestamptz AS applied_at,
+    EXISTS (SELECT 1 FROM job_application_events e WHERE e.job_id = j.id AND e.stage IN ('interview', 'offer', 'hired')) AS reached_interview,
+    COALESCE((SELECT e.note FROM job_application_events e WHERE e.job_id = j.id AND e.note <> ''
+              ORDER BY e.happened_at DESC, e.created_at DESC LIMIT 1), '')::text AS last_note
+FROM jobs j
+WHERE j.user_id = $1 AND j.deleted_at IS NULL
+  AND (j.application_stage IS NOT NULL OR j.status = 'completed')
+ORDER BY COALESCE(j.application_stage_at, j.created_at) DESC
+LIMIT 500
+`
+
+type QueryApplicationBoardRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	JobTitle           pgtype.Text        `json:"job_title"`
+	CompanyName        pgtype.Text        `json:"company_name"`
+	ExternalUrl        string             `json:"external_url"`
+	Quality            NullJobQuality     `json:"quality"`
+	Status             JobStatus          `json:"status"`
+	ApplicationStage   pgtype.Text        `json:"application_stage"`
+	ApplicationStageAt pgtype.Timestamptz `json:"application_stage_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	ResumeAt           pgtype.Timestamptz `json:"resume_at"`
+	AppliedAt          pgtype.Timestamptz `json:"applied_at"`
+	ReachedInterview   bool               `json:"reached_interview"`
+	LastNote           string             `json:"last_note"`
+}
+
+// Vagas do quadro: as concluídas (currículo pronto) e as que já têm etapa. applied_at
+// é o primeiro envio; reached_interview diz se chegou a entrevista (taxa de resposta),
+// mesmo que depois tenha sido encerrada.
+func (q *Queries) QueryApplicationBoard(ctx context.Context, userID pgtype.UUID) ([]QueryApplicationBoardRow, error) {
+	rows, err := q.db.Query(ctx, queryApplicationBoard, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []QueryApplicationBoardRow
+	for rows.Next() {
+		var i QueryApplicationBoardRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.JobTitle,
+			&i.CompanyName,
+			&i.ExternalUrl,
+			&i.Quality,
+			&i.Status,
+			&i.ApplicationStage,
+			&i.ApplicationStageAt,
+			&i.CreatedAt,
+			&i.ResumeAt,
+			&i.AppliedAt,
+			&i.ReachedInterview,
+			&i.LastNote,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const queryApplicationJobOwned = `-- name: QueryApplicationJobOwned :one
+
+SELECT j.id FROM jobs j
+WHERE j.id = $1 AND j.user_id = $2 AND j.deleted_at IS NULL
+FOR UPDATE
+`
+
+type QueryApplicationJobOwnedParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+// ── Quadro de candidaturas ──
+func (q *Queries) QueryApplicationJobOwned(ctx context.Context, arg QueryApplicationJobOwnedParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, queryApplicationJobOwned, arg.ID, arg.UserID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const queryDeleteApplicationEvent = `-- name: QueryDeleteApplicationEvent :one
+DELETE FROM job_application_events
+WHERE id = $1 AND job_id = $2 AND user_id = $3
+RETURNING id
+`
+
+type QueryDeleteApplicationEventParams struct {
+	ID     pgtype.UUID `json:"id"`
+	JobID  pgtype.UUID `json:"job_id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) QueryDeleteApplicationEvent(ctx context.Context, arg QueryDeleteApplicationEventParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, queryDeleteApplicationEvent, arg.ID, arg.JobID, arg.UserID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const queryDeleteJob = `-- name: QueryDeleteJob :exec
 DELETE FROM jobs 
 WHERE id = $1 
@@ -59,6 +167,33 @@ type QueryFindJobByUrlParams struct {
 
 func (q *Queries) QueryFindJobByUrl(ctx context.Context, arg QueryFindJobByUrlParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, queryFindJobByUrl, arg.ExternalUrl, arg.UserID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const queryInsertApplicationEvent = `-- name: QueryInsertApplicationEvent :one
+INSERT INTO job_application_events(job_id, user_id, stage, note, happened_at)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+`
+
+type QueryInsertApplicationEventParams struct {
+	JobID      pgtype.UUID        `json:"job_id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	Stage      string             `json:"stage"`
+	Note       string             `json:"note"`
+	HappenedAt pgtype.Timestamptz `json:"happened_at"`
+}
+
+func (q *Queries) QueryInsertApplicationEvent(ctx context.Context, arg QueryInsertApplicationEventParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, queryInsertApplicationEvent,
+		arg.JobID,
+		arg.UserID,
+		arg.Stage,
+		arg.Note,
+		arg.HappenedAt,
+	)
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -118,6 +253,53 @@ func (q *Queries) QueryInsertUrlJob(ctx context.Context, arg QueryInsertUrlJobPa
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const queryListApplicationEvents = `-- name: QueryListApplicationEvents :many
+SELECT e.id, e.stage, e.note, e.happened_at, e.created_at
+FROM job_application_events e
+WHERE e.job_id = $1 AND e.user_id = $2
+ORDER BY e.happened_at DESC, e.created_at DESC
+LIMIT 200
+`
+
+type QueryListApplicationEventsParams struct {
+	JobID  pgtype.UUID `json:"job_id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+type QueryListApplicationEventsRow struct {
+	ID         pgtype.UUID        `json:"id"`
+	Stage      string             `json:"stage"`
+	Note       string             `json:"note"`
+	HappenedAt pgtype.Timestamptz `json:"happened_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) QueryListApplicationEvents(ctx context.Context, arg QueryListApplicationEventsParams) ([]QueryListApplicationEventsRow, error) {
+	rows, err := q.db.Query(ctx, queryListApplicationEvents, arg.JobID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []QueryListApplicationEventsRow
+	for rows.Next() {
+		var i QueryListApplicationEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Stage,
+			&i.Note,
+			&i.HappenedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const queryListResumesForUser = `-- name: QueryListResumesForUser :many
@@ -188,6 +370,33 @@ func (q *Queries) QueryListResumesForUser(ctx context.Context, arg QueryListResu
 	return items, nil
 }
 
+const queryRecomputeApplicationStage = `-- name: QueryRecomputeApplicationStage :exec
+UPDATE jobs j
+SET application_stage = NULLIF(last.stage, 'ready'),
+    application_stage_at = CASE WHEN last.stage IS NULL OR last.stage = 'ready' THEN NULL ELSE last.happened_at END
+FROM (SELECT $2::uuid AS job_id) k
+LEFT JOIN LATERAL (
+    SELECT e.stage, e.happened_at
+    FROM job_application_events e
+    WHERE e.job_id = k.job_id AND e.stage <> 'note'
+    ORDER BY e.happened_at DESC, e.created_at DESC
+    LIMIT 1
+) last ON true
+WHERE j.id = k.job_id AND j.user_id = $1
+`
+
+type QueryRecomputeApplicationStageParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	JobID  pgtype.UUID `json:"job_id"`
+}
+
+// Etapa atual = a última mudança de etapa do histórico (anotações não contam);
+// 'ready' ou nenhuma = ainda não enviado.
+func (q *Queries) QueryRecomputeApplicationStage(ctx context.Context, arg QueryRecomputeApplicationStageParams) error {
+	_, err := q.db.Exec(ctx, queryRecomputeApplicationStage, arg.UserID, arg.JobID)
+	return err
+}
+
 const queryReprocessJob = `-- name: QueryReprocessJob :exec
 UPDATE jobs
 SET
@@ -219,7 +428,7 @@ func (q *Queries) QueryReprocessJob(ctx context.Context, arg QueryReprocessJobPa
 }
 
 const querySelectJobForUser = `-- name: QuerySelectJobForUser :one
-SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation
+SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation, j.application_stage, j.application_stage_at
 FROM jobs j
 WHERE j.id = $1 AND j.user_id = $2 AND j.deleted_at IS NULL
 `
@@ -252,12 +461,14 @@ func (q *Queries) QuerySelectJobForUser(ctx context.Context, arg QuerySelectJobF
 		&i.SourceDescription,
 		&i.ScrapedDescription,
 		&i.FreshGeneration,
+		&i.ApplicationStage,
+		&i.ApplicationStageAt,
 	)
 	return i, err
 }
 
 const querySelectJobsForUser = `-- name: QuerySelectJobsForUser :many
-SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation, COUNT(*) OVER() AS total_count
+SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation, j.application_stage, j.application_stage_at, COUNT(*) OVER() AS total_count
 FROM jobs j
 INNER JOIN user_accounts acc ON acc.id = j.user_id
 WHERE
@@ -298,6 +509,8 @@ type QuerySelectJobsForUserRow struct {
 	SourceDescription  pgtype.Text        `json:"source_description"`
 	ScrapedDescription pgtype.Text        `json:"scraped_description"`
 	FreshGeneration    bool               `json:"fresh_generation"`
+	ApplicationStage   pgtype.Text        `json:"application_stage"`
+	ApplicationStageAt pgtype.Timestamptz `json:"application_stage_at"`
 	TotalCount         int64              `json:"total_count"`
 }
 
@@ -336,6 +549,8 @@ func (q *Queries) QuerySelectJobsForUser(ctx context.Context, arg QuerySelectJob
 			&i.SourceDescription,
 			&i.ScrapedDescription,
 			&i.FreshGeneration,
+			&i.ApplicationStage,
+			&i.ApplicationStageAt,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

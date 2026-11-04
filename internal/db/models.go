@@ -365,6 +365,8 @@ type Job struct {
 	SourceDescription  pgtype.Text        `json:"source_description"`
 	ScrapedDescription pgtype.Text        `json:"scraped_description"`
 	FreshGeneration    bool               `json:"fresh_generation"`
+	ApplicationStage   pgtype.Text        `json:"application_stage"`
+	ApplicationStageAt pgtype.Timestamptz `json:"application_stage_at"`
 }
 
 type JobAlertFeedback struct {
@@ -374,6 +376,16 @@ type JobAlertFeedback struct {
 	Quality     string             `json:"quality"`
 	CoveragePct int32              `json:"coverage_pct"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type JobApplicationEvent struct {
+	ID         pgtype.UUID        `json:"id"`
+	JobID      pgtype.UUID        `json:"job_id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	Stage      string             `json:"stage"`
+	Note       string             `json:"note"`
+	HappenedAt pgtype.Timestamptz `json:"happened_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 type ProfileImport struct {

@@ -46,6 +46,9 @@ type Job struct {
 	FullDescriptionFrom string  `json:"full_description_from,omitempty"`
 	// Keywords: relatório de palavras-chave da vaga × último currículo × perfil.
 	Keywords *jobfit.KeywordReport `json:"keywords,omitempty"`
+	// Etapa da candidatura ("" = ainda não enviado) e desde quando.
+	ApplicationStage   string     `json:"application_stage,omitempty"`
+	ApplicationStageAt *time.Time `json:"application_stage_at,omitempty"`
 }
 
 // Resume

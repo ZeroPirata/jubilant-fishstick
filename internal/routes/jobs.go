@@ -31,5 +31,11 @@ func setupJobRoutes(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, bu
 	// Feedback
 	mux.HandleFunc("POST /jobs/{id}/resumes/{resume_id}/feedback", h.InsertFeedback)
 
+	// Quadro de candidaturas: etapa (enviado, entrevista...) e histórico de cada vaga.
+	mux.HandleFunc("GET /applications", h.ApplicationBoard)
+	mux.HandleFunc("GET /jobs/{id}/application", h.GetApplication)
+	mux.HandleFunc("POST /jobs/{id}/application/events", h.AddApplicationEvent)
+	mux.HandleFunc("DELETE /jobs/{id}/application/events/{event_id}", h.DeleteApplicationEvent)
+
 	return h
 }

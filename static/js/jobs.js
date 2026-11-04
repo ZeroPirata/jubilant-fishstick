@@ -102,6 +102,7 @@ function applyJobEvent(ev) {
   // se atualiza sozinha.
   if (typeof discOnJobEvent === 'function') discOnJobEvent(ev);
   if (typeof jdOnJobEvent === 'function') jdOnJobEvent(ev);
+  if (_activeTab === 'candidaturas' && ev.status === 'completed' && typeof loadBoard === 'function') loadBoard();
   const row = document.getElementById(`job-row-${ev.id}`);
   if (!row) { if (_activeTab === 'vagas') loadJobs(); return; }
 
@@ -294,6 +295,7 @@ function renderJobRow(j) {
       </div>
       <div class="jl-chips">
         <span class="jl-status">${badge(j.status)}</span>
+        ${appStageChip(j.application_stage)}
         <span class="jl-quality">${jobQualityChip(j.id, quality, fit)}</span>
       </div>
       <div class="jl-actions job-actions-cell" data-status="${j.status}" data-lang="${j.language === 'en' ? 'en' : 'pt-br'}">${jobActions(j.id, j.status)}</div>
@@ -500,6 +502,7 @@ async function downloadPdf(path, filename) {
   if (!res.ok)            { toast('Erro ao baixar o arquivo (HTTP ' + res.status + ').', 'error'); return; }
   const blob = await res.blob();
   if (blob.size === 0)    { toast('O arquivo gerado está vazio — tente regenerar.', 'error'); return; }
+  if (typeof appAskSentAfterPdf === 'function') appAskSentAfterPdf();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
