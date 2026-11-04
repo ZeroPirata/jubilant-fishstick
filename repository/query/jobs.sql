@@ -20,9 +20,49 @@ WHERE
     j.deleted_at IS NULL AND
     acc.deleted_at IS NULL AND
     (NULLIF(@status::TEXT, '') IS NULL OR j.status = @status::job_status) AND
-    (NULLIF(@quality::TEXT, '') IS NULL OR j.quality = @quality::job_quality)
+    (NULLIF(@quality::TEXT, '') IS NULL OR j.quality = @quality::job_quality) AND
+    -- Etapa da candidatura, como as colunas do quadro: ready = currículo pronto e
+    -- ainda não enviado; closed = contratado, não seguiu ou desistência.
+    (NULLIF(@stage::TEXT, '') IS NULL
+        OR (@stage::TEXT = 'ready'  AND j.application_stage IS NULL AND j.status = 'completed')
+        OR (@stage::TEXT = 'closed' AND j.application_stage IN ('hired', 'rejected', 'withdrawn'))
+        OR j.application_stage = @stage::TEXT) AND
+    -- Origem: auto = escolhida pela Seleção com IA; manual = cadastrada por você.
+    (NULLIF(@origin::TEXT, '') IS NULL OR j.auto_selected = (@origin::TEXT = 'auto'))
 ORDER BY j.created_at DESC
 LIMIT @size OFFSET @cursor;
+
+
+-- name: QuerySelectJobFitRows :many
+-- Só o necessário para calcular a compatibilidade (a % não fica gravada: depende das
+-- skills de agora). Usada quando a lista filtra ou ordena por %: o Go calcula, filtra,
+-- ordena e pagina, e depois busca as vagas da página com QuerySelectJobsByIds.
+SELECT j.id, j.tech_stack, j.created_at
+FROM jobs j
+INNER JOIN user_accounts acc ON acc.id = j.user_id
+WHERE
+    j.user_id = @user_id AND
+    j.deleted_at IS NULL AND
+    acc.deleted_at IS NULL AND
+    (NULLIF(@status::TEXT, '') IS NULL OR j.status = @status::job_status) AND
+    (NULLIF(@quality::TEXT, '') IS NULL OR j.quality = @quality::job_quality) AND
+    -- Etapa da candidatura, como as colunas do quadro: ready = currículo pronto e
+    -- ainda não enviado; closed = contratado, não seguiu ou desistência.
+    (NULLIF(@stage::TEXT, '') IS NULL
+        OR (@stage::TEXT = 'ready'  AND j.application_stage IS NULL AND j.status = 'completed')
+        OR (@stage::TEXT = 'closed' AND j.application_stage IN ('hired', 'rejected', 'withdrawn'))
+        OR j.application_stage = @stage::TEXT) AND
+    -- Origem: auto = escolhida pela Seleção com IA; manual = cadastrada por você.
+    (NULLIF(@origin::TEXT, '') IS NULL OR j.auto_selected = (@origin::TEXT = 'auto'))
+ORDER BY j.created_at DESC
+LIMIT 5000;
+
+
+-- name: QuerySelectJobsByIds :many
+-- Mesmas colunas de QuerySelectJobsForUser (total_count vem do Go).
+SELECT j.*, 0::BIGINT AS total_count
+FROM jobs j
+WHERE j.user_id = @user_id AND j.deleted_at IS NULL AND j.id = ANY(@ids::UUID[]);
 
 
 -- name: QuerySelectJobForUser :one

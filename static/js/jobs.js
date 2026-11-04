@@ -49,14 +49,50 @@ function changeJobsSize(val) {
   loadJobs();
 }
 
-function filterJobsByStatus() {
+// ── Filtros da aba Vagas ──
+// Cada <select data-jf="…"> vira um parâmetro de /jobs. Ficam lembrados neste navegador.
+const JOBS_FILTERS_KEY = 'jp_jobs_filters';
+
+function jobsFilterEls() {
+  return [...document.querySelectorAll('#tab-vagas [data-jf]')];
+}
+
+function jobsFiltersQuery() {
+  return jobsFilterEls().filter(el => el.value).map(el => `&${el.dataset.jf}=${encodeURIComponent(el.value)}`).join('');
+}
+
+function jobsFilterChanged() {
   _jobsPg.offset = 0;
+  const saved = {};
+  jobsFilterEls().forEach(el => { if (el.value) saved[el.dataset.jf] = el.value; });
+  try { localStorage.setItem(JOBS_FILTERS_KEY, JSON.stringify(saved)); } catch (_) {}
   loadJobs();
 }
 
-function filterJobsByQuality() {
-  _jobsPg.offset = 0;
-  loadJobs();
+function clearJobsFilters() {
+  jobsFilterEls().forEach(el => { el.value = ''; });
+  jobsFilterChanged();
+}
+
+function restoreJobsFilters() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(JOBS_FILTERS_KEY) || '{}') || {}; } catch (_) {}
+  jobsFilterEls().forEach(el => {
+    const v = saved[el.dataset.jf];
+    if (v && [...el.options].some(o => o.value === v)) el.value = v;
+  });
+}
+
+// Filtro em uso fica destacado; "Limpar filtros" só aparece com algum ativo
+// (a ordenação não conta como filtro).
+function markJobsFilters() {
+  let active = false;
+  jobsFilterEls().forEach(el => {
+    el.classList.toggle('jf-on', !!el.value);
+    if (el.value && el.dataset.jf !== 'sort') active = true;
+  });
+  document.getElementById('jobs-filters-clear')?.classList.toggle('hidden', !active);
+  return active;
 }
 
 // Cache job stack/requirements by ID (populated in loadJobs)
@@ -254,11 +290,9 @@ function renderFitDetails({ stack = [], reqs = [], quality = null, fit = null, a
 // vaga, aberta ao clicar na linha.
 async function loadJobs() {
   const list = document.getElementById('jobs-body');
-  const statusFilter  = document.getElementById('jobs-status-filter').value;
-  const qualityFilter = document.getElementById('jobs-quality-filter').value;
-  let qs = `?offset=${_jobsPg.offset}&size=${_jobsPg.size}`;
-  if (statusFilter)  qs += `&status=${statusFilter}`;
-  if (qualityFilter) qs += `&quality=${qualityFilter}`;
+  if (!_jobsPg.restored) { restoreJobsFilters(); _jobsPg.restored = true; }
+  const filtered = markJobsFilters();
+  const qs = `?offset=${_jobsPg.offset}&size=${_jobsPg.size}` + jobsFiltersQuery();
   list.innerHTML = '<p class="jl-empty">Carregando...</p>';
 
   try {
@@ -269,7 +303,9 @@ async function loadJobs() {
     renderJobsPagination(meta.total ?? 0, meta.cursor ?? _jobsPg.offset, meta.size ?? _jobsPg.size);
 
     if (!jobs.length) {
-      list.innerHTML = '<p class="jl-empty">Nenhuma vaga encontrada.</p>';
+      list.innerHTML = filtered
+        ? '<p class="jl-empty">Nenhuma vaga com esses filtros. <button type="button" class="btn-link" onclick="clearJobsFilters()">Limpar filtros</button></p>'
+        : '<p class="jl-empty">Nenhuma vaga encontrada.</p>';
       return;
     }
 

@@ -565,6 +565,17 @@ a.link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; max-width: 320px; }
 .truncate { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ══ Filtros da aba Vagas ══ */
+.jobs-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 10px; margin: 4px 0 2px; }
+.jobs-filters label { display: flex; flex-direction: column; gap: 3px; margin: 0; }
+.jobs-filters label > span { font: 500 10.5px var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.jobs-filters select { font-size: 12.5px; padding: 5px 26px 5px 9px; width: auto; max-width: 230px; }
+.jobs-filters select.jf-on { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 640px) {
+  .jobs-filters label { flex: 1 1 calc(50% - 10px); }
+  .jobs-filters select { max-width: none; width: 100%; }
+}
+
 /* ══ Paginação e busca ══ */
 .list-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .list-search { flex: 1; min-width: 160px; max-width: 320px; }

@@ -19,6 +19,8 @@ import (
 	"hackton-treino/internal/util"
 	"net/http"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -184,22 +186,20 @@ func (h *JobHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cursor, size := getPaginationParams(r)
-
-	rows, errR := h.Jobs.QuerySelectJobsForUser(r.Context(), db.QuerySelectJobsForUserParams{
-		UserID:  userID,
-		Cursor:  cursor,
-		Size:    size,
-		Status:  r.URL.Query().Get("status"),
-		Quality: r.URL.Query().Get("quality"),
-	})
-	if errR != nil {
-		writeRepositoryError(w, errR)
-		return
+	if cursor < 0 {
+		cursor = 0
 	}
-
-	if len(rows) == 0 {
-		writeList(w, http.StatusOK, []Job{}, size, cursor, 0)
-		return
+	if size <= 0 || size > 100 {
+		size = 20
+	}
+	q := r.URL.Query()
+	f := jobListFilter{
+		Status:  q.Get("status"),
+		Quality: q.Get("quality"),
+		Stage:   allowed(q.Get("stage"), "ready", "applied", "interview", "offer", "closed"),
+		Origin:  allowed(q.Get("origin"), "auto", "manual"),
+		MinPct:  clampPct(q.Get("min_pct")),
+		ByFit:   q.Get("sort") == "fit",
 	}
 
 	// Compatibilidade recalculada com o perfil de agora: quem cadastra uma skill vê a
@@ -207,6 +207,32 @@ func (h *JobHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	skills, errS := h.Users.QuerySelectAllSkills(r.Context(), userID.String())
 	aliasMap, errA := h.Aliases.QuerySelectAllStackAliases(r.Context())
 	canFit := errS == nil && errA == nil
+
+	var (
+		rows  []db.QuerySelectJobsForUserRow
+		total int32
+		errR  *repository.RepositoryError
+	)
+	if canFit && (f.MinPct > 0 || f.ByFit) {
+		rows, total, errR = h.listJobsByFit(r.Context(), userID, f, cursor, size, skills, aliasMap)
+	} else {
+		rows, errR = h.Jobs.QuerySelectJobsForUser(r.Context(), db.QuerySelectJobsForUserParams{
+			UserID: userID, Cursor: cursor, Size: size,
+			Status: f.Status, Quality: f.Quality, Stage: f.Stage, Origin: f.Origin,
+		})
+		if len(rows) > 0 {
+			total = int32(rows[0].TotalCount)
+		}
+	}
+	if errR != nil {
+		writeRepositoryError(w, errR)
+		return
+	}
+
+	if len(rows) == 0 {
+		writeList(w, http.StatusOK, []Job{}, size, cursor, total)
+		return
+	}
 
 	response := make([]Job, len(rows))
 	for i, j := range rows {
@@ -240,7 +266,93 @@ func (h *JobHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeList(w, http.StatusOK, response, size, cursor, int32(rows[0].TotalCount))
+	writeList(w, http.StatusOK, response, size, cursor, total)
+}
+
+// jobListFilter: filtros da aba Vagas. Stage e Origin já validados ("" = qualquer).
+type jobListFilter struct {
+	Status, Quality, Stage, Origin string
+	MinPct                         int  // % da stack mínima (0 = sem filtro)
+	ByFit                          bool // ordenar pela maior % em vez da mais recente
+}
+
+func allowed(v string, opts ...string) string {
+	for _, o := range opts {
+		if v == o {
+			return v
+		}
+	}
+	return ""
+}
+
+func clampPct(v string) int {
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return min(n, 100)
+}
+
+// listJobsByFit: lista filtrada ou ordenada pela % da stack. A % não fica gravada (muda
+// com as skills), então calcula para todas as vagas que passam nos outros filtros,
+// filtra, ordena e pagina aqui, e só então busca as vagas completas da página.
+// Vaga ainda sem stack (lendo) não tem %: some com o filtro e vai para o fim na ordem.
+func (h *JobHandler) listJobsByFit(ctx context.Context, userID pgtype.UUID, f jobListFilter, cursor, size int32,
+	skills []db.UserSkill, aliasMap map[string]string) ([]db.QuerySelectJobsForUserRow, int32, *repository.RepositoryError) {
+	cands, errR := h.Jobs.QuerySelectJobFitRows(ctx, db.QuerySelectJobFitRowsParams{
+		UserID: userID, Status: f.Status, Quality: f.Quality, Stage: f.Stage, Origin: f.Origin,
+	})
+	if errR != nil {
+		return nil, 0, errR
+	}
+	type scored struct {
+		id  pgtype.UUID
+		pct int
+	}
+	list := make([]scored, 0, len(cands))
+	for _, c := range cands { // já vem da mais recente para a mais antiga
+		pct := -1
+		if len(c.TechStack) > 0 {
+			pct = jobfit.Evaluate(c.TechStack, skills, aliasMap).CoveragePct
+		}
+		if f.MinPct > 0 && pct < f.MinPct {
+			continue
+		}
+		list = append(list, scored{c.ID, pct})
+	}
+	if f.ByFit {
+		sort.SliceStable(list, func(a, b int) bool { return list[a].pct > list[b].pct })
+	}
+	total := int32(len(list))
+	if cursor >= total {
+		return nil, total, nil
+	}
+	page := list[cursor:min(cursor+size, total)]
+	ids := make([]pgtype.UUID, len(page))
+	pos := make(map[[16]byte]int, len(page))
+	for i, s := range page {
+		ids[i] = s.id
+		pos[s.id.Bytes] = i
+	}
+	full, errR := h.Jobs.QuerySelectJobsByIds(ctx, db.QuerySelectJobsByIdsParams{UserID: userID, Ids: ids})
+	if errR != nil {
+		return nil, 0, errR
+	}
+	out := make([]db.QuerySelectJobsForUserRow, len(page))
+	got := make([]bool, len(page))
+	for _, row := range full {
+		if i, ok := pos[row.ID.Bytes]; ok {
+			out[i], got[i] = db.QuerySelectJobsForUserRow(row), true
+		}
+	}
+	// Vaga apagada entre as duas consultas: sai da página sem deixar buraco.
+	res := out[:0]
+	for i := range out {
+		if got[i] {
+			res = append(res, out[i])
+		}
+	}
+	return res, total, nil
 }
 
 // attachFit calcula a compatibilidade com o perfil atual e, se a qualidade gravada

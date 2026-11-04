@@ -142,25 +142,60 @@
         <h2>Vagas Cadastradas</h2>
         <div class="toolbar" style="margin:0">
           <button type="button" class="btn btn-ai hidden" id="btn-auto-select" onclick="toggleAutoPanel()" aria-expanded="false" aria-controls="auto-panel" title="A IA escolhe vagas do Descobrir e já gera os currículos"><svg class="ico"><use href="#i-spark"/></svg>Seleção com IA</button>
-          <select id="jobs-status-filter" onchange="filterJobsByStatus()">
-            <option value="">Todos os status</option>
+          <button class="btn btn-ghost" onclick="loadJobs()">↻ Atualizar</button>
+        </div>
+      </div>
+      <div id="auto-panel" class="auto-panel hidden" aria-live="polite"></div>
+      <div class="jobs-filters" role="group" aria-label="Filtros das vagas">
+        <label><span>Status</span>
+          <select id="jobs-status-filter" data-jf="status" onchange="jobsFilterChanged()">
+            <option value="">Todos</option>
             <option value="pending">Pendente</option>
             <option value="processing">Processando</option>
             <option value="scraping_basic">Coletando</option>
             <option value="scraping_nl">Analisando</option>
             <option value="completed">Concluído</option>
             <option value="error">Erro</option>
-          </select>
-          <select id="jobs-quality-filter" onchange="filterJobsByQuality()">
-            <option value="">Todas qualidades</option>
+          </select></label>
+        <label><span>Compatibilidade</span>
+          <select id="jobs-quality-filter" data-jf="quality" onchange="jobsFilterChanged()">
+            <option value="">Todas</option>
             <option value="high">Alta</option>
             <option value="mid">Média</option>
             <option value="low">Baixa</option>
-          </select>
-          <button class="btn btn-ghost" onclick="loadJobs()">↻ Atualizar</button>
-        </div>
+          </select></label>
+        <label><span>% da stack</span>
+          <select id="jobs-min-pct" data-jf="min_pct" onchange="jobsFilterChanged()">
+            <option value="">Qualquer</option>
+            <option value="90">90% ou mais</option>
+            <option value="80">80% ou mais</option>
+            <option value="70">70% ou mais</option>
+            <option value="60">60% ou mais</option>
+            <option value="50">50% ou mais</option>
+            <option value="30">30% ou mais</option>
+          </select></label>
+        <label><span>Candidatura</span>
+          <select id="jobs-stage-filter" data-jf="stage" onchange="jobsFilterChanged()">
+            <option value="">Todas</option>
+            <option value="ready">Pronto, não enviado</option>
+            <option value="applied">Enviado</option>
+            <option value="interview">Entrevista</option>
+            <option value="offer">Proposta</option>
+            <option value="closed">Encerrada</option>
+          </select></label>
+        <label><span>Origem</span>
+          <select id="jobs-origin-filter" data-jf="origin" onchange="jobsFilterChanged()">
+            <option value="">Todas</option>
+            <option value="auto">Seleção com IA</option>
+            <option value="manual">Cadastro manual</option>
+          </select></label>
+        <label><span>Ordenar</span>
+          <select id="jobs-sort" data-jf="sort" onchange="jobsFilterChanged()">
+            <option value="">Mais recentes</option>
+            <option value="fit">Maior %</option>
+          </select></label>
+        <button type="button" class="btn btn-ghost btn-sm hidden" id="jobs-filters-clear" onclick="clearJobsFilters()">Limpar filtros</button>
       </div>
-      <div id="auto-panel" class="auto-panel hidden" aria-live="polite"></div>
       <div class="list-controls" style="margin-top:10px">
         <div class="page-nav" style="margin-left:0">
           <select id="jobs-size" onchange="changeJobsSize(this.value)">

@@ -266,7 +266,7 @@ Base `/api/v1`. Rotas protegidas exigem `Authorization: Bearer <jwt>`; as respos
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET / POST | `/jobs` | Listar (filtros de status e compatibilidade) / cadastrar `{url, company_name?, job_title?, description?, language, mode}` |
+| GET / POST | `/jobs` | Listar (`status`, `quality`, `min_pct` 0–100, `stage` ready/applied/interview/offer/closed, `origin` auto/manual, `sort=fit`) / cadastrar `{url, company_name?, job_title?, description?, language, mode}` |
 | GET / PUT / DELETE | `/jobs/{id}` | Ver / editar / remover |
 | PUT | `/jobs/{id}/retry` | Refazer `{mode?, language?, fresh?}` |
 | GET | `/applications` | Quadro de candidaturas (vagas concluídas e as que têm etapa) |

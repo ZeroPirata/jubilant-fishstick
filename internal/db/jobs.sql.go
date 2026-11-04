@@ -464,6 +464,71 @@ func (q *Queries) QueryReprocessJob(ctx context.Context, arg QueryReprocessJobPa
 	return err
 }
 
+const querySelectJobFitRows = `-- name: QuerySelectJobFitRows :many
+SELECT j.id, j.tech_stack, j.created_at
+FROM jobs j
+INNER JOIN user_accounts acc ON acc.id = j.user_id
+WHERE
+    j.user_id = $1 AND
+    j.deleted_at IS NULL AND
+    acc.deleted_at IS NULL AND
+    (NULLIF($2::TEXT, '') IS NULL OR j.status = $2::job_status) AND
+    (NULLIF($3::TEXT, '') IS NULL OR j.quality = $3::job_quality) AND
+    -- Etapa da candidatura, como as colunas do quadro: ready = currículo pronto e
+    -- ainda não enviado; closed = contratado, não seguiu ou desistência.
+    (NULLIF($4::TEXT, '') IS NULL
+        OR ($4::TEXT = 'ready'  AND j.application_stage IS NULL AND j.status = 'completed')
+        OR ($4::TEXT = 'closed' AND j.application_stage IN ('hired', 'rejected', 'withdrawn'))
+        OR j.application_stage = $4::TEXT) AND
+    -- Origem: auto = escolhida pela Seleção com IA; manual = cadastrada por você.
+    (NULLIF($5::TEXT, '') IS NULL OR j.auto_selected = ($5::TEXT = 'auto'))
+ORDER BY j.created_at DESC
+LIMIT 5000
+`
+
+type QuerySelectJobFitRowsParams struct {
+	UserID  pgtype.UUID `json:"user_id"`
+	Status  string      `json:"status"`
+	Quality string      `json:"quality"`
+	Stage   string      `json:"stage"`
+	Origin  string      `json:"origin"`
+}
+
+type QuerySelectJobFitRowsRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	TechStack []string           `json:"tech_stack"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+// Só o necessário para calcular a compatibilidade (a % não fica gravada: depende das
+// skills de agora). Usada quando a lista filtra ou ordena por %: o Go calcula, filtra,
+// ordena e pagina, e depois busca as vagas da página com QuerySelectJobsByIds.
+func (q *Queries) QuerySelectJobFitRows(ctx context.Context, arg QuerySelectJobFitRowsParams) ([]QuerySelectJobFitRowsRow, error) {
+	rows, err := q.db.Query(ctx, querySelectJobFitRows,
+		arg.UserID,
+		arg.Status,
+		arg.Quality,
+		arg.Stage,
+		arg.Origin,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []QuerySelectJobFitRowsRow
+	for rows.Next() {
+		var i QuerySelectJobFitRowsRow
+		if err := rows.Scan(&i.ID, &i.TechStack, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const querySelectJobForUser = `-- name: QuerySelectJobForUser :one
 SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation, j.application_stage, j.application_stage_at, j.auto_selected, j.auto_score, j.auto_reason
 FROM jobs j
@@ -507,6 +572,92 @@ func (q *Queries) QuerySelectJobForUser(ctx context.Context, arg QuerySelectJobF
 	return i, err
 }
 
+const querySelectJobsByIds = `-- name: QuerySelectJobsByIds :many
+SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation, j.application_stage, j.application_stage_at, j.auto_selected, j.auto_score, j.auto_reason, 0::BIGINT AS total_count
+FROM jobs j
+WHERE j.user_id = $1 AND j.deleted_at IS NULL AND j.id = ANY($2::UUID[])
+`
+
+type QuerySelectJobsByIdsParams struct {
+	UserID pgtype.UUID   `json:"user_id"`
+	Ids    []pgtype.UUID `json:"ids"`
+}
+
+type QuerySelectJobsByIdsRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	UserID             pgtype.UUID        `json:"user_id"`
+	ExternalUrl        string             `json:"external_url"`
+	CompanyName        pgtype.Text        `json:"company_name"`
+	JobTitle           pgtype.Text        `json:"job_title"`
+	Description        pgtype.Text        `json:"description"`
+	TechStack          []string           `json:"tech_stack"`
+	Requirements       []string           `json:"requirements"`
+	Status             JobStatus          `json:"status"`
+	Quality            NullJobQuality     `json:"quality"`
+	Language           pgtype.Text        `json:"language"`
+	Mode               string             `json:"mode"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	FitAnalysis        []byte             `json:"fit_analysis"`
+	SourceDescription  pgtype.Text        `json:"source_description"`
+	ScrapedDescription pgtype.Text        `json:"scraped_description"`
+	FreshGeneration    bool               `json:"fresh_generation"`
+	ApplicationStage   pgtype.Text        `json:"application_stage"`
+	ApplicationStageAt pgtype.Timestamptz `json:"application_stage_at"`
+	AutoSelected       bool               `json:"auto_selected"`
+	AutoScore          pgtype.Int4        `json:"auto_score"`
+	AutoReason         pgtype.Text        `json:"auto_reason"`
+	TotalCount         int64              `json:"total_count"`
+}
+
+// Mesmas colunas de QuerySelectJobsForUser (total_count vem do Go).
+func (q *Queries) QuerySelectJobsByIds(ctx context.Context, arg QuerySelectJobsByIdsParams) ([]QuerySelectJobsByIdsRow, error) {
+	rows, err := q.db.Query(ctx, querySelectJobsByIds, arg.UserID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []QuerySelectJobsByIdsRow
+	for rows.Next() {
+		var i QuerySelectJobsByIdsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ExternalUrl,
+			&i.CompanyName,
+			&i.JobTitle,
+			&i.Description,
+			&i.TechStack,
+			&i.Requirements,
+			&i.Status,
+			&i.Quality,
+			&i.Language,
+			&i.Mode,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.FitAnalysis,
+			&i.SourceDescription,
+			&i.ScrapedDescription,
+			&i.FreshGeneration,
+			&i.ApplicationStage,
+			&i.ApplicationStageAt,
+			&i.AutoSelected,
+			&i.AutoScore,
+			&i.AutoReason,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const querySelectJobsForUser = `-- name: QuerySelectJobsForUser :many
 SELECT j.id, j.user_id, j.external_url, j.company_name, j.job_title, j.description, j.tech_stack, j.requirements, j.status, j.quality, j.language, j.mode, j.created_at, j.updated_at, j.deleted_at, j.fit_analysis, j.source_description, j.scraped_description, j.fresh_generation, j.application_stage, j.application_stage_at, j.auto_selected, j.auto_score, j.auto_reason, COUNT(*) OVER() AS total_count
 FROM jobs j
@@ -516,15 +667,25 @@ WHERE
     j.deleted_at IS NULL AND
     acc.deleted_at IS NULL AND
     (NULLIF($2::TEXT, '') IS NULL OR j.status = $2::job_status) AND
-    (NULLIF($3::TEXT, '') IS NULL OR j.quality = $3::job_quality)
+    (NULLIF($3::TEXT, '') IS NULL OR j.quality = $3::job_quality) AND
+    -- Etapa da candidatura, como as colunas do quadro: ready = currículo pronto e
+    -- ainda não enviado; closed = contratado, não seguiu ou desistência.
+    (NULLIF($4::TEXT, '') IS NULL
+        OR ($4::TEXT = 'ready'  AND j.application_stage IS NULL AND j.status = 'completed')
+        OR ($4::TEXT = 'closed' AND j.application_stage IN ('hired', 'rejected', 'withdrawn'))
+        OR j.application_stage = $4::TEXT) AND
+    -- Origem: auto = escolhida pela Seleção com IA; manual = cadastrada por você.
+    (NULLIF($5::TEXT, '') IS NULL OR j.auto_selected = ($5::TEXT = 'auto'))
 ORDER BY j.created_at DESC
-LIMIT $5 OFFSET $4
+LIMIT $7 OFFSET $6
 `
 
 type QuerySelectJobsForUserParams struct {
 	UserID  pgtype.UUID `json:"user_id"`
 	Status  string      `json:"status"`
 	Quality string      `json:"quality"`
+	Stage   string      `json:"stage"`
+	Origin  string      `json:"origin"`
 	Cursor  int32       `json:"cursor"`
 	Size    int32       `json:"size"`
 }
@@ -562,6 +723,8 @@ func (q *Queries) QuerySelectJobsForUser(ctx context.Context, arg QuerySelectJob
 		arg.UserID,
 		arg.Status,
 		arg.Quality,
+		arg.Stage,
+		arg.Origin,
 		arg.Cursor,
 		arg.Size,
 	)

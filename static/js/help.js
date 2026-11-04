@@ -112,6 +112,18 @@ const HELP_TOPICS = [
           ${['Pendente', 'Coletando', 'Analisando', 'Concluído'].map((s, i) => `<span class="hv-pill" style="--i:${i}">${s}</span>`).join('<i>›</i>')}
         </div>`,
       },
+      {
+        title: 'Filtre a sua lista',
+        body: `<p>Acima da lista de vagas:</p>
+          <ul><li><b>% da stack</b>: só as vagas em que você cobre pelo menos essa parte das tecnologias (calculado com as suas habilidades de agora)</li>
+          <li><b>Candidatura</b>: as mesmas etapas do quadro, de “pronto, não enviado” a “encerrada”</li>
+          <li><b>Origem</b>: as escolhidas pela Seleção com IA ou as que você cadastrou</li>
+          <li><b>Ordenar por maior %</b>: as mais compatíveis primeiro</li></ul>
+          <p>Os filtros ficam lembrados neste navegador; o filtro em uso fica destacado e <b>Limpar filtros</b> volta tudo.</p>`,
+        visual: `<div class="hv-status">
+          ${['% da stack', 'Candidatura', 'Origem', 'Ordenar'].map((s, i) => `<span class="hv-pill" style="--i:${i}">${s}</span>`).join('<i>·</i>')}
+        </div>`,
+      },
     ],
   },
   {

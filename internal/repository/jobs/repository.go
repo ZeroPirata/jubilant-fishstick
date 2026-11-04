@@ -21,6 +21,16 @@ func (r *jobRepository) QuerySelectJobsForUser(ctx context.Context, args db.Quer
 	return jobs, repository.HandleDatabaseError(err)
 }
 
+func (r *jobRepository) QuerySelectJobFitRows(ctx context.Context, args db.QuerySelectJobFitRowsParams) ([]db.QuerySelectJobFitRowsRow, *repository.RepositoryError) {
+	rows, err := r.Q.QuerySelectJobFitRows(ctx, args)
+	return rows, repository.HandleDatabaseError(err)
+}
+
+func (r *jobRepository) QuerySelectJobsByIds(ctx context.Context, args db.QuerySelectJobsByIdsParams) ([]db.QuerySelectJobsByIdsRow, *repository.RepositoryError) {
+	rows, err := r.Q.QuerySelectJobsByIds(ctx, args)
+	return rows, repository.HandleDatabaseError(err)
+}
+
 func (r *jobRepository) QueryReprocessJob(ctx context.Context, args db.QueryReprocessJobParams) *repository.RepositoryError {
 	err := r.Q.QueryReprocessJob(ctx, args)
 	return repository.HandleDatabaseError(err)
