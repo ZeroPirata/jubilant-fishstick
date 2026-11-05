@@ -179,7 +179,7 @@ func TestParseAutoVerdicts_Fatos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := got[1]; v.YearsAsked != 5 || v.Workplace != "hybrid" || len(v.Missing) != 2 {
+	if v := got[1]; v.YearsAsked != 5 || v.Workplace != "hybrid" || len(v.Missing) != 2 || !v.Missing[0].Central {
 		t.Errorf("vaga 1: %+v", v)
 	}
 	if v := got[2]; v.YearsAsked != 0 || v.Workplace != "" || len(v.Missing) != 0 {
@@ -202,8 +202,11 @@ func TestAutoApplyRules(t *testing.T) {
 		{"5 anos para 3,6 passa", autoVerdict{Score: 70, Apply: true, YearsAsked: 5}, DiscoveredJob{}, true, 70, ""},
 		{"híbrido sem local no site", autoVerdict{Score: 80, Apply: true, Workplace: "hybrid"}, DiscoveredJob{}, false, 80, "híbrido"},
 		{"site diz remoto: vale o site", autoVerdict{Score: 80, Apply: true, Workplace: "hybrid"}, DiscoveredJob{WorkplaceType: "remote"}, true, 80, ""},
-		{"dois faltando", autoVerdict{Score: 70, Apply: true, Missing: []string{"Ruby on Rails", "Vue.js"}}, DiscoveredJob{}, false, 70, "Ruby on Rails, Vue.js"},
-		{"um faltando limita a nota", autoVerdict{Score: 85, Apply: true, Missing: []string{"Machine Learning"}}, DiscoveredJob{}, true, 65, ""},
+		{"dois faltando", autoVerdict{Score: 70, Apply: true, Missing: []autoMissing{{"Ruby on Rails", true}, {"Vue.js", true}}}, DiscoveredJob{}, false, 70, "Ruby on Rails, Vue.js"},
+		{"um central limita a nota", autoVerdict{Score: 85, Apply: true, Missing: []autoMissing{{"Machine Learning", true}}}, DiscoveredJob{}, true, 65, ""},
+		{"secundários tiram 5 cada", autoVerdict{Score: 80, Apply: true, Missing: []autoMissing{{"HTML5", false}, {"CSS3", false}}}, DiscoveredJob{}, true, 70, ""},
+		{"1 central + 2 secundários", autoVerdict{Score: 80, Apply: true, Missing: []autoMissing{{"React", true}, {"Jest", false}, {"Next.js", false}}}, DiscoveredJob{}, false, 80, "React, Jest, Next.js"},
+		{"4 secundários", autoVerdict{Score: 80, Apply: true, Missing: []autoMissing{{"a", false}, {"b", false}, {"c", false}, {"d", false}}}, DiscoveredJob{}, false, 80, "a, b, c, d"},
 		{"eliminatório", autoVerdict{Score: 80, Apply: true, Blocker: "cidadania"}, DiscoveredJob{}, false, 80, ""},
 	} {
 		v := tc.v
@@ -229,7 +232,7 @@ func TestAutoApplyRules(t *testing.T) {
 	}{
 		{autoVerdict{Score: 85, Apply: true}, true},
 		{autoVerdict{Score: 70, Apply: true}, false},
-		{autoVerdict{Score: 90, Apply: true, Missing: []string{"Kafka"}}, false},
+		{autoVerdict{Score: 90, Apply: true, Missing: []autoMissing{{"Kafka", false}}}, false},
 	} {
 		v := tc.v
 		autoApplyRules(&v, stretch, 3.6, remote)
@@ -260,5 +263,41 @@ func TestAutoApplyRules(t *testing.T) {
 	}
 	if !autoIsNonTech("Account Executive, Mid-Market - Brazil") || autoIsNonTech("Backend Engineer") {
 		t.Error("autoIsNonTech")
+	}
+}
+
+func TestRawMissing(t *testing.T) {
+	got := rawMissing([]byte(`[{"item":"React","peso":"central"},{"item":"Jest","peso":"secundário"},{"item":"nenhum","peso":"central"}]`))
+	if len(got) != 2 || !got[0].Central || got[1].Central {
+		t.Errorf("objetos: %+v", got)
+	}
+	if got := rawMissing([]byte(`"Kafka, Terraform"`)); len(got) != 2 || !got[1].Central {
+		t.Errorf("texto: %+v", got)
+	}
+}
+
+func TestAutoVerifyMissing(t *testing.T) {
+	skills := []db.UserSkill{
+		{SkillName: "Go (Golang)", ProficiencyLevel: db.SkillLevelExpert},
+		{SkillName: "TypeScript", ProficiencyLevel: db.SkillLevelIntermediate},
+		{SkillName: "React.js", ProficiencyLevel: db.SkillLevelBasic},
+		{SkillName: "AWS SQS", ProficiencyLevel: db.SkillLevelAdvanced, Tags: []string{"aws", "sqs"}},
+	}
+	eval := jobfit.NewEvaluator(skills, nil)
+	v := autoVerdict{Missing: []autoMissing{
+		{"Kafka ou SQS", true},                  // tem SQS: sai
+		{"TypeScript", false},                   // intermediário: sai
+		{"React", true},                         // só básico: fica
+		{"Terraform ou OpenTofu", true},         // nenhuma das duas: fica
+		{"Golang (or similar)", false},          // tem: sai
+		{"frontend avançado (Vue/React)", true}, // React básico, Vue não: fica
+	}}
+	autoVerifyMissing(&v, eval)
+	var names []string
+	for _, m := range v.Missing {
+		names = append(names, m.Item)
+	}
+	if strings.Join(names, "|") != "React|Terraform ou OpenTofu|frontend avançado (Vue/React)" {
+		t.Errorf("ficaram %v", names)
 	}
 }

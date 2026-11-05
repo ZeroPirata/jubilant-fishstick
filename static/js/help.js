@@ -227,7 +227,7 @@ const HELP_TOPICS = [
           <li>vagas afirmativas (exclusivas para mulheres, pessoas negras, PcD…) não são escolhidas automaticamente, porque o perfil não diz se você se encaixa; elas continuam no Descobrir</li>
           <li>pode escolher menos do que o pedido: melhor uma vaga boa do que cinco improváveis</li>
           <li>a IA lê cada uma como um recrutador do seu lado: senioridade pedida, idioma, requisitos eliminatórios, tipo de função</li>
-          <li>as regras de corte são fixas, não dependem do humor da IA: 2+ requisitos obrigatórios que você não tem, anos pedidos bem acima do seu tempo de carreira ou vaga híbrida/presencial quando você quer remoto tiram a vaga, mesmo com nota boa</li>
+          <li>as regras de corte são fixas, não dependem do humor da IA: requisitos obrigatórios que você não tem (2 centrais, ou 1 central e 2 secundários; o que está nas suas habilidades é conferido e não conta), anos pedidos bem acima do seu tempo de carreira ou vaga híbrida/presencial quando você quer remoto tiram a vaga, mesmo com nota boa</li>
           <li>as que valem a candidatura entram na pipeline com a tag <b>auto-gerado</b> e o currículo é gerado sozinho</li></ul>
           <p>Você só confere e envia no site da empresa: a candidatura em si não dá para fazer por você.</p>`,
         visual: `<div class="hv-flow">

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"hackton-treino/internal/db"
+	"hackton-treino/internal/jobfit"
 	"hackton-treino/internal/middleware"
 	"hackton-treino/internal/repository"
 	"hackton-treino/internal/repository/admin"
@@ -15,6 +16,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -426,6 +428,11 @@ func (h *AutoSelectHandler) run(ctx context.Context, userID pgtype.UUID, runID p
 	if total, ok := autoExperience(exps, time.Now()); ok {
 		years = total.Hours() / 24 / 365.25
 	}
+	// Confere o "faltando" da IA contra as skills (com os sinônimos da % da stack).
+	var eval *jobfit.Evaluator
+	if aliasMap, errA := h.Disc.Aliases.QuerySelectAllStackAliases(ctx); errA == nil {
+		eval = jobfit.NewEvaluator(skills, aliasMap)
+	}
 
 	ids := make([]pgtype.UUID, 0, len(jobs))
 	for _, j := range jobs {
@@ -438,6 +445,31 @@ func (h *AutoSelectHandler) run(ctx context.Context, userID pgtype.UUID, runID p
 	if rows, err := h.Q.AutoSelectDescriptions(ctx, ids); err == nil {
 		for _, d := range rows {
 			descs[d.ID.String()] = d.Description
+		}
+	}
+
+	// A mesma vaga em outro site pode ter o texto inteiro: a Himalayas às vezes entrega
+	// "frontend utilizando <strong></strong> e/ou <strong></strong>", enquanto a Gupy
+	// traz "Vue.js e/ou Nuxt.js". Fica a descrição mais longa.
+	var altURLs []string
+	for _, j := range jobs {
+		for _, l := range j.AlsoOn {
+			altURLs = append(altURLs, l.Url)
+		}
+	}
+	if len(altURLs) > 0 {
+		if rows, err := h.Q.AutoSelectDescriptionsByUrl(ctx, altURLs); err == nil {
+			byURL := make(map[string]string, len(rows))
+			for _, r := range rows {
+				byURL[r.Url] = r.Description
+			}
+			for _, j := range jobs {
+				for _, l := range j.AlsoOn {
+					if alt := byURL[l.Url]; utf8.RuneCountInString(alt) > utf8.RuneCountInString(descs[j.ID]) {
+						descs[j.ID] = alt
+					}
+				}
+			}
 		}
 	}
 
@@ -481,6 +513,7 @@ func (h *AutoSelectHandler) run(ctx context.Context, userID pgtype.UUID, runID p
 		}
 		for i := range batch {
 			if v, ok := verdicts[i+1]; ok {
+				autoVerifyMissing(&v, eval)
 				autoApplyRules(&v, batch[i].Job, years, filter.Location.WorkplaceTypes)
 				batch[i].Verdict = &v
 				analyzed++

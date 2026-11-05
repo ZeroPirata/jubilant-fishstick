@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hackton-treino/internal/db"
 	"hackton-treino/internal/jobfit"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -46,16 +47,20 @@ Regras:
 - Fatos da vaga (copie do texto, não julgue):
   - "anos_pedidos": o mínimo de anos de experiência que a vaga pede (número), ou null se não diz.
   - "modelo": "remoto", "híbrido" ou "presencial" conforme o texto da vaga; "" se não diz.
-  - "faltando": lista do que a vaga marca como obrigatório (tecnologia, plataforma, certificação, idioma, formação, domínio de negócio) e o perfil não tem ou tem só no nível básico. Não inclua o que é "desejável", "diferencial" ou "nice to have". [] quando nada falta.
+  - "faltando": o que a vaga exige na seção de REQUISITOS ("Requisitos", "Qualificações", "Required", "Basic Qualifications", "Must have") e o perfil não tem ou tem só no nível básico. Cada item é {"item": "...", "peso": "central" ou "secundario"}. [] quando nada falta. Regras:
+    - Não use as responsabilidades ("o que você vai fazer", "What you'll do") nem o que é "desejável", "diferencial", "preferred" ou "nice to have".
+    - "X ou Y", "X e/ou Y", "X ou similar", "X or similar": só falta se o perfil não tem nenhuma das opções nem um equivalente direto (ex.: "Kafka ou similar" é atendido por SQS, RabbitMQ ou mensageria assíncrona).
+    - Descreva a competência inteira, não um pedaço: "frontend avançado (Vue/React)", e não "HTML5" e "CSS3" separados. Fundamentos (HTML, CSS, Git, SQL, REST, Linux, testes) não entram sozinhos quando o perfil tem skills vizinhas.
+    - "central": o núcleo da vaga (a linguagem ou plataforma principal, o tipo de trabalho do dia a dia, o que aparece no título). "secundario": o resto.
 - "eliminatorio": outro requisito eliminatório que falha (cidadania, visto, estágio, função não técnica), em poucas palavras; "" quando nenhum falha.
-- "candidatar": true só com nota 60 ou mais, "eliminatorio" vazio e no máximo 1 item em "faltando". A nota e o motivo precisam concordar com essa decisão; o que está em "faltando" não vira só um "Risco".
+- "candidatar": true só com nota 60 ou mais, "eliminatorio" vazio e no máximo 1 item "central" em "faltando". A nota e o motivo precisam concordar com essa decisão; o que está em "faltando" não vira só um "Risco".
 - "motivo": uma frase em português, até 160 caracteres, coerente com "candidatar":
   - candidatar true: comece pelo que faz valer a pena e, se houver, termine com o principal risco depois de "Risco:" (ex.: "Go e AWS são o núcleo da vaga e o forte do perfil. Risco: pede 3+ anos de Node.js.").
   - candidatar false: o fator que elimina ou enfraquece a candidatura (ex.: "Pede 5+ anos com Kotlin; o perfil tem 2 anos em Go.").
 - Avalie todas as vagas da lista, sem pular nenhuma, usando o número entre colchetes.
 
 Responda APENAS com JSON válido, sem texto antes ou depois:
-{"avaliacoes":[{"vaga":1,"anos_pedidos":3,"modelo":"remoto","faltando":["Node.js"],"eliminatorio":"","nota":70,"candidatar":true,"motivo":"..."}]}`
+{"avaliacoes":[{"vaga":1,"anos_pedidos":3,"modelo":"remoto","faltando":[{"item":"Node.js","peso":"secundario"}],"eliminatorio":"","nota":70,"candidatar":true,"motivo":"..."}]}`
 
 // autoVerdict: o julgamento da IA sobre uma vaga.
 type autoVerdict struct {
@@ -67,9 +72,9 @@ type autoVerdict struct {
 	// "a vaga exige VTEX, que o candidato não possui").
 	Blocker string
 	// Fatos copiados da vaga pela IA; as regras de autoApplyRules decidem com eles.
-	YearsAsked float64  // 0 = não diz
-	Workplace  string   // remote, hybrid, onsite ou "" (não diz)
-	Missing    []string // obrigatórios que o perfil não tem
+	YearsAsked float64       // 0 = não diz
+	Workplace  string        // remote, hybrid, onsite ou "" (não diz)
+	Missing    []autoMissing // obrigatórios que o perfil não tem
 }
 
 // flexInt aceita 7, 7.0 e "7" (modelos variam).
@@ -139,7 +144,7 @@ func parseAutoVerdicts(content string, n int) (map[int]autoVerdict, error) {
 		}
 		res[i] = autoVerdict{
 			Score: score, Apply: bool(a.Candidatar) && blocker == "", Reason: reason, Blocker: blocker,
-			YearsAsked: rawYears(a.AnosPedidos), Workplace: rawWorkplace(a.Modelo), Missing: rawList(a.Faltando),
+			YearsAsked: rawYears(a.AnosPedidos), Workplace: rawWorkplace(a.Modelo), Missing: rawMissing(a.Faltando),
 		}
 	}
 	if len(res) == 0 {
@@ -175,8 +180,35 @@ func rawWorkplace(s string) string {
 	return ""
 }
 
-// rawList aceita ["a","b"] ou "a, b".
-func rawList(b json.RawMessage) []string {
+// autoMissing: um obrigatório que falta. Central = o núcleo da vaga.
+type autoMissing struct {
+	Item    string
+	Central bool
+}
+
+// rawMissing aceita [{"item":"X","peso":"central"}], ["X","Y"] ou "X, Y". Sem peso
+// (formato antigo), conta como central: na dúvida, a regra fica mais rígida.
+func rawMissing(b json.RawMessage) []autoMissing {
+	var objs []struct {
+		Item string `json:"item"`
+		Peso string `json:"peso"`
+	}
+	var out []autoMissing
+	add := func(item string, central bool) {
+		item = strings.TrimSpace(item)
+		switch strings.ToLower(item) {
+		case "", "nenhum", "nenhuma", "-", "n/a", "none":
+			return
+		}
+		out = append(out, autoMissing{Item: item, Central: central})
+	}
+	if json.Unmarshal(b, &objs) == nil && len(objs) > 0 && objs[0].Item != "" {
+		for _, o := range objs {
+			p := strings.ToLower(strings.TrimSpace(o.Peso))
+			add(o.Item, !strings.HasPrefix(p, "secund"))
+		}
+		return out
+	}
 	var list []string
 	if json.Unmarshal(b, &list) != nil {
 		var s string
@@ -185,16 +217,55 @@ func rawList(b json.RawMessage) []string {
 		}
 		list = strings.Split(s, ",")
 	}
-	out := make([]string, 0, len(list))
 	for _, it := range list {
-		it = strings.TrimSpace(it)
-		switch strings.ToLower(it) {
-		case "", "nenhum", "nenhuma", "-", "n/a", "none":
-			continue
-		}
-		out = append(out, it)
+		add(it, true)
 	}
 	return out
+}
+
+// autoVerifyMissing tira da lista o que o perfil tem: a IA às vezes lista algo que
+// está nas skills (ou uma das opções de "X ou Y"). Usa o mesmo cálculo da % da stack
+// (sinônimos incluídos); conta a skill em nível intermediário ou acima.
+func autoVerifyMissing(v *autoVerdict, eval *jobfit.Evaluator) {
+	if eval == nil || len(v.Missing) == 0 {
+		return
+	}
+	kept := v.Missing[:0]
+	for _, m := range v.Missing {
+		if !autoProfileHas(m.Item, eval) {
+			kept = append(kept, m)
+		}
+	}
+	v.Missing = kept
+}
+
+var autoAltSplit = regexp.MustCompile(`(?i)\s+(?:e/ou|ou|or|and/or)\s+|[/,;()]`)
+var autoAltNoise = regexp.MustCompile(`(?i)\b(?:similar|similares|equivalente|equivalent|semelhante|ou|or|e/ou)\b`)
+
+func autoProfileHas(item string, eval *jobfit.Evaluator) bool {
+	for _, alt := range autoAltSplit.Split(item, -1) {
+		alt = strings.TrimSpace(autoAltNoise.ReplaceAllString(alt, ""))
+		if alt == "" {
+			continue
+		}
+		fit := eval.Evaluate([]string{alt})
+		if len(fit.Items) == 0 {
+			continue
+		}
+		it := fit.Items[0]
+		if it.Status == jobfit.StatusStrong || (it.Status == jobfit.StatusPartial && it.Level == string(db.SkillLevelIntermediate)) {
+			return true
+		}
+	}
+	return false
+}
+
+func missingNames(ms []autoMissing) string {
+	names := make([]string, 0, len(ms))
+	for _, m := range ms[:min(len(ms), 4)] {
+		names = append(names, m.Item)
+	}
+	return strings.Join(names, ", ")
 }
 
 // autoApplyRules: as regras de corte ficam no código, não no julgamento do modelo. Na
@@ -203,7 +274,8 @@ func rawList(b json.RawMessage) []string {
 //   - anos pedidos acima de 1,5× a carreira do perfil → fora;
 //   - modelo de trabalho fora das preferências (só quando o site não informou; se
 //     informou, o Descobrir já filtrou) → fora;
-//   - 2+ obrigatórios faltando → fora; 1 faltando → nota no máximo 65.
+//   - obrigatórios faltando, por peso: 2 centrais, ou 1 central + 2 secundários, ou
+//     4 secundários → fora; 1 central → nota no máximo 65; cada secundário tira 5.
 //
 // years < 0: tempo de carreira desconhecido.
 func autoApplyRules(v *autoVerdict, j DiscoveredJob, years float64, places []string) {
@@ -218,10 +290,24 @@ func autoApplyRules(v *autoVerdict, j DiscoveredJob, years float64, places []str
 		drop(fmt.Sprintf("pede %s+ anos; o perfil tem %s", trimYears(v.YearsAsked), autoDuration(time.Duration(years*365.25*24)*time.Hour)))
 	case len(places) > 0 && j.WorkplaceType == "" && v.Workplace != "" && !slices.Contains(places, v.Workplace):
 		drop("vaga " + autoPlace(v.Workplace) + ", fora do local que você escolheu")
-	case len(v.Missing) >= 2:
-		drop("obrigatórios que o perfil não tem: " + strings.Join(v.Missing[:min(len(v.Missing), 4)], ", "))
-	case len(v.Missing) == 1:
-		v.Score = min(v.Score, 65)
+	default:
+		central, minor := 0, 0
+		for _, m := range v.Missing {
+			if m.Central {
+				central++
+			} else {
+				minor++
+			}
+		}
+		switch {
+		case central >= 2 || (central == 1 && minor >= 2) || minor >= 4:
+			drop("obrigatórios que o perfil não tem: " + missingNames(v.Missing))
+		default:
+			if central == 1 {
+				v.Score = min(v.Score, 65)
+			}
+			v.Score = max(v.Score-5*minor, 0)
+		}
 	}
 	// Nível vizinho ao alvo: na 3ª rodada, acabadas as vagas de pleno, 4 das 5 escolhas
 	// foram sênior com "Risco: nível sênior" ou um obrigatório faltando. Melhor escolher

@@ -52,6 +52,10 @@ SELECT p.url FROM auto_select_picks p WHERE p.user_id = @user_id AND p.created_a
 -- name: AutoSelectDescriptions :many
 SELECT id, description FROM discovered_jobs WHERE id = ANY(@ids::uuid[]);
 
+-- name: AutoSelectDescriptionsByUrl :many
+-- Descrições da mesma vaga em outros sites ("também em"): a IA lê a mais completa.
+SELECT url, description FROM discovered_jobs WHERE url = ANY(@urls::text[]);
+
 -- name: AutoSelectInsertPick :exec
 INSERT INTO auto_select_picks(run_id, user_id, url, title, company, coverage_pct, quality, score, selected, reason, job_id)
 VALUES (@run_id, @user_id, @url, @title, @company, @coverage_pct, @quality, sqlc.narg('score'), @selected, @reason, sqlc.narg('job_id'))

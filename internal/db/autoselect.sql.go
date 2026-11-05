@@ -53,6 +53,36 @@ func (q *Queries) AutoSelectDescriptions(ctx context.Context, ids []pgtype.UUID)
 	return items, nil
 }
 
+const autoSelectDescriptionsByUrl = `-- name: AutoSelectDescriptionsByUrl :many
+SELECT url, description FROM discovered_jobs WHERE url = ANY($1::text[])
+`
+
+type AutoSelectDescriptionsByUrlRow struct {
+	Url         string `json:"url"`
+	Description string `json:"description"`
+}
+
+// Descrições da mesma vaga em outros sites ("também em"): a IA lê a mais completa.
+func (q *Queries) AutoSelectDescriptionsByUrl(ctx context.Context, urls []string) ([]AutoSelectDescriptionsByUrlRow, error) {
+	rows, err := q.db.Query(ctx, autoSelectDescriptionsByUrl, urls)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AutoSelectDescriptionsByUrlRow
+	for rows.Next() {
+		var i AutoSelectDescriptionsByUrlRow
+		if err := rows.Scan(&i.Url, &i.Description); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const autoSelectExcludedUrls = `-- name: AutoSelectExcludedUrls :many
 SELECT j.external_url::text AS url FROM jobs j WHERE j.user_id = $1
 UNION
