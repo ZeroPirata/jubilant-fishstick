@@ -39,6 +39,10 @@ type ServerConfig struct {
 	Host              string `env:"SERVER_HOST,required"`
 	Port              string `env:"SERVER_PORT,required"`
 	CORSAllowedOrigin string `env:"CORS_ALLOWED_ORIGIN" envDefault:"*"`
+	// CanonicalHost: o nome atual do site; LegacyHosts: nomes antigos que recebem 301
+	// para ele (separados por vírgula). Vazios, nada é redirecionado.
+	CanonicalHost string `env:"CANONICAL_HOST"`
+	LegacyHosts   string `env:"LEGACY_HOSTS"`
 }
 
 type AiConfig struct {

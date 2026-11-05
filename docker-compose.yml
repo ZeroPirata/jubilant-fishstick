@@ -10,6 +10,9 @@ services:
       - .env
     environment:
       - OUTPUT_DIR=/app/storage
+      # Nome do site; o antigo recebe 301 para ele (ver middleware.CanonicalHost).
+      - CANONICAL_HOST=jobpipeline.gsbnunes.com.br
+      - LEGACY_HOSTS=gerador-curriculo.gsbnunes.com.br
     ports:
       - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
     volumes:

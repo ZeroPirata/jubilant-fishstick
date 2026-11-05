@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -139,6 +140,7 @@ func startServer(ctx context.Context, cfg config.Config, db *pgxpool.Pool, rds *
 			),
 		),
 	)
+	handler = middleware.CanonicalHost(cfg.Server.CanonicalHost, strings.Split(cfg.Server.LegacyHosts, ","))(handler)
 	handler = middleware.MiddlewarePanicRecovery(zap.L())(handler)
 
 	server := &http.Server{

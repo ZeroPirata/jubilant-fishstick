@@ -4,7 +4,7 @@
 
 | CI/CD | Demo |
 | :--- | :--- |
-| [![Deploy](https://github.com/ZeroPirata/jubilant-fishstick/actions/workflows/deploy.yml/badge.svg)](https://github.com/ZeroPirata/jubilant-fishstick/actions/workflows/deploy.yml) | [![Acesse o Site](https://img.shields.io/badge/Acessar_Site-Gerador_de_Currículos-brightgreen?style=for-the-badge&logo=google-chrome&logoColor=white)](https://gerador-curriculo.gsbnunes.com.br) |
+| [![Deploy](https://github.com/ZeroPirata/jubilant-fishstick/actions/workflows/deploy.yml/badge.svg)](https://github.com/ZeroPirata/jubilant-fishstick/actions/workflows/deploy.yml) | [![Acesse o Site](https://img.shields.io/badge/Acessar_Site-JobPipeline-brightgreen?style=for-the-badge&logo=google-chrome&logoColor=white)](https://jobpipeline.gsbnunes.com.br) |
 
 O JobPipeline lê uma vaga, compara com o seu perfil e monta um currículo (e, se quiser, a carta de apresentação) adaptado àquela vaga, em português ou inglês, pronto em PDF. Ele também mantém um catálogo próprio de vagas de tecnologia — o **Descobrir** — ordenado pelo quanto cada vaga combina com o que você sabe.
 
@@ -303,7 +303,7 @@ O container sobe Go, PostgreSQL e Redis. Crie o `.env` a partir do [`.env.exampl
 
 | Grupo | Variáveis |
 |---|---|
-| Servidor | `SERVER_HOST`, `SERVER_PORT`, `CORS_ALLOWED_ORIGIN`, `CONTEXT_TIMEOUT` |
+| Servidor | `SERVER_HOST`, `SERVER_PORT`, `CORS_ALLOWED_ORIGIN`, `CONTEXT_TIMEOUT`, `CANONICAL_HOST` e `LEGACY_HOSTS` (nome do site e nomes antigos que recebem 301) |
 | PostgreSQL / Redis | `POSTGRES_*`, `REDIS_ADDR`, `REDIS_PASSWORD` |
 | IA de escrita | `API_PROVIDER` (`gemini`, `ollama` ou OpenAI-compatible), `API_KEY_AI`, `API_MODEL_AI`, `API_URL_AI` |
 | IA de leitura (opcional) | `SCRAPE_AI_ACTIVATE`, `SCRAPE_AI_PROVIDER`, `SCRAPE_AI_KEY`, `SCRAPE_AI_MODEL` |
