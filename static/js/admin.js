@@ -15,6 +15,8 @@ function switchAdminView(view, btn) {
   document.getElementById('admin-imports').classList.toggle('hidden', view !== 'imports');
   document.getElementById('admin-discovery').classList.toggle('hidden', view !== 'discovery');
   document.getElementById('admin-autoselect').classList.toggle('hidden', view !== 'autoselect');
+  document.getElementById('admin-changelog').classList.toggle('hidden', view !== 'changelog');
+  if (view === 'changelog') loadChangelog();
   if (view === 'autoselect') loadAutoSelectAdmin();
   if (view === 'errors') loadAdminErrors();
   if (view === 'users')  loadAdminUsers();
@@ -630,13 +632,49 @@ function showAppVersion(v) {
   const isNew = seen !== v.version;
   const date = /^\d{4}-\d{2}-\d{2}$/.test(v.date || '') ? v.date.split('-').reverse().join('/') : '';
   el.innerHTML = `<span>v${escHtml(v.version)}</span>${date ? `<span class="app-version-date">${date}</span>` : ''}${isNew ? '<span class="app-version-new">nova</span>' : ''}`;
-  el.title = isNew ? 'Versão nova no ar. Clique para marcar como vista.' : `Versão do app no ar, atualizada em ${date}`;
+  el.title = isNew ? 'Versão nova no ar. Clique para ver as novidades.' : `Versão do app no ar, atualizada em ${date}. Clique para ver as novidades.`;
   if (!isNew) return;
   try {
     if (sessionStorage.getItem('jp_version_toast') === v.version) return;
     sessionStorage.setItem('jp_version_toast', v.version);
   } catch (_) {}
   toast(`Versão nova no ar: v${v.version}${date ? ` (${date})` : ''}.`);
+}
+
+// ── Novidades: o CHANGELOG.md (GET /admin/changelog), já escapado e em HTML no servidor ──
+// As 3 versões mais novas abertas; o resto em "Versões anteriores". O arquivo só muda
+// com deploy, então uma requisição por carregamento da página basta.
+let _changelog = null;
+
+async function loadChangelog() {
+  const box = document.getElementById('changelog-body');
+  if (!_changelog) {
+    try {
+      const res = await api.get('/admin/changelog');
+      if (!res.ok) throw new Error('status ' + res.status);
+      _changelog = (await res.json()).data;
+    } catch (e) {
+      box.innerHTML = `<p class="empty">Erro ao carregar as novidades: ${escHtml(e.message)}</p>`;
+      return;
+    }
+  }
+  const current = _changelog.current?.version;
+  const item = (r) => `<article class="release">
+      <h3>${/^\d/.test(r.version) ? 'Versão ' : ''}${escHtml(r.version)}${r.date ? ` <span class="release-date">${escHtml(r.date)}</span>` : ''}${r.version === current ? ' <span class="release-live">no ar</span>' : ''}</h3>
+      ${r.html}
+    </article>`;
+  const list = _changelog.releases || [];
+  const open = 3, rest = list.slice(open);
+  box.innerHTML = `<div class="release-intro">${_changelog.intro || ''}</div>`
+    + list.slice(0, open).map(item).join('')
+    + (rest.length ? `<details class="release-older"><summary>Versões anteriores (${rest.length})</summary>${rest.map(item).join('')}</details>` : '');
+  markVersionSeen();
+}
+
+// O selo da versão (master) leva às Novidades.
+function openChangelog() {
+  navigateTo('admin');
+  setTimeout(() => switchAdminView('changelog', document.querySelector('[data-admin="changelog"]')), 50);
 }
 
 function markVersionSeen() {

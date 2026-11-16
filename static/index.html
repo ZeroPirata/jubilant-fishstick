@@ -118,7 +118,7 @@
 
     <div class="sidebar-foot">
       <div class="sys-line" id="sse-status"><span class="pulse"></span><span id="sse-status-text">conectando…</span></div>
-      <button type="button" class="sys-line app-version hidden" id="app-version" onclick="markVersionSeen()"></button>
+      <button type="button" class="sys-line app-version hidden" id="app-version" onclick="openChangelog()"></button>
       <button class="btn-help" data-tab="ajuda"><svg class="ico"><use href="#i-help"/></svg><span>Ajuda</span><kbd>guia rápido</kbd></button>
       <button class="btn-logout" onclick="doLogout()"><svg class="ico"><use href="#i-logout"/></svg>Sair</button>
     </div>
@@ -824,6 +824,61 @@
       </div>
       </details>
 
+      <details class="disc-fold" id="li-box" ontoggle="if (this.open) loadLinkedInSearches()">
+      <summary><span class="disc-fold-title">Buscas no LinkedIn</span><span class="disc-fold-sum" id="li-sum">monte o link da busca com os seus filtros</span></summary>
+      <div class="li-wrap">
+        <p class="card-note">Salve buscas com os filtros que quiser e abra no LinkedIn, já logado no seu navegador. O JobPipeline só monta o link: ele não entra no LinkedIn por você.</p>
+        <div id="li-list" class="li-list"><p class="li-empty">Carregando...</p></div>
+        <div class="toolbar" style="margin:10px 0 0"><button class="btn btn-ghost btn-sm" onclick="liNew()">+ Nova busca</button></div>
+
+        <div class="form-card li-form hidden" id="li-form" oninput="liInput()">
+          <p class="card-eyebrow" id="li-form-title">Nova busca</p>
+          <div class="li-row">
+            <label class="li-label" for="li-paste">Copiar de uma URL</label>
+            <div class="li-inline">
+              <input type="url" id="li-paste" placeholder="Cole aqui uma busca do LinkedIn (https://www.linkedin.com/jobs/…)" maxlength="4096"
+                     onkeydown="if(event.key==='Enter'){event.preventDefault();liReadURL()}" />
+              <button type="button" class="btn btn-ghost btn-sm" onclick="liReadURL()">Ler filtros</button>
+            </div>
+            <p class="li-hint">Opcional. É o jeito de trazer o local: o código da cidade só existe na URL do LinkedIn.</p>
+          </div>
+          <div class="li-row">
+            <label class="li-label" for="li-name">Nome</label>
+            <input type="text" id="li-name" maxlength="80" placeholder="Ex: Back-end Go pleno" />
+          </div>
+          <div class="li-row">
+            <label class="li-label" for="li-keywords">Palavras-chave</label>
+            <input type="text" id="li-keywords" maxlength="200" placeholder="Ex: Desenvolvedor Back-end Go" />
+          </div>
+          <div class="li-row">
+            <label class="li-label" for="li-geo-label">Local</label>
+            <div class="li-inline">
+              <input type="text" id="li-geo-label" maxlength="80" placeholder="Nome do local (vem da URL colada)" />
+              <button type="button" class="btn btn-ghost btn-sm" onclick="liSetBrasil()">Brasil</button>
+              <button type="button" class="btn btn-ghost btn-sm hidden" id="li-geo-clear" onclick="liClearGeo()">Sem local</button>
+            </div>
+            <p class="li-hint" id="li-geo-code"></p>
+          </div>
+          <div class="li-row"><span class="li-label">Publicadas</span><div class="disc-chips" id="li-chips-posted_within"></div></div>
+          <div class="li-row"><span class="li-label">Modelo</span><div class="disc-chips" id="li-chips-workplace"></div></div>
+          <div class="li-row"><span class="li-label">Nível</span><div class="disc-chips" id="li-chips-experience"></div></div>
+          <div class="li-row"><span class="li-label">Tipo</span><div class="disc-chips" id="li-chips-job_types"></div></div>
+          <div class="li-row"><span class="li-label">Outros</span><div class="disc-chips" id="li-chips-flags"></div></div>
+          <div class="li-row"><span class="li-label">Ordem</span><div class="disc-chips" id="li-chips-sort"></div></div>
+          <div class="li-row">
+            <span class="li-label">Link</span>
+            <a id="li-preview" class="li-preview" href="https://www.linkedin.com/jobs/search/" target="_blank" rel="noopener noreferrer">https://www.linkedin.com/jobs/search/</a>
+            <p class="li-hint li-error" id="li-preview-error"></p>
+          </div>
+          <div class="toolbar" style="margin:6px 0 0">
+            <button type="button" class="btn btn-primary" onclick="liSave()">Salvar busca</button>
+            <button type="button" class="btn btn-ghost" onclick="window.open(document.getElementById('li-preview').href, '_blank', 'noopener')">Abrir sem salvar ↗</button>
+            <button type="button" class="btn btn-ghost" onclick="liCloseForm()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+      </details>
+
       <div id="disc-skills-note" class="banner banner-warn hidden">
         <span class="banner-icon">⚠</span>
         <div style="flex:1">Nenhuma skill do seu perfil está como <b>avançado</b> ou <b>expert</b>, então a lista usa todas as suas skills. Ajuste os níveis em Perfil para ver só as vagas em que você é forte.</div>
@@ -1172,6 +1227,7 @@
           <button               data-admin="imports" onclick="switchAdminView('imports',this)">Importações</button>
           <button               data-admin="discovery" onclick="switchAdminView('discovery',this)">Busca de vagas</button>
           <button               data-admin="autoselect" onclick="switchAdminView('autoselect',this)">Seleção com IA</button>
+          <button               data-admin="changelog" onclick="switchAdminView('changelog',this)">Novidades</button>
           <button class="master-only hidden" data-admin="ai" onclick="switchAdminView('ai',this)">Configurações de IA</button>
         </div>
       </div>
@@ -1383,6 +1439,11 @@
         </div>
       </div>
 
+      <!-- Novidades: o CHANGELOG.md, uma versão por bloco (admin e master) -->
+      <div id="admin-changelog" class="hidden">
+        <div id="changelog-body" class="releases"><p class="empty">Carregando...</p></div>
+      </div>
+
       <!-- Configurações de IA (só master) -->
       <div id="admin-ai" class="hidden">
         <div id="ai-status" style="margin-bottom:14px"></div>
@@ -1474,6 +1535,7 @@
 <script src="/static/js/jobs.js"></script>
 <script src="/static/js/job_detail.js"></script>
 <script src="/static/js/discovery.js"></script>
+<script src="/static/js/linkedin.js"></script>
 <script src="/static/js/disc_detail.js"></script>
 <script src="/static/js/alerts.js"></script>
 <script src="/static/js/applications.js"></script>

@@ -102,6 +102,8 @@ Cada fonte só entrou depois de verificar os termos de uso; as avaliadas e recus
 
 **Avisos de vagas novas.** O sininho no topo conta as vagas que entraram no catálogo (`first_seen_at`) desde a última olhada do usuário, com compatibilidade alta (ou alta e média, à escolha) e dentro do local e nível salvos. Usa o mesmo ranking da lista. Para não virar ruído, o aviso também exige uma skill avançada/expert do perfil na stack da vaga (Git, SQL e Docker sozinhos não bastam), publicação nos últimos 7 dias (vaga velha que só agora entrou por uma fonte nova não é novidade) e que a vaga não tenha sido dispensada. Empresa com 3 vagas novas ou mais vira um grupo no painel. Cada aviso pode ser avaliado (👍/👎, `job_alert_feedback`); o resultado por faixa aparece em Métricas → Busca de vagas. Abrir o sininho ou o Descobrir avança a marca (`user_job_alerts.seen_at`): nenhuma vaga é avisada duas vezes. Por enquanto só na plataforma; Telegram e e-mail podem reaproveitar a mesma lista.
 
+**Buscas no LinkedIn.** O LinkedIn não entra no catálogo (os termos proíbem acesso automatizado). Em vez disso, o usuário salva buscas com os filtros que quiser (`user_linkedin_searches`, até 20) e abre o link no próprio navegador, logado. Nenhum filtro vem marcado. Uma URL de busca colada do LinkedIn é lida para preencher a busca: é o único jeito de obter o código do local (`geoId`). Montar e ler o link fica em `internal/linkedinsearch`; o servidor não acessa o LinkedIn.
+
 **Higiene do catálogo.** Vaga que some das buscas sai da lista em 36 h e é apagada em 7 dias; vaga publicada há mais de 45 dias não entra (e é removida, com log por fonte); vagas repetidas (mesmo título e empresa) aparecem uma vez.
 
 ---
@@ -121,6 +123,7 @@ O usuário envia um PDF, DOCX ou TXT (ou o PDF exportado do LinkedIn). A IA sepa
 | Importações | Histórico de importações de currículo, ao vivo |
 | Busca de vagas | Sites ligados, termos do catálogo, intervalo, empresas nos ATS (com busca por nome ou link em todos os ATS) |
 | Seleção com IA | Liga/desliga, vagas por clique e por dia, quantas a IA lê, nota mínima, compatibilidade mínima e o que gerar |
+| Novidades | O `CHANGELOG.md`: o que cada versão mudou, da mais nova para a mais antiga |
 | Configurações de IA *(master)* | Cadeia de provedores por finalidade (geração, leitura de vagas, importação, triagem da Seleção com IA), pausa do worker |
 | Métricas | Vagas, IA (chamadas, latência, tokens), usuários, a varredura de vagas em andamento, por site, e a Seleção com IA (escolhidas, enviadas, descartadas, custo) |
 
@@ -194,6 +197,7 @@ erDiagram
 | `jobs` | Vagas do usuário: status, compatibilidade, stack, requisitos, idioma, modo, análise da IA, descrição lida |
 | `generated_resumes` / `resumes_feedback` | Currículos gerados (JSON estruturado) e avaliações |
 | `discovered_jobs` | Catálogo do Descobrir, com `techs[]`, `search_vec`, idioma e nível indexados |
+| `user_linkedin_searches` | Buscas salvas no LinkedIn: palavras-chave, local (`geoId`) e filtros; o sistema só monta o link |
 | `user_job_alerts` | Alertas de vagas novas: ligado, limite de compatibilidade e quando o usuário viu por último |
 | `user_dismissed_jobs`, `job_alert_feedback` | Vagas do Descobrir dispensadas pelo usuário e avaliações dos avisos (útil / não útil) |
 | `discovery_settings`, `discovery_runs`, `discovery_run_sources` | Configuração da varredura (sites, termos, intervalo, empresas nos ATS) e histórico por site |
@@ -248,6 +252,7 @@ flowchart LR
     Test -- "falha" --> Abort
 ```
 
+- **Changelog:** o [`CHANGELOG.md`](CHANGELOG.md) diz o que cada versão mudou, da mais nova para a mais antiga. Toda versão nova ganha uma entrada lá (`## X.Y.Z (DD/MM/AAAA)`, uma frase de resumo e os tópicos) no mesmo commit que atualiza o `version.json`; o *Check version* barra versão sem entrada. O arquivo vai embutido no binário e aparece na aba **Novidades** do painel admin.
 - **Versão:** todo deploy atualiza o [`version.json`](version.json) (`{"version": "X.Y.Z", "date": "AAAA-MM-DD"}`). O passo *Check version* (`cmd/checkversion`) compara com o que está no ar e barra versão igual ou menor, ou data anterior. A versão vai embutida no binário e aparece nos logs e para o admin master.
 - **Servidor só baixa:** o servidor de produção é um notebook. Testes e build da imagem rodam nos runners do GitHub; a imagem vai para o GHCR com a tag do commit, e o servidor (runner próprio) só confere a versão, faz backup, baixa a imagem e reinicia. Nada é compilado nele.
 - **Banco:** backup (`pg_dump`) antes de cada deploy, mantendo os 10 mais recentes; as migrations rodam na subida.
@@ -280,6 +285,10 @@ Base `/api/v1`. Rotas protegidas exigem `Authorization: Bearer <jwt>`; as respos
 | DELETE | `/jobs/{id}/resumes/{resume_id}` | Remover currículo |
 | POST | `/jobs/{id}/resumes/{resume_id}/pdf` | Gerar PDF (modelo) |
 | POST | `/jobs/{id}/resumes/{resume_id}/feedback` | Avaliar |
+| GET / POST | `/linkedin/searches` | Buscas salvas no LinkedIn (com o link pronto) / salvar `{name, keywords, geo_id, geo_label, posted_within, workplace[], experience[], job_types[], easy_apply, few_applicants, in_network, sort}` |
+| PUT / DELETE | `/linkedin/searches/{id}` | Editar / apagar |
+| POST | `/linkedin/searches/preview` | Link de uma busca ainda não salva |
+| POST | `/linkedin/searches/from-url` | Lê os filtros de uma URL de busca do LinkedIn `{url}` |
 | GET | `/jobs/events` | SSE |
 
 **Descobrir:** `GET /discovery/jobs` (filtros, paginação, ordenado por compatibilidade) · `GET /discovery/jobs/{id}` (página "Sobre a vaga": descrição, compatibilidade e onde mais aparece) · `GET /discovery/technologies` · `GET/PUT /discovery/preferences` · `POST /discovery/refresh` · `GET /discovery/status` · `GET/PUT /discovery/alerts` · `POST /discovery/alerts/seen` · `POST /discovery/alerts/feedback` · `POST/DELETE /discovery/jobs/{id}/dismiss` (`?dismissed=1` lista as dispensadas)

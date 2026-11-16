@@ -582,6 +582,25 @@ type UserLink struct {
 	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type UserLinkedinSearch struct {
+	ID            pgtype.UUID        `json:"id"`
+	UserID        pgtype.UUID        `json:"user_id"`
+	Name          string             `json:"name"`
+	Keywords      string             `json:"keywords"`
+	GeoID         string             `json:"geo_id"`
+	GeoLabel      string             `json:"geo_label"`
+	PostedWithin  string             `json:"posted_within"`
+	Workplace     []string           `json:"workplace"`
+	Experience    []string           `json:"experience"`
+	JobTypes      []string           `json:"job_types"`
+	EasyApply     bool               `json:"easy_apply"`
+	FewApplicants bool               `json:"few_applicants"`
+	InNetwork     bool               `json:"in_network"`
+	Sort          string             `json:"sort"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 type UserProfile struct {
 	UserID       pgtype.UUID        `json:"user_id"`
 	FullName     string             `json:"full_name"`

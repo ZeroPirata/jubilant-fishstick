@@ -15,6 +15,7 @@ sql:
       - "repository/query/security.sql"
       - "repository/query/discovery.sql"
       - "repository/query/autoselect.sql"
+      - "repository/query/linkedin.sql"
     engine: "postgresql"
     gen:
       go:
