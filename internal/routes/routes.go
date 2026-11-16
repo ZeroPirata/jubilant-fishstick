@@ -92,6 +92,8 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	adminMux.Handle("GET /metrics/raw", promhttp.Handler())
 	adminMux.HandleFunc("GET /metrics/ai", metricsH.AI)
 	adminMux.HandleFunc("GET /metrics/users", metricsH.UserStats)
+	// Novidades: o CHANGELOG.md embutido no binário (admin e master; master é sempre admin).
+	adminMux.HandleFunc("GET /changelog", handler.Changelog())
 	adminMux.HandleFunc("GET /imports", handler.NewImportLogHandler(logger, importLog).List)
 
 	// Busca automática de vagas (aba Descobrir): configuração no painel admin,

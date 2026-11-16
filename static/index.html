@@ -118,7 +118,7 @@
 
     <div class="sidebar-foot">
       <div class="sys-line" id="sse-status"><span class="pulse"></span><span id="sse-status-text">conectando…</span></div>
-      <button type="button" class="sys-line app-version hidden" id="app-version" onclick="markVersionSeen()"></button>
+      <button type="button" class="sys-line app-version hidden" id="app-version" onclick="openChangelog()"></button>
       <button class="btn-help" data-tab="ajuda"><svg class="ico"><use href="#i-help"/></svg><span>Ajuda</span><kbd>guia rápido</kbd></button>
       <button class="btn-logout" onclick="doLogout()"><svg class="ico"><use href="#i-logout"/></svg>Sair</button>
     </div>
@@ -1172,6 +1172,7 @@
           <button               data-admin="imports" onclick="switchAdminView('imports',this)">Importações</button>
           <button               data-admin="discovery" onclick="switchAdminView('discovery',this)">Busca de vagas</button>
           <button               data-admin="autoselect" onclick="switchAdminView('autoselect',this)">Seleção com IA</button>
+          <button               data-admin="changelog" onclick="switchAdminView('changelog',this)">Novidades</button>
           <button class="master-only hidden" data-admin="ai" onclick="switchAdminView('ai',this)">Configurações de IA</button>
         </div>
       </div>
@@ -1381,6 +1382,11 @@
             <p class="card-note" id="asadm-updated"></p>
           </div>
         </div>
+      </div>
+
+      <!-- Novidades: o CHANGELOG.md, uma versão por bloco (admin e master) -->
+      <div id="admin-changelog" class="hidden">
+        <div id="changelog-body" class="releases"><p class="empty">Carregando...</p></div>
       </div>
 
       <!-- Configurações de IA (só master) -->

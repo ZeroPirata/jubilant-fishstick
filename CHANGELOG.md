@@ -3,9 +3,11 @@
 O que cada versão do site mudou, da mais nova para a mais antiga. Toda versão publicada ganha uma entrada aqui antes de subir.
 
 ## 0.4.10 (16/11/2026)
-Histórico de versões.
+Novidades: o histórico de versões no painel admin.
 
-- Novo arquivo `CHANGELOG.md` com o que mudou em cada versão, desde a 0.2.0. A partir de agora, toda versão nova entra aqui junto com o `version.json`.
+- Nova aba **Novidades** no painel admin, só para administradores e masters: o que mudou em cada versão, da mais nova para a mais antiga. As três últimas aparecem abertas e as outras ficam em "Versões anteriores".
+- O selo da versão na barra lateral (master) leva direto às Novidades.
+- O texto vem do `CHANGELOG.md` do repositório, que agora traz o histórico desde a 0.2.0. O deploy não sobe uma versão sem entrada nele.
 
 ## 0.4.9 (04/11/2026)
 Novo endereço do site.

@@ -3,7 +3,8 @@
 //
 //	go run ./cmd/checkversion <version.json no ar>
 //
-// Sem o arquivo do ar (primeiro deploy), só valida o do repositório.
+// Sem o arquivo do ar (primeiro deploy), só valida o do repositório. Em todo caso, a
+// versão precisa ter entrada no CHANGELOG.md.
 package main
 
 import (
@@ -14,6 +15,7 @@ import (
 
 	hacktontreino "hackton-treino"
 	"hackton-treino/internal/appversion"
+	"hackton-treino/internal/changelog"
 )
 
 func main() {
@@ -27,6 +29,11 @@ func run(args []string) error {
 	next, err := appversion.Parse(hacktontreino.VersionJSON)
 	if err != nil {
 		return err
+	}
+	// A aba Novidades do admin mostra o CHANGELOG.md: versão publicada sem entrada lá
+	// some da lista.
+	if !changelog.HasVersion(string(hacktontreino.ChangelogMD), next.Version) {
+		return fmt.Errorf("escreva a entrada \"## %s (DD/MM/AAAA)\" no CHANGELOG.md", next.Version)
 	}
 	if len(args) != 1 {
 		return errors.New("uso: checkversion <version.json no ar>")

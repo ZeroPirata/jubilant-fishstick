@@ -121,6 +121,7 @@ O usuário envia um PDF, DOCX ou TXT (ou o PDF exportado do LinkedIn). A IA sepa
 | Importações | Histórico de importações de currículo, ao vivo |
 | Busca de vagas | Sites ligados, termos do catálogo, intervalo, empresas nos ATS (com busca por nome ou link em todos os ATS) |
 | Seleção com IA | Liga/desliga, vagas por clique e por dia, quantas a IA lê, nota mínima, compatibilidade mínima e o que gerar |
+| Novidades | O `CHANGELOG.md`: o que cada versão mudou, da mais nova para a mais antiga |
 | Configurações de IA *(master)* | Cadeia de provedores por finalidade (geração, leitura de vagas, importação, triagem da Seleção com IA), pausa do worker |
 | Métricas | Vagas, IA (chamadas, latência, tokens), usuários, a varredura de vagas em andamento, por site, e a Seleção com IA (escolhidas, enviadas, descartadas, custo) |
 
@@ -248,7 +249,7 @@ flowchart LR
     Test -- "falha" --> Abort
 ```
 
-- **Changelog:** o [`CHANGELOG.md`](CHANGELOG.md) diz o que cada versão mudou, da mais nova para a mais antiga. Toda versão nova ganha uma entrada lá (`## X.Y.Z (DD/MM/AAAA)`, uma frase de resumo e os tópicos) no mesmo commit que atualiza o `version.json`.
+- **Changelog:** o [`CHANGELOG.md`](CHANGELOG.md) diz o que cada versão mudou, da mais nova para a mais antiga. Toda versão nova ganha uma entrada lá (`## X.Y.Z (DD/MM/AAAA)`, uma frase de resumo e os tópicos) no mesmo commit que atualiza o `version.json`; o *Check version* barra versão sem entrada. O arquivo vai embutido no binário e aparece na aba **Novidades** do painel admin.
 - **Versão:** todo deploy atualiza o [`version.json`](version.json) (`{"version": "X.Y.Z", "date": "AAAA-MM-DD"}`). O passo *Check version* (`cmd/checkversion`) compara com o que está no ar e barra versão igual ou menor, ou data anterior. A versão vai embutida no binário e aparece nos logs e para o admin master.
 - **Servidor só baixa:** o servidor de produção é um notebook. Testes e build da imagem rodam nos runners do GitHub; a imagem vai para o GHCR com a tag do commit, e o servidor (runner próprio) só confere a versão, faz backup, baixa a imagem e reinicia. Nada é compilado nele.
 - **Banco:** backup (`pg_dump`) antes de cada deploy, mantendo os 10 mais recentes; as migrations rodam na subida.
