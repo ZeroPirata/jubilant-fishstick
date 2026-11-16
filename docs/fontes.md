@@ -57,7 +57,7 @@ têm poucas vagas no Brasil ou remotas para cá (2, 1, 1, 0 e 0 em 2026-10-31).
 
 | Fonte | Motivo |
 |---|---|
-| LinkedIn | Termos proíbem acesso automatizado; exigiria contornar bloqueio. |
+| LinkedIn | Termos proíbem acesso automatizado; exigiria contornar bloqueio. O Descobrir só **monta o link** das buscas salvas pelo usuário (`internal/linkedinsearch`), que ele abre no próprio navegador; o servidor não acessa o LinkedIn. |
 | Remotive | Termos da API restringem o uso por agregadores. |
 | Adzuna, Jooble | Cadastro da API exige cartão de crédito. |
 

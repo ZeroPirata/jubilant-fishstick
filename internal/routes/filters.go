@@ -34,3 +34,15 @@ func setupFilterRoutes(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool)
 	mux.HandleFunc("POST /filters", h.InsertFilter)
 	mux.HandleFunc("DELETE /filters/{id}", h.DeleteFilter)
 }
+
+// Buscas no LinkedIn (Descobrir): só montam o link; o usuário abre no navegador dele.
+func setupLinkedInRoutes(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool) {
+	h := handler.NewLinkedInSearchHandler(logger, db)
+
+	mux.HandleFunc("GET /linkedin/searches", h.List)
+	mux.HandleFunc("POST /linkedin/searches", h.Create)
+	mux.HandleFunc("POST /linkedin/searches/preview", h.Preview)
+	mux.HandleFunc("POST /linkedin/searches/from-url", h.FromURL)
+	mux.HandleFunc("PUT /linkedin/searches/{id}", h.Update)
+	mux.HandleFunc("DELETE /linkedin/searches/{id}", h.Delete)
+}

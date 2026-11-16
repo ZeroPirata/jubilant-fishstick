@@ -171,6 +171,18 @@ const HELP_TOPICS = [
         </div>`,
       },
       {
+        title: 'Buscas no LinkedIn',
+        body: `<p>Em <b>Buscas no LinkedIn</b> você salva buscas com os filtros que quiser (palavras-chave, local, data, modelo, nível, tipo, candidatura simplificada…) e abre o link no LinkedIn, já logado no seu navegador.</p>
+          <ul><li>Nenhum filtro vem marcado: você escolhe tudo</li>
+          <li>Cole uma busca que você já usa no LinkedIn e o sistema lê os filtros dela; é o jeito de trazer a cidade, porque o código do local só existe na URL do LinkedIn</li>
+          <li>O JobPipeline só monta o link: ele não entra no LinkedIn por você</li></ul>`,
+        visual: `<div class="hv-stack">
+          <div class="hv-card"><b>Back-end Go pleno</b><span class="hv-chips"><em>Remoto</em><em>Híbrido</em><em>Última semana</em></span></div>
+          <div class="hv-card"><b>Abrir no LinkedIn ↗</b></div>
+        </div>`,
+        cta: { label: 'Abrir o Descobrir', action: "navigateTo('descobrir')" },
+      },
+      {
         title: 'Avisos de vagas novas',
         body: `<p>O <b>sininho</b> no topo conta as vagas que entraram no catálogo desde a sua última olhada e combinam com você.</p>
           <ul><li>Escolha avisar só das de compatibilidade <b>alta</b> (padrão) ou também das <b>médias</b>, ou desligar</li>

@@ -71,6 +71,7 @@ func Setup(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Pool, cfg config.
 	importLog := importlog.New(db, profileimport.StaleAfter)
 	setupProfileImportRoutes(protectedMux, logger, db, rds, llm, importLog)
 	setupFilterRoutes(protectedMux, logger, db)
+	setupLinkedInRoutes(protectedMux, logger, db)
 	setupDiscoveryRoutes(protectedMux, logger, db, disc)
 	setupSecurityRoutes(protectedMux, logger, secLog)
 

@@ -2,6 +2,14 @@
 
 O que cada versão do site mudou, da mais nova para a mais antiga. Toda versão publicada ganha uma entrada aqui antes de subir.
 
+## 0.5.0 (16/11/2026)
+Buscas no LinkedIn.
+
+- Novo bloco **Buscas no LinkedIn** no Descobrir: salve buscas com os filtros que quiser (palavras-chave, local, data de publicação, modelo, nível, tipo de vaga, candidatura simplificada, menos de 10 candidaturas, na minha rede e ordem) e abra no LinkedIn com um clique, já logado no seu navegador.
+- Nenhum filtro vem marcado numa busca nova.
+- Cole uma busca que você já usa no LinkedIn e os filtros dela são lidos. É assim que a cidade entra, porque o código do local só existe na URL do LinkedIn.
+- O JobPipeline só monta o link: ele não acessa o LinkedIn.
+
 ## 0.4.10 (16/11/2026)
 Novidades: o histórico de versões no painel admin.
 
