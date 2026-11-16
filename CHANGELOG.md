@@ -2,6 +2,17 @@
 
 O que cada versão do site mudou, da mais nova para a mais antiga. Toda versão publicada ganha uma entrada aqui antes de subir.
 
+## 0.6.0 (16/11/2026)
+Seu alvo no Descobrir: a lista entende "golang backend".
+
+- Novo cartão **Seu alvo** no topo do Descobrir: a função (back-end, front-end, dados, DevOps...), as tecnologias, o nível e o modo de trabalho que você procura. Escreva do seu jeito ("golang backend remoto pleno") e o sistema entende; o que ele não entender, ele avisa.
+- Sugestão pelo seu perfil num clique: a função vem dos seus cargos, a linguagem das suas skills avançadas/expert e o nível do seu tempo de carreira.
+- A lista passa a ordenar pela função e pela tecnologia no título: "Desenvolvedor Back-end Go" vem antes de "Backend Developer" (Java), que vem antes de uma vaga que só cita Go no meio do texto. Cada vaga mostra o porquê ("Back-end", "Go no título").
+- Vagas de outra função (front-end, dados, suporte para quem procura back-end) ficam escondidas, com a contagem e um clique para mostrar. Full stack continua aparecendo para quem procura back-end, um pouco abaixo.
+- O alvo vale também para os avisos de vagas novas e para a Seleção com IA.
+- Buscas no LinkedIn: o botão **Gerar pelo meu alvo** monta as buscas sozinho, com a busca booleana do LinkedIn (`("Golang" OR "Go developer" ...) AND (backend OR "back-end")`) em vez de "go" sozinho, que trazia qualquer vaga. O nível e o modo de trabalho vêm do alvo.
+- Correção: a vaga não mostra mais "Go (Golang)" e "Go" repetidos.
+
 ## 0.5.0 (16/11/2026)
 Buscas no LinkedIn.
 

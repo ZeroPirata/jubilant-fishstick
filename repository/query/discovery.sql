@@ -130,15 +130,16 @@ WHERE id = @id;
 
 
 -- name: DiscoverySelectPreferences :one
-SELECT workplace_types, cities, technologies, seniorities, seniority_unknown
+SELECT workplace_types, cities, technologies, seniorities, seniority_unknown, roles
 FROM user_discovery_preferences
 WHERE user_id = @user_id;
 
 
 -- name: DiscoveryUpsertPreferences :exec
-INSERT INTO user_discovery_preferences(user_id, workplace_types, cities, technologies, seniorities, seniority_unknown)
-VALUES (@user_id, @workplace_types::text[], @cities::text[], @technologies::text[], @seniorities::text[], @seniority_unknown)
+INSERT INTO user_discovery_preferences(user_id, workplace_types, cities, technologies, seniorities, seniority_unknown, roles)
+VALUES (@user_id, @workplace_types::text[], @cities::text[], @technologies::text[], @seniorities::text[], @seniority_unknown, @roles::text[])
 ON CONFLICT (user_id) DO UPDATE SET
+    roles           = EXCLUDED.roles,
     workplace_types = EXCLUDED.workplace_types,
     cities          = EXCLUDED.cities,
     technologies    = EXCLUDED.technologies,

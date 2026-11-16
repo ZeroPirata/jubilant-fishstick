@@ -519,6 +519,7 @@ type UserDiscoveryPreference struct {
 	Technologies     []string           `json:"technologies"`
 	Seniorities      []string           `json:"seniorities"`
 	SeniorityUnknown bool               `json:"seniority_unknown"`
+	Roles            []string           `json:"roles"`
 }
 
 type UserDismissedJob struct {
@@ -599,6 +600,7 @@ type UserLinkedinSearch struct {
 	Sort          string             `json:"sort"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Auto          bool               `json:"auto"`
 }
 
 type UserProfile struct {

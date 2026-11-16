@@ -10,10 +10,10 @@ WHERE user_id = @user_id;
 -- name: LinkedInInsertSearch :one
 INSERT INTO user_linkedin_searches(
     user_id, name, keywords, geo_id, geo_label, posted_within, workplace, experience,
-    job_types, easy_apply, few_applicants, in_network, sort
+    job_types, easy_apply, few_applicants, in_network, sort, auto
 ) VALUES (
     @user_id, @name, @keywords, @geo_id, @geo_label, @posted_within, @workplace, @experience,
-    @job_types, @easy_apply, @few_applicants, @in_network, @sort
+    @job_types, @easy_apply, @few_applicants, @in_network, @sort, @auto
 )
 RETURNING *;
 
@@ -29,3 +29,7 @@ RETURNING *;
 -- name: LinkedInDeleteSearch :execrows
 DELETE FROM user_linkedin_searches
 WHERE id = @id AND user_id = @user_id;
+
+-- name: LinkedInDeleteAutoSearches :exec
+DELETE FROM user_linkedin_searches
+WHERE user_id = @user_id AND auto;

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"hackton-treino/internal/db"
+	"hackton-treino/internal/discovery"
 	"hackton-treino/internal/middleware"
 	"hackton-treino/internal/repository"
 	"hackton-treino/internal/security"
@@ -19,10 +20,19 @@ type fakeLinkedinRepo struct {
 	count    int64
 	inserted []db.LinkedInInsertSearchParams
 	deleted  bool
+	rows     []db.UserLinkedinSearch
+	replaced []db.LinkedInInsertSearchParams
 }
 
 func (f *fakeLinkedinRepo) List(context.Context, pgtype.UUID) ([]db.UserLinkedinSearch, *repository.RepositoryError) {
+	if f.rows != nil {
+		return f.rows, nil
+	}
 	return []db.UserLinkedinSearch{{Name: "Go", Keywords: "go", Workplace: []string{"2"}}}, nil
+}
+func (f *fakeLinkedinRepo) ReplaceAuto(_ context.Context, _ pgtype.UUID, s []db.LinkedInInsertSearchParams) *repository.RepositoryError {
+	f.replaced = s
+	return nil
 }
 func (f *fakeLinkedinRepo) Count(context.Context, pgtype.UUID) (int64, *repository.RepositoryError) {
 	return f.count, nil
@@ -145,5 +155,53 @@ func TestLinkedInDeleteAndUpdateNotFound(t *testing.T) {
 	h.Delete(w, req)
 	if w.Code < 400 {
 		t.Errorf("id inválido: status %d", w.Code)
+	}
+}
+
+func targetFn(t discovery.Target) func(context.Context, pgtype.UUID) (discovery.Target, *repository.RepositoryError) {
+	return func(context.Context, pgtype.UUID) (discovery.Target, *repository.RepositoryError) { return t, nil }
+}
+
+func TestLinkedInGenerate(t *testing.T) {
+	// Uma busca feita à mão com local: o local dela vale para as geradas.
+	f := &fakeLinkedinRepo{rows: []db.UserLinkedinSearch{
+		{Name: "minha", GeoID: "105104646", GeoLabel: "São José dos Campos", Workplace: []string{}, Experience: []string{}, JobTypes: []string{}},
+		{Name: "velha automática", Auto: true, Workplace: []string{}, Experience: []string{}, JobTypes: []string{}},
+	}}
+	h := &LinkedInSearchHandler{Repo: f, Target: targetFn(discovery.Target{
+		Roles: []string{"backend"}, Technologies: []string{"Go"}, WorkplaceTypes: []string{"hybrid"},
+	})}
+	w := httptest.NewRecorder()
+	h.Generate(w, linkedinReq("POST", "/linkedin/searches/generate", ""))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	if len(f.replaced) != 2 || f.replaced[0].GeoID != "105104646" || !strings.Contains(f.replaced[0].Keywords, "Golang") {
+		t.Errorf("geradas = %+v", f.replaced)
+	}
+
+	// Só remoto: o local é o Brasil, mesmo com uma busca salva de outra cidade.
+	h.Target = targetFn(discovery.Target{Technologies: []string{"Go"}, WorkplaceTypes: []string{"remote"}})
+	h.Generate(httptest.NewRecorder(), linkedinReq("POST", "/x", ""))
+	if len(f.replaced) != 1 || f.replaced[0].GeoID != "106057199" {
+		t.Errorf("só remoto = %+v", f.replaced)
+	}
+
+	// Sem Alvo: explica em vez de gerar.
+	f.replaced = nil
+	h.Target = targetFn(discovery.Target{})
+	w = httptest.NewRecorder()
+	h.Generate(w, linkedinReq("POST", "/x", ""))
+	if w.Code != http.StatusBadRequest || f.replaced != nil {
+		t.Errorf("sem Alvo: status %d, gerou %v", w.Code, f.replaced)
+	}
+
+	// Limite: as manuais mais as geradas não passam de 20.
+	f.rows = make([]db.UserLinkedinSearch, 19)
+	h.Target = targetFn(discovery.Target{Roles: []string{"backend"}, Technologies: []string{"Go"}})
+	w = httptest.NewRecorder()
+	h.Generate(w, linkedinReq("POST", "/x", ""))
+	if w.Code != http.StatusConflict {
+		t.Errorf("limite: status %d", w.Code)
 	}
 }
