@@ -62,7 +62,7 @@ function renderLinkedInSearches() {
   box.innerHTML = _liSearches.map((s, i) => `
     <div class="li-item">
       <div class="li-item-main">
-        <div class="li-item-name">${escHtml(s.name)}</div>
+        <div class="li-item-name">${escHtml(s.name)}${s.auto ? ' <span class="li-auto" title="Gerada pelo seu alvo: gerar de novo troca esta busca">pelo alvo</span>' : ''}</div>
         <div class="li-item-sum">${escHtml(liSummary(s))}</div>
       </div>
       <div class="li-item-actions">

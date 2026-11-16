@@ -1,13 +1,18 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"hackton-treino/internal/db"
+	"hackton-treino/internal/discovery"
 	"hackton-treino/internal/linkedinsearch"
 	"hackton-treino/internal/middleware"
+	"hackton-treino/internal/repository"
+	discoveryRepo "hackton-treino/internal/repository/discovery"
 	repo "hackton-treino/internal/repository/linkedin"
 	"hackton-treino/internal/util"
 	"net/http"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -29,10 +34,20 @@ const (
 type LinkedInSearchHandler struct {
 	*BaseHandler
 	Repo repo.Repository
+	// Target: o Alvo do Descobrir do usuário (para gerar as buscas).
+	Target func(ctx context.Context, userID pgtype.UUID) (discovery.Target, *repository.RepositoryError)
 }
 
 func NewLinkedInSearchHandler(logger *zap.Logger, conn *pgxpool.Pool) *LinkedInSearchHandler {
-	return &LinkedInSearchHandler{BaseHandler: NewBaseHandler(logger), Repo: repo.New(conn)}
+	disc := discoveryRepo.New(conn)
+	return &LinkedInSearchHandler{
+		BaseHandler: NewBaseHandler(logger),
+		Repo:        repo.New(conn),
+		Target: func(ctx context.Context, userID pgtype.UUID) (discovery.Target, *repository.RepositoryError) {
+			p, errR := disc.SelectPreferences(ctx, userID)
+			return discovery.Target{Roles: p.Roles, Technologies: p.Technologies, Seniorities: p.Seniorities, WorkplaceTypes: p.WorkplaceTypes}, errR
+		},
+	}
 }
 
 // linkedinSearchBody: o corpo de POST/PUT e a resposta (com id e url).
@@ -41,6 +56,8 @@ type linkedinSearchBody struct {
 	Name string `json:"name"`
 	linkedinsearch.Search
 	URL string `json:"url,omitempty"`
+	// Auto: gerada pelo Alvo ("Gerar pelo meu Alvo" troca as automáticas).
+	Auto bool `json:"auto"`
 }
 
 func linkedinSearchView(row db.UserLinkedinSearch) linkedinSearchBody {
@@ -49,7 +66,7 @@ func linkedinSearchView(row db.UserLinkedinSearch) linkedinSearchBody {
 		Workplace: nonNil(row.Workplace), Experience: nonNil(row.Experience), JobTypes: nonNil(row.JobTypes),
 		EasyApply: row.EasyApply, FewApplicants: row.FewApplicants, InNetwork: row.InNetwork, Sort: row.Sort,
 	}
-	return linkedinSearchBody{ID: row.ID.String(), Name: row.Name, Search: s, URL: linkedinsearch.URL(s)}
+	return linkedinSearchBody{ID: row.ID.String(), Name: row.Name, Search: s, URL: linkedinsearch.URL(s), Auto: row.Auto}
 }
 
 // readLinkedinSearch lê e valida o corpo. O nome é obrigatório só para salvar.
@@ -207,4 +224,61 @@ func linkedinSearchTarget(w http.ResponseWriter, r *http.Request) (pgtype.UUID, 
 		return pgtype.UUID{}, pgtype.UUID{}, false
 	}
 	return userID, id, true
+}
+
+// Generate (POST /linkedin/searches/generate): monta as buscas pelo Alvo do Descobrir
+// (função, tecnologias, nível e modo de trabalho) e troca as automáticas de antes. As
+// buscas feitas à mão ficam. O local vem da primeira busca salva com local; sem
+// nenhuma, ou quando o Alvo é só remoto, é o Brasil.
+func (h *LinkedInSearchHandler) Generate(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, ErrNotAuthorized.Error())
+		return
+	}
+	target, errR := h.Target(r.Context(), userID)
+	if errR != nil && errR.StatusCode != http.StatusNotFound {
+		writeRepositoryError(w, errR)
+		return
+	}
+	rows, errR := h.Repo.List(r.Context(), userID)
+	if errR != nil {
+		writeRepositoryError(w, errR)
+		return
+	}
+	geoID, geoLabel := linkedinsearch.GeoBrasil, "Brasil"
+	onlyRemote := len(target.WorkplaceTypes) > 0 && !slices.ContainsFunc(target.WorkplaceTypes, func(wt string) bool { return wt == "hybrid" || wt == "onsite" })
+	manual := 0
+	for _, row := range rows {
+		if row.Auto {
+			continue
+		}
+		manual++
+		if row.GeoID != "" && geoID == linkedinsearch.GeoBrasil && !onlyRemote {
+			geoID, geoLabel = row.GeoID, row.GeoLabel
+		}
+	}
+	generated := linkedinsearch.FromTarget(target, geoID, geoLabel)
+	if len(generated) == 0 {
+		writeError(w, http.StatusBadRequest, "defina o seu Alvo no Descobrir (função ou tecnologia) para gerar as buscas")
+		return
+	}
+	if manual+len(generated) > linkedinSearchMax {
+		writeError(w, http.StatusConflict, "limite de 20 buscas salvas: apague uma antes")
+		return
+	}
+	params := make([]db.LinkedInInsertSearchParams, 0, len(generated))
+	for _, g := range generated {
+		s := g.Search
+		params = append(params, db.LinkedInInsertSearchParams{
+			Name: g.Name, Keywords: s.Keywords, GeoID: s.GeoID, GeoLabel: s.GeoLabel, PostedWithin: s.PostedWithin,
+			Workplace: s.Workplace, Experience: s.Experience, JobTypes: s.JobTypes,
+			EasyApply: s.EasyApply, FewApplicants: s.FewApplicants, InNetwork: s.InNetwork, Sort: s.Sort,
+		})
+	}
+	if errR := h.Repo.ReplaceAuto(r.Context(), userID, params); errR != nil {
+		writeRepositoryError(w, errR)
+		return
+	}
+	h.List(w, r)
 }

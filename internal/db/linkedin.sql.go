@@ -23,6 +23,16 @@ func (q *Queries) LinkedInCountSearches(ctx context.Context, userID pgtype.UUID)
 	return count, err
 }
 
+const linkedInDeleteAutoSearches = `-- name: LinkedInDeleteAutoSearches :exec
+DELETE FROM user_linkedin_searches
+WHERE user_id = $1 AND auto
+`
+
+func (q *Queries) LinkedInDeleteAutoSearches(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, linkedInDeleteAutoSearches, userID)
+	return err
+}
+
 const linkedInDeleteSearch = `-- name: LinkedInDeleteSearch :execrows
 DELETE FROM user_linkedin_searches
 WHERE id = $1 AND user_id = $2
@@ -44,12 +54,12 @@ func (q *Queries) LinkedInDeleteSearch(ctx context.Context, arg LinkedInDeleteSe
 const linkedInInsertSearch = `-- name: LinkedInInsertSearch :one
 INSERT INTO user_linkedin_searches(
     user_id, name, keywords, geo_id, geo_label, posted_within, workplace, experience,
-    job_types, easy_apply, few_applicants, in_network, sort
+    job_types, easy_apply, few_applicants, in_network, sort, auto
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8,
-    $9, $10, $11, $12, $13
+    $9, $10, $11, $12, $13, $14
 )
-RETURNING id, user_id, name, keywords, geo_id, geo_label, posted_within, workplace, experience, job_types, easy_apply, few_applicants, in_network, sort, created_at, updated_at
+RETURNING id, user_id, name, keywords, geo_id, geo_label, posted_within, workplace, experience, job_types, easy_apply, few_applicants, in_network, sort, created_at, updated_at, auto
 `
 
 type LinkedInInsertSearchParams struct {
@@ -66,6 +76,7 @@ type LinkedInInsertSearchParams struct {
 	FewApplicants bool        `json:"few_applicants"`
 	InNetwork     bool        `json:"in_network"`
 	Sort          string      `json:"sort"`
+	Auto          bool        `json:"auto"`
 }
 
 func (q *Queries) LinkedInInsertSearch(ctx context.Context, arg LinkedInInsertSearchParams) (UserLinkedinSearch, error) {
@@ -83,6 +94,7 @@ func (q *Queries) LinkedInInsertSearch(ctx context.Context, arg LinkedInInsertSe
 		arg.FewApplicants,
 		arg.InNetwork,
 		arg.Sort,
+		arg.Auto,
 	)
 	var i UserLinkedinSearch
 	err := row.Scan(
@@ -102,12 +114,13 @@ func (q *Queries) LinkedInInsertSearch(ctx context.Context, arg LinkedInInsertSe
 		&i.Sort,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Auto,
 	)
 	return i, err
 }
 
 const linkedInListSearches = `-- name: LinkedInListSearches :many
-SELECT id, user_id, name, keywords, geo_id, geo_label, posted_within, workplace, experience, job_types, easy_apply, few_applicants, in_network, sort, created_at, updated_at FROM user_linkedin_searches
+SELECT id, user_id, name, keywords, geo_id, geo_label, posted_within, workplace, experience, job_types, easy_apply, few_applicants, in_network, sort, created_at, updated_at, auto FROM user_linkedin_searches
 WHERE user_id = $1
 ORDER BY created_at
 `
@@ -138,6 +151,7 @@ func (q *Queries) LinkedInListSearches(ctx context.Context, userID pgtype.UUID) 
 			&i.Sort,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Auto,
 		); err != nil {
 			return nil, err
 		}
@@ -156,7 +170,7 @@ UPDATE user_linkedin_searches SET
     job_types = $8, easy_apply = $9, few_applicants = $10,
     in_network = $11, sort = $12, updated_at = now()
 WHERE id = $13 AND user_id = $14
-RETURNING id, user_id, name, keywords, geo_id, geo_label, posted_within, workplace, experience, job_types, easy_apply, few_applicants, in_network, sort, created_at, updated_at
+RETURNING id, user_id, name, keywords, geo_id, geo_label, posted_within, workplace, experience, job_types, easy_apply, few_applicants, in_network, sort, created_at, updated_at, auto
 `
 
 type LinkedInUpdateSearchParams struct {
@@ -211,6 +225,7 @@ func (q *Queries) LinkedInUpdateSearch(ctx context.Context, arg LinkedInUpdateSe
 		&i.Sort,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Auto,
 	)
 	return i, err
 }

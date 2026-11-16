@@ -86,8 +86,14 @@ type DiscoveredJob struct {
 	AlsoOn []JobLink `json:"also_on,omitempty"`
 	// Dismissed: o usuário dispensou a vaga (só aparece em ?dismissed=1).
 	Dismissed bool `json:"dismissed,omitempty"`
-	techs     []string
-	fit       jobfit.Fit
+	// Roles: funções que o título diz (back-end, dados...). RoleFit: como elas batem
+	// com as funções do Alvo (match, neighbor, unknown, other). TitleTechs: tecnologias
+	// do Alvo que estão no título ("Desenvolvedor Go"), que valem mais que uma menção.
+	Roles      []string `json:"roles"`
+	RoleFit    string   `json:"role_fit,omitempty"`
+	TitleTechs []string `json:"title_techs,omitempty"`
+	techs      []string
+	fit        jobfit.Fit
 	// autoStretch: na Seleção com IA, vaga de nível vizinho ao alvo (ex.: sênior para
 	// um perfil pleno). Só entra com nota alta e nada obrigatório faltando.
 	autoStretch bool
@@ -136,6 +142,7 @@ func (h *DiscoveryHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	f := rk.filter
 	f.Sources, f.Skills = q["source"], q["skill"]
+	f.AllRoles = q.Get("all_roles") == "1"
 	result := filterDiscovered(rk.jobs, f)
 	if errR := h.fillPage(ctx, userID, result.Jobs, cursor, size); errR != nil {
 		writeRepositoryError(w, errR)
@@ -178,6 +185,7 @@ func (h *DiscoveryHandler) rankedJobs(ctx context.Context, userID pgtype.UUID, v
 	out.filter = discoveryFilter{
 		Location:  discovery.LocationPrefs{WorkplaceTypes: prefs.WorkplaceTypes, Cities: prefs.Cities},
 		Seniority: discovery.SeniorityPrefs{Levels: prefs.Seniorities, IncludeUnknown: prefs.SeniorityUnknown},
+		Roles:     prefs.Roles,
 	}
 
 	matchSkills, onlyStrong := strongSkills(skills)
@@ -259,6 +267,11 @@ func (h *DiscoveryHandler) rankedJobs(ctx context.Context, userID pgtype.UUID, v
 		job.MatchedTechs = matchedTechs
 		job.Dismissed = view == onlyDismissed
 		job.fit, job.FitFrom = jobFit(eval, row.Techs, pipeStacks[row.Url])
+		job.Roles = discovery.ClassifyRoles(row.Title)
+		if len(prefs.Roles) > 0 {
+			job.RoleFit = discovery.RoleFit(job.Roles, prefs.Roles)
+		}
+		job.TitleTechs = intersect(interest, discovery.MatchTechs(row.Title, interest))
 		kept[key] = len(jobs)
 		jobs = append(jobs, job)
 	}
@@ -281,11 +294,31 @@ func jobFit(eval *jobfit.Evaluator, catalog, pipeline []string) (jobfit.Fit, str
 	return eval.Evaluate(catalog), "catalog"
 }
 
-// rankDiscovered ordena pela compatibilidade (JobFit): primeiro a faixa (alta, média,
-// baixa; sem stack conhecida por último), depois quantas tecnologias da vaga o perfil
-// cobre (forte vale o dobro de parcial, para uma vaga que só cita Go não passar na
-// frente de uma com Go, PostgreSQL e Docker), a cobertura e as skills citadas.
-// Estável: no empate fica a mais recente.
+// targetScore: o quanto a vaga é o que o Alvo procura, antes da stack. Uma tecnologia
+// do Alvo no título vale 3 e a função do título vale 2 (próxima vale 1): "Backend Go"
+// (5) vem antes de "Desenvolvedor Go" (3), que vem antes de "Backend Developer" com
+// Java no título e Go só no texto (2), e de uma vaga que só cita Go (0). Sem Alvo, tudo
+// vale 0 e manda a stack.
+func targetScore(j DiscoveredJob) int {
+	score := 0
+	switch j.RoleFit {
+	case discovery.RoleMatch:
+		score += 2
+	case discovery.RoleNeighbor:
+		score++
+	}
+	if len(j.TitleTechs) > 0 {
+		score += 3
+	}
+	return score
+}
+
+// rankDiscovered ordena primeiro pelo Alvo (targetScore: função e tecnologia no
+// título) e depois pela compatibilidade (JobFit): a faixa (alta, média, baixa; sem
+// stack conhecida por último), quantas tecnologias da vaga o perfil cobre (forte vale
+// o dobro de parcial, para uma vaga que só cita Go não passar na frente de uma com Go,
+// PostgreSQL e Docker), a cobertura e as skills citadas. Estável: no empate fica a
+// mais recente.
 func rankDiscovered(jobs []DiscoveredJob) {
 	tier := func(f jobfit.Fit) int {
 		if len(f.Items) == 0 {
@@ -300,6 +333,9 @@ func rankDiscovered(jobs []DiscoveredJob) {
 		return 1
 	}
 	sort.SliceStable(jobs, func(a, b int) bool {
+		if sa, sb := targetScore(jobs[a]), targetScore(jobs[b]); sa != sb {
+			return sa > sb
+		}
 		fa, fb := jobs[a].fit, jobs[b].fit
 		if ta, tb := tier(fa), tier(fb); ta != tb {
 			return ta > tb
@@ -429,11 +465,17 @@ type discoveryFilter struct {
 	Seniority discovery.SeniorityPrefs
 	Sources   []string
 	Skills    []string
+	// Roles: funções do Alvo. Vaga de outra função (o título diz front-end para quem
+	// procura back-end) sai da lista, a menos que AllRoles (?all_roles=1).
+	Roles    []string
+	AllRoles bool
 }
 
 type discoveryResult struct {
 	Jobs   []DiscoveredJob
 	Facets discoveryFacets
+	// OtherRole: vagas escondidas por serem de outra função (com os demais filtros).
+	OtherRole int
 }
 
 // filterDiscovered aplica local, nível, plataformas e skills. As contagens de cada
@@ -441,10 +483,16 @@ type discoveryResult struct {
 // quantas vagas aparecem ao marcar a gupy com as skills já escolhidas.
 func filterDiscovered(jobs []DiscoveredJob, f discoveryFilter) discoveryResult {
 	inLocation := make([]DiscoveredJob, 0, len(jobs))
+	otherRole := 0
 	for _, j := range jobs {
-		if f.Location.MatchesLocation(j.WorkplaceType, j.Location, j.International) {
-			inLocation = append(inLocation, j)
+		if !f.Location.MatchesLocation(j.WorkplaceType, j.Location, j.International) {
+			continue
 		}
+		if len(f.Roles) > 0 && !f.AllRoles && j.RoleFit == discovery.RoleOther {
+			otherRole++
+			continue
+		}
+		inLocation = append(inLocation, j)
 	}
 
 	sourceOK := func(j DiscoveredJob) bool { return len(f.Sources) == 0 || slices.Contains(f.Sources, j.Source) }
@@ -484,7 +532,8 @@ func filterDiscovered(jobs []DiscoveredJob, f discoveryFilter) discoveryResult {
 		}
 	}
 	return discoveryResult{
-		Jobs: final,
+		Jobs:      final,
+		OtherRole: otherRole,
 		Facets: discoveryFacets{
 			Sources: sortedFacets(sourceCount),
 			Skills:  sortedFacets(skillCount),
@@ -531,6 +580,7 @@ func writeDiscoveryList(w http.ResponseWriter, res discoveryResult, size, cursor
 		"only_strong_skills": rk.onlyStrong,
 		"facets":             res.Facets,
 		"dismissed_count":    rk.dismissed,
+		"other_role_count":   res.OtherRole,
 	})
 }
 
@@ -542,6 +592,9 @@ type DiscoveryPreferences struct {
 	// vagas sem nível; ausente no corpo, vale true.
 	Seniorities      []string `json:"seniorities"`
 	SeniorityUnknown *bool    `json:"seniority_unknown"`
+	// Roles: funções do Alvo. Ausente no corpo (nil), fica a que estava salva: a tela
+	// antiga de preferências não manda o campo.
+	Roles []string `json:"roles"`
 }
 
 const (
@@ -571,6 +624,7 @@ func (h *DiscoveryHandler) GetPreferences(w http.ResponseWriter, r *http.Request
 		Technologies:     nonNil(prefs.Technologies),
 		Seniorities:      nonNil(prefs.Seniorities),
 		SeniorityUnknown: &prefs.SeniorityUnknown,
+		Roles:            nonNil(prefs.Roles),
 	})
 }
 
@@ -585,30 +639,53 @@ func (h *DiscoveryHandler) SavePreferences(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, ErrInvalidRequestBody.Error())
 		return
 	}
-	prefs, err := cleanPreferences(body)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	if body.Roles == nil {
+		saved, errR := h.Repo.SelectPreferences(r.Context(), userID)
+		if errR != nil {
+			writeRepositoryError(w, errR)
+			return
+		}
+		body.Roles = saved.Roles
+	}
+	prefs, errR := h.savePreferences(r.Context(), userID, body)
+	if errR != nil {
+		writeError(w, errR.StatusCode, errR.Message)
 		return
 	}
-	if errR := h.Repo.UpsertPreferences(r.Context(), db.DiscoveryUpsertPreferencesParams{
+	writeJSON(w, http.StatusOK, prefs)
+}
+
+// savePreferences valida e grava as preferências (usado também pelo Alvo).
+func (h *DiscoveryHandler) savePreferences(ctx context.Context, userID pgtype.UUID, body DiscoveryPreferences) (DiscoveryPreferences, *repository.RepositoryError) {
+	prefs, err := cleanPreferences(body)
+	if err != nil {
+		return prefs, &repository.RepositoryError{StatusCode: http.StatusBadRequest, Message: err.Error()}
+	}
+	errR := h.Repo.UpsertPreferences(ctx, db.DiscoveryUpsertPreferencesParams{
 		UserID:           userID,
 		WorkplaceTypes:   prefs.WorkplaceTypes,
 		Cities:           prefs.Cities,
 		Technologies:     prefs.Technologies,
 		Seniorities:      prefs.Seniorities,
 		SeniorityUnknown: *prefs.SeniorityUnknown,
-	}); errR != nil {
-		writeRepositoryError(w, errR)
-		return
-	}
-	writeJSON(w, http.StatusOK, prefs)
+		Roles:            prefs.Roles,
+	})
+	return prefs, errR
 }
 
 func cleanPreferences(p DiscoveryPreferences) (DiscoveryPreferences, error) {
 	unknown := p.SeniorityUnknown == nil || *p.SeniorityUnknown
 	out := DiscoveryPreferences{
 		WorkplaceTypes: []string{}, Cities: []string{}, Technologies: []string{},
-		Seniorities: []string{}, SeniorityUnknown: &unknown,
+		Seniorities: []string{}, SeniorityUnknown: &unknown, Roles: []string{},
+	}
+	for _, k := range p.Roles {
+		if _, ok := discovery.RoleByKey(k); !ok {
+			return out, fmt.Errorf("função inválida: %q", k)
+		}
+		if !slices.Contains(out.Roles, k) {
+			out.Roles = append(out.Roles, k)
+		}
 	}
 	for _, wt := range p.WorkplaceTypes {
 		if !slices.Contains(discovery.LocationModes, wt) {
@@ -720,6 +797,7 @@ func toDiscoveredJob(row db.DiscoveryListCandidatesRow, matched []string) Discov
 		MatchedTechs:  []string{},
 		International: row.International,
 		Seniority:     nonNil(row.Seniority),
+		Roles:         []string{},
 		Stack:         []string{},
 		Language:      row.Language,
 		techs:         row.Techs,

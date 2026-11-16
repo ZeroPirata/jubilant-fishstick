@@ -902,7 +902,7 @@ func (q *Queries) DiscoverySelectByURL(ctx context.Context, url string) (Discove
 }
 
 const discoverySelectPreferences = `-- name: DiscoverySelectPreferences :one
-SELECT workplace_types, cities, technologies, seniorities, seniority_unknown
+SELECT workplace_types, cities, technologies, seniorities, seniority_unknown, roles
 FROM user_discovery_preferences
 WHERE user_id = $1
 `
@@ -913,6 +913,7 @@ type DiscoverySelectPreferencesRow struct {
 	Technologies     []string `json:"technologies"`
 	Seniorities      []string `json:"seniorities"`
 	SeniorityUnknown bool     `json:"seniority_unknown"`
+	Roles            []string `json:"roles"`
 }
 
 func (q *Queries) DiscoverySelectPreferences(ctx context.Context, userID pgtype.UUID) (DiscoverySelectPreferencesRow, error) {
@@ -924,6 +925,7 @@ func (q *Queries) DiscoverySelectPreferences(ctx context.Context, userID pgtype.
 		&i.Technologies,
 		&i.Seniorities,
 		&i.SeniorityUnknown,
+		&i.Roles,
 	)
 	return i, err
 }
@@ -1193,9 +1195,10 @@ func (q *Queries) DiscoveryUpsertJob(ctx context.Context, arg DiscoveryUpsertJob
 }
 
 const discoveryUpsertPreferences = `-- name: DiscoveryUpsertPreferences :exec
-INSERT INTO user_discovery_preferences(user_id, workplace_types, cities, technologies, seniorities, seniority_unknown)
-VALUES ($1, $2::text[], $3::text[], $4::text[], $5::text[], $6)
+INSERT INTO user_discovery_preferences(user_id, workplace_types, cities, technologies, seniorities, seniority_unknown, roles)
+VALUES ($1, $2::text[], $3::text[], $4::text[], $5::text[], $6, $7::text[])
 ON CONFLICT (user_id) DO UPDATE SET
+    roles           = EXCLUDED.roles,
     workplace_types = EXCLUDED.workplace_types,
     cities          = EXCLUDED.cities,
     technologies    = EXCLUDED.technologies,
@@ -1211,6 +1214,7 @@ type DiscoveryUpsertPreferencesParams struct {
 	Technologies     []string    `json:"technologies"`
 	Seniorities      []string    `json:"seniorities"`
 	SeniorityUnknown bool        `json:"seniority_unknown"`
+	Roles            []string    `json:"roles"`
 }
 
 func (q *Queries) DiscoveryUpsertPreferences(ctx context.Context, arg DiscoveryUpsertPreferencesParams) error {
@@ -1221,6 +1225,7 @@ func (q *Queries) DiscoveryUpsertPreferences(ctx context.Context, arg DiscoveryU
 		arg.Technologies,
 		arg.Seniorities,
 		arg.SeniorityUnknown,
+		arg.Roles,
 	)
 	return err
 }

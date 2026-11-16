@@ -22,6 +22,9 @@ func setupDiscoveryRoutes(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Po
 	mux.HandleFunc("PUT /discovery/alerts", h.SaveAlerts)
 	mux.HandleFunc("POST /discovery/alerts/seen", h.MarkAlertsSeen)
 	mux.HandleFunc("POST /discovery/alerts/feedback", h.AlertFeedback)
+	mux.HandleFunc("GET /discovery/target", h.GetTarget)
+	mux.HandleFunc("PUT /discovery/target", h.SaveTarget)
+	mux.HandleFunc("POST /discovery/target/parse", h.ParseTarget)
 	mux.HandleFunc("GET /discovery/jobs/{id}", h.GetJob)
 	mux.HandleFunc("POST /discovery/jobs/{id}/dismiss", h.DismissJob)
 	mux.HandleFunc("DELETE /discovery/jobs/{id}/dismiss", h.RestoreJob)
@@ -43,6 +46,7 @@ func setupLinkedInRoutes(mux *http.ServeMux, logger *zap.Logger, db *pgxpool.Poo
 	mux.HandleFunc("POST /linkedin/searches", h.Create)
 	mux.HandleFunc("POST /linkedin/searches/preview", h.Preview)
 	mux.HandleFunc("POST /linkedin/searches/from-url", h.FromURL)
+	mux.HandleFunc("POST /linkedin/searches/generate", h.Generate)
 	mux.HandleFunc("PUT /linkedin/searches/{id}", h.Update)
 	mux.HandleFunc("DELETE /linkedin/searches/{id}", h.Delete)
 }

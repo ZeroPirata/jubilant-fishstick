@@ -171,9 +171,21 @@ const HELP_TOPICS = [
         </div>`,
       },
       {
+        title: 'Seu alvo',
+        body: `<p>No topo do Descobrir fica o <b>seu alvo</b>: a função, as tecnologias, o nível e o modo de trabalho que você procura. Escreva do seu jeito ("golang backend remoto pleno") ou use a sugestão montada pelo seu perfil.</p>
+          <ul><li>Vagas da sua função e com a sua tecnologia no título vêm primeiro (a vaga mostra o porquê: "Back-end", "Go no título")</li>
+          <li>Vagas de outra função (front-end para quem procura back-end) ficam escondidas; um clique mostra</li>
+          <li>O alvo vale também para os avisos, a Seleção com IA e as buscas do LinkedIn</li></ul>`,
+        visual: `<div class="hv-stack">
+          <div class="hv-card"><b>Seu alvo</b><span class="hv-chips"><em>Back-end</em><em>Go</em><em>Pleno</em><em>Remoto</em></span></div>
+          <div class="hv-card"><b>Desenvolvedor Back-end Go</b><span class="hv-chips"><em>Back-end</em><em>Go no título</em></span></div>
+        </div>`,
+        cta: { label: 'Abrir o Descobrir', action: "navigateTo('descobrir')" },
+      },
+      {
         title: 'Buscas no LinkedIn',
-        body: `<p>Em <b>Buscas no LinkedIn</b> você salva buscas com os filtros que quiser (palavras-chave, local, data, modelo, nível, tipo, candidatura simplificada…) e abre o link no LinkedIn, já logado no seu navegador.</p>
-          <ul><li>Nenhum filtro vem marcado: você escolhe tudo</li>
+        body: `<p><b>Gerar pelo meu alvo</b> monta as buscas do LinkedIn sozinho, com a busca booleana dele: "Golang" OU "Go developer", E back-end. Você só clica em Abrir, já logado no seu navegador. Também dá para montar uma busca à mão.</p>
+          <ul><li>Numa busca feita à mão, nenhum filtro vem marcado: você escolhe tudo</li>
           <li>Cole uma busca que você já usa no LinkedIn e o sistema lê os filtros dela; é o jeito de trazer a cidade, porque o código do local só existe na URL do LinkedIn</li>
           <li>O JobPipeline só monta o link: ele não entra no LinkedIn por você</li></ul>`,
         visual: `<div class="hv-stack">

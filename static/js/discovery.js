@@ -6,6 +6,8 @@
 const _discPg = { offset: 0, size: 20 };
 // Lista das vagas dispensadas (para restaurar) em vez da lista normal.
 let _discShowDismissed = false;
+// Mostrar também as vagas de outra função (o Alvo esconde por padrão).
+let _discAllRoles = false;
 let _discPollTimer = null;
 // Cada clique em filtro recarrega a lista; só a resposta do último pedido é desenhada.
 let _discLoadSeq = 0;
@@ -72,6 +74,7 @@ function updateDiscFoldSummaries() {
 
 function loadDiscovery() {
   initDiscFolds();
+  loadTarget();
   loadDiscoveryTechCatalog().then(loadDiscoveryPreferences);
   loadDiscoveryKeywords();
   loadDiscoveryJobs();
@@ -123,6 +126,7 @@ async function saveDiscoveryPreferences() {
     }
     _discPg.offset = 0;
     loadDiscoveryJobs();
+    if (typeof loadTarget === 'function') loadTarget();
     return true;
   } catch (e) { toast(e.message, 'error'); return false; }
 }
@@ -438,6 +442,7 @@ async function loadDiscoveryJobs() {
     _discFilters.sources.forEach(s => qs.append('source', s));
     _discFilters.skills.forEach(s => qs.append('skill', s));
     if (_discShowDismissed) qs.set('dismissed', '1');
+    if (_discAllRoles) qs.set('all_roles', '1');
     const res = await api.get(`/discovery/jobs?${qs}`);
     if (seq !== _discLoadSeq) return;
     if (!res.ok) { tbody.innerHTML = '<p class=\"jl-empty\">Erro ao carregar vagas.</p>'; return; }
@@ -450,6 +455,7 @@ async function loadDiscoveryJobs() {
     renderDiscLevels((json.facets || {}).levels || []);
     renderDiscoveryPagination(meta.total ?? 0, meta.cursor ?? _discPg.offset, meta.size ?? _discPg.size);
     renderDiscDismissedToggle(json.dismissed_count ?? 0);
+    renderDiscOtherRole(json.other_role_count ?? 0);
     updateDiscFoldSummaries();
 
     if (!jobs.length && _discShowDismissed) {
@@ -476,7 +482,9 @@ function renderDiscoveryRow(j) {
   const url = safeHttpUrl(j.url);
   const local = [j.international ? 'Exterior' : '', _discWorkplace[j.workplace_type] || '', j.location].filter(Boolean).join(' · ');
   // Skills do perfil primeiro; depois as tecnologias de interesse que não são skill.
-  const techs = (j.matched_techs || []).filter(t => !j.matched_skills.some(s => s.toLowerCase() === t.toLowerCase()));
+  // "Go" some quando a skill "Go (Golang)" já está nos chips.
+  const coveredBy = (t, s) => { const tl = t.toLowerCase(), sl = s.toLowerCase(); return sl === tl || sl.split(/[\s()\/,]+/).includes(tl); };
+  const techs = (j.matched_techs || []).filter(t => !j.matched_skills.some(s => coveredBy(t, s)));
   // Depois, o resto da stack que a vaga cita, apagado: "C#, Java, Go ou Rust" com Go no perfil.
   const stack = j.stack || [];
   const strong = [...j.matched_skills.map(s => [s, '']), ...techs.map(t => [t, ' match-tag-tech'])];
@@ -507,7 +515,7 @@ function renderDiscoveryRow(j) {
     <div class="jl-row disc-row" data-id="${escDisc(j.id)}">
       ${pct}
       <div class="jl-main">
-        <div class="jl-title"><a class="disc-title" href="#/descobrir/${escDisc(j.id)}" onclick="event.preventDefault(); openDiscJob('${escDisc(j.id)}')">${escDisc(j.title)}</a>${level}</div>
+        <div class="jl-title"><a class="disc-title" href="#/descobrir/${escDisc(j.id)}" onclick="event.preventDefault(); openDiscJob('${escDisc(j.id)}')">${escDisc(j.title)}</a>${level}${discTargetBadges(j)}</div>
         <div class="jl-sub">${sub}</div>
         ${skills ? `<div class="disc-skills">${skills}</div>` : ''}
       </div>
@@ -543,6 +551,23 @@ function renderDiscDismissedToggle(n) {
   if (!b) return;
   b.classList.toggle('hidden', !n && !_discShowDismissed);
   b.textContent = _discShowDismissed ? '← Voltar à lista' : `Dispensadas (${n})`;
+}
+
+// Vagas de outra função (o título diz front-end para quem procura back-end) somem da
+// lista; a tela diz quantas e deixa mostrar.
+function renderDiscOtherRole(n) {
+  const el = document.getElementById('disc-other-role');
+  if (!el) return;
+  el.classList.toggle('hidden', !n && !_discAllRoles);
+  el.innerHTML = _discAllRoles
+    ? `Mostrando também as vagas de outras funções. <button type="button" class="btn-more" onclick="toggleDiscAllRoles()">esconder</button>`
+    : `${n > 1 ? `${n} vagas de outras funções escondidas` : '1 vaga de outra função escondida'} pelo seu alvo. <button type="button" class="btn-more" onclick="toggleDiscAllRoles()">mostrar</button>`;
+}
+
+function toggleDiscAllRoles() {
+  _discAllRoles = !_discAllRoles;
+  _discPg.offset = 0;
+  loadDiscoveryJobs();
 }
 
 function toggleDiscDismissed() {

@@ -17,6 +17,8 @@ type Repository interface {
 	Update(ctx context.Context, args db.LinkedInUpdateSearchParams) (db.UserLinkedinSearch, *repository.RepositoryError)
 	// Delete devolve false quando a busca não existe ou é de outro usuário.
 	Delete(ctx context.Context, args db.LinkedInDeleteSearchParams) (bool, *repository.RepositoryError)
+	// ReplaceAuto troca as buscas geradas pelo Alvo (auto) pelas novas, numa transação.
+	ReplaceAuto(ctx context.Context, userID pgtype.UUID, searches []db.LinkedInInsertSearchParams) *repository.RepositoryError
 }
 
 type linkedinRepository struct {
@@ -50,4 +52,19 @@ func (r *linkedinRepository) Update(ctx context.Context, args db.LinkedInUpdateS
 func (r *linkedinRepository) Delete(ctx context.Context, args db.LinkedInDeleteSearchParams) (bool, *repository.RepositoryError) {
 	n, err := r.Q.LinkedInDeleteSearch(ctx, args)
 	return n > 0, repository.HandleDatabaseError(err)
+}
+
+func (r *linkedinRepository) ReplaceAuto(ctx context.Context, userID pgtype.UUID, searches []db.LinkedInInsertSearchParams) *repository.RepositoryError {
+	return r.ExecTx(ctx, func(q *db.Queries) error {
+		if err := q.LinkedInDeleteAutoSearches(ctx, userID); err != nil {
+			return err
+		}
+		for _, s := range searches {
+			s.UserID, s.Auto = userID, true
+			if _, err := q.LinkedInInsertSearch(ctx, s); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
